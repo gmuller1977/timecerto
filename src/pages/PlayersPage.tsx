@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Plus, Radio, Search, Shuffle, Users } from 'lucide-react';
+import { ChevronRight, Plus, Radio, Search, Shuffle, Swords, Users } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { SportPicker } from '@/components/sports/SportPicker';
 import { PlayerRow } from '@/components/players/PlayerRow';
@@ -158,15 +158,24 @@ export function PlayersPage() {
       </div>
 
       <div className="safe-bottom fixed inset-x-0 bottom-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto max-w-lg">
+        <div className="mx-auto flex max-w-lg gap-2">
           <Button
             size="lg"
-            className="w-full"
+            className="flex-1"
             disabled={present < 4}
             onClick={() => navigate('/sortear')}
           >
             <Shuffle size={19} strokeWidth={2.5} />
-            {present < 4 ? 'Mínimo de 4 presentes' : `Sortear times (${present})`}
+            {present < 4 ? 'Mínimo de 4 presentes' : `Sortear (${present})`}
+          </Button>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="shrink-0"
+            onClick={() => navigate('/partida')}
+          >
+            <Swords size={18} />
+            Partida direta
           </Button>
         </div>
       </div>

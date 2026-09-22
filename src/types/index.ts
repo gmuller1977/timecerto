@@ -75,6 +75,8 @@ export interface DrawSettings {
   balanceByPosition: boolean;
   /** Distribuir goleiros/líberos um por time */
   distributeKeepers: boolean;
+  /** Vôlei: sistema de jogo — define quantos levantadores por time */
+  rotation: RotationSystem;
   /** Evitar repetir os mesmos times do sorteio anterior */
   avoidRepeat: boolean;
 }
@@ -154,6 +156,36 @@ export interface Game {
   finished?: boolean;
   /** Scout detalhado, rally a rally */
   rallies?: Rally[];
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sistemas de jogo do vôlei
+// ─────────────────────────────────────────────────────────────
+
+export type RotationSystem = '6x0' | '4x2' | '6x2' | '5x1' | 'fixo';
+
+export interface RotationConfig {
+  id: RotationSystem;
+  name: string;
+  /** Levantadores que o time precisa ter */
+  setters: number;
+  summary: string;
+  description: string;
+  /** O time roda ou joga em posições fixas */
+  rotates: boolean;
+}
+
+/** Elenco fixo — um time que existe fora do sorteio */
+export interface Squad {
+  id: string;
+  name: string;
+  sport: SportId;
+  color: TeamColor;
+  playerIds: string[];
+  system?: RotationSystem;
+  /** O time da casa, o seu */
+  isMine: boolean;
+  createdAt: string;
 }
 
 /** Quanto detalhe o scout captura — muda o número de toques por ponto */

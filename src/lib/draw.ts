@@ -8,6 +8,7 @@ import type {
   TeamColor,
 } from '@/types';
 import { KEEPER_POSITION, SPORTS } from '@/lib/sports';
+import { settersNeeded } from '@/lib/rotation';
 import { shuffle, uid } from '@/lib/utils';
 
 const TEAM_COLORS: { color: TeamColor; name: string }[] = [
@@ -84,16 +85,37 @@ function buildDraw(players: Player[], settings: DrawSettings): { teams: Team[]; 
   // Sobra: quem não cabe vai pro banco (sorteado, não os piores)
   const totalSlots = capacity * numberOfTeams;
 
-  // 1) Goleiros primeiro
-  if (settings.distributeKeepers) {
+  // 1) Goleiros / levantadores primeiro.
+  // No vôlei a quantidade vem do sistema de jogo: 5x1 pede 1 por time,
+  // 4x2 e 6x2 pedem 2, 6x0 não pede nenhum.
+  const perTeam =
+    sport === 'volei' ? settersNeeded(settings.rotation) : settings.distributeKeepers ? 1 : 0;
+
+  if (perTeam > 0) {
     const keepers = shuffle(pool.filter((p) => isKeeper(p, sport)));
     const rest = pool.filter((p) => !isKeeper(p, sport));
-    // ordena goleiros por nível para espalhar o melhor e o pior
+    // do mais forte ao mais fraco, em serpentina, para não concentrar
     keepers.sort((a, b) => skillOf(b, sport) - skillOf(a, sport));
+
+    // Serpentina sobre TODOS os levantadores, não só os exigidos pelo sistema.
+    // Sobrando levantadores, eles precisam continuar espalhados — concentrar
+    // três num time e um no outro deixa um lado com especialista sobrando
+    // e o outro sem reserva.
+    const rounds = Math.min(
+      Math.ceil(keepers.length / numberOfTeams),
+      capacity,
+    );
+    const slots: Team[] = [];
+    for (let round = 0; round < Math.max(perTeam, rounds); round++) {
+      const order = round % 2 === 0 ? teams : [...teams].reverse();
+      slots.push(...order);
+    }
+
     keepers.forEach((k, i) => {
-      if (i < numberOfTeams) {
-        teams[i].players.push(k);
-        recalc(teams[i], sport);
+      const target = slots[i];
+      if (target && target.players.length < capacity) {
+        target.players.push(k);
+        recalc(target, sport);
       } else {
         rest.push(k);
       }

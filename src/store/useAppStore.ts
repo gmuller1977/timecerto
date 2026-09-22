@@ -1,7 +1,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { DrawResult, DrawSettings, Player, SkillLevel, SportId } from '@/types';
+import type {
+  DrawResult,
+  DrawSettings,
+  Player,
+  RotationSystem,
+  SkillLevel,
+  SportId,
+  Squad,
+  TeamColor,
+} from '@/types';
 import { SPORTS } from '@/lib/sports';
+import { DEFAULT_ROTATION } from '@/lib/rotation';
 import { uid } from '@/lib/utils';
 
 interface AppState {
@@ -10,8 +20,18 @@ interface AppState {
   settings: DrawSettings;
   lastResult: DrawResult | null;
   history: DrawResult[];
+  squads: Squad[];
 
   setSport: (sport: SportId) => void;
+  addSquad: (input: {
+    name: string;
+    playerIds: string[];
+    color: TeamColor;
+    isMine: boolean;
+    system?: RotationSystem;
+  }) => Squad;
+  updateSquad: (id: string, patch: Partial<Squad>) => void;
+  removeSquad: (id: string) => void;
   addPlayer: (input: { name: string; skill: SkillLevel; position?: string }) => void;
   updatePlayer: (id: string, patch: Partial<Player>) => void;
   removePlayer: (id: string) => void;
@@ -31,6 +51,7 @@ const defaultSettings = (sport: SportId): DrawSettings => ({
   balanceBySkill: true,
   balanceByPosition: true,
   distributeKeepers: true,
+  rotation: DEFAULT_ROTATION,
   avoidRepeat: false,
 });
 
@@ -42,6 +63,30 @@ export const useAppStore = create<AppState>()(
       settings: defaultSettings('futebol'),
       lastResult: null,
       history: [],
+      squads: [],
+
+      addSquad: ({ name, playerIds, color, isMine, system }) => {
+        const squad: Squad = {
+          id: uid(),
+          name: name.trim(),
+          sport: get().sport,
+          color,
+          playerIds,
+          isMine,
+          system,
+          createdAt: new Date().toISOString(),
+        };
+        set((s) => ({ squads: [...s.squads, squad] }));
+        return squad;
+      },
+
+      updateSquad: (id, patch) =>
+        set((s) => ({
+          squads: s.squads.map((q) => (q.id === id ? { ...q, ...patch } : q)),
+        })),
+
+      removeSquad: (id) =>
+        set((s) => ({ squads: s.squads.filter((q) => q.id !== id) })),
 
       setSport: (sport) =>
         set((s) => ({
@@ -119,6 +164,7 @@ export const useAppStore = create<AppState>()(
         settings: s.settings,
         lastResult: s.lastResult,
         history: s.history,
+        squads: s.squads,
       }),
     },
   ),

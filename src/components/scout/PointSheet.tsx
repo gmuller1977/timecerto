@@ -43,7 +43,11 @@ export function PointSheet({
   const c = TEAM_COLOR_CLASSES[scoringTeam.color];
 
   function pick(kind: 'ponto' | 'erro', action: VolleyAction) {
-    if (mode === 'atleta') {
+    // Só pergunta quem foi se o time em questão tem elenco cadastrado.
+    // Time convidado sem jogadores entra no scout como contagem.
+    const team = kind === 'ponto' ? scoringTeam : opponentTeam;
+    const hasRoster = players.some((p) => team.playerIds.includes(p.id));
+    if (mode === 'atleta' && hasRoster) {
       setDraft({ kind, action });
       return;
     }
