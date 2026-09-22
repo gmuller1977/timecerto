@@ -4,6 +4,9 @@ import { DrawPage } from '@/pages/DrawPage';
 import { ResultPage } from '@/pages/ResultPage';
 import { ScoreboardPage } from '@/pages/ScoreboardPage';
 import { QuickMatchPage } from '@/pages/QuickMatchPage';
+import { MatchSummaryPage } from '@/pages/MatchSummaryPage';
+import { HistoryPage } from '@/pages/HistoryPage';
+import { PlayerProfilePage } from '@/pages/PlayerProfilePage';
 
 export default function App() {
   return (
@@ -14,6 +17,9 @@ export default function App() {
         <Route path="/resultado" element={<ResultPage />} />
         <Route path="/partida" element={<QuickMatchPage />} />
         <Route path="/placar" element={<ScoreboardPage />} />
+        <Route path="/partida/:id" element={<MatchSummaryPage />} />
+        <Route path="/historico" element={<HistoryPage />} />
+        <Route path="/jogador/:id" element={<PlayerProfilePage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </HashRouter>

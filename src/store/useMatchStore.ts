@@ -184,6 +184,9 @@ export const useMatchStore = create<MatchState>()(
       removeMatch: (id) =>
         set((s) => ({ matches: s.matches.filter((m) => m.id !== id) })),
     }),
-    { name: 'timecerto:matches:v1' },
+    {
+      name: 'timecerto:matches:v1',
+      partialize: (s) => ({ live: s.live, matches: s.matches }),
+    },
   ),
 );

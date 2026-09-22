@@ -1,4 +1,5 @@
 import { Check, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { Player, SkillLevel } from '@/types';
 import { StarRating } from '@/components/ui/StarRating';
 import { useAppStore } from '@/store/useAppStore';
@@ -6,6 +7,7 @@ import { cn, initials } from '@/lib/utils';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 
 export function PlayerRow({ player }: { player: Player }) {
+  const navigate = useNavigate();
   const sport = useAppStore((s) => s.sport);
   const togglePresence = useAppStore((s) => s.togglePresence);
   const setSkill = useAppStore((s) => s.setSkill);
@@ -39,7 +41,12 @@ export function PlayerRow({ player }: { player: Player }) {
       </button>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-[15px] font-medium text-ink-50">{player.name}</p>
+        <button
+          onClick={() => navigate(`/jogador/${player.id}`)}
+          className="block max-w-full truncate text-left text-[15px] font-medium text-ink-50"
+        >
+          {player.name}
+        </button>
         <div className="mt-1 flex items-center gap-2">
           <StarRating value={skill} onChange={(v) => setSkill(player.id, v)} size={15} />
           <select

@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, Flag, Settings2, Undo2, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
+import { useHydrated } from '@/store/useHydrated';
 import { PointSheet, type PointDraft } from '@/components/scout/PointSheet';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ACTION_LABEL, POINTS_OPTIONS, currentRun } from '@/lib/volley';
@@ -18,6 +19,7 @@ const MODE_LABEL: Record<ScoutMode, { title: string; hint: string }> = {
 export function ScoreboardPage() {
   const navigate = useNavigate();
   const live = useMatchStore((s) => s.live);
+  const hydrated = useHydrated();
   const players = useAppStore((s) => s.players);
   const addRally = useMatchStore((s) => s.addRally);
   const undoRally = useMatchStore((s) => s.undoRally);
@@ -28,7 +30,11 @@ export function ScoreboardPage() {
 
   const [pending, setPending] = useState<{ team: MatchTeam; opp: MatchTeam } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  // Encerrar zera a partida no store. Sem esta trava, o redirecionamento
+  // de segurança abaixo dispara antes da navegação e engole o resumo.
+  const [leaving, setLeaving] = useState(false);
 
+  if (!hydrated || (leaving && !live)) return null;
   if (!live) return <Navigate to="/" replace />;
 
   const [teamA, teamB] = live.teams;
@@ -62,8 +68,11 @@ export function ScoreboardPage() {
   }
 
   function handleFinish() {
+    const matchId = live!.id;
+    const played = live!.sets.some((g) => (g.rallies?.length ?? 0) > 0);
+    setLeaving(true);
     finishMatch();
-    navigate('/');
+    navigate(played ? `/partida/${matchId}` : '/', { replace: true });
   }
 
   return (

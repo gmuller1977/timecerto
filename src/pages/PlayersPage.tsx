@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Plus, Radio, Search, Shuffle, Swords, Users } from 'lucide-react';
+import { ChevronRight, History, Plus, Radio, Search, Shuffle, Swords, Users } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { SportPicker } from '@/components/sports/SportPicker';
 import { PlayerRow } from '@/components/players/PlayerRow';
@@ -17,6 +17,7 @@ export function PlayersPage() {
   const addPlayer = useAppStore((s) => s.addPlayer);
   const setAllPresence = useAppStore((s) => s.setAllPresence);
   const live = useMatchStore((s) => s.live);
+  const matches = useMatchStore((s) => s.matches);
 
   const [name, setName] = useState('');
   const [skill, setSkill] = useState<SkillLevel>(3);
@@ -47,13 +48,25 @@ export function PlayersPage() {
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
-      <header className="safe-top pt-6 pb-4">
-        <h1 className="text-2xl font-bold tracking-tight">
-          Time<span className="text-brand-400">Certo</span>
-        </h1>
-        <p className="mt-0.5 text-sm text-ink-400">
-          Times equilibrados em segundos.
-        </p>
+      <header className="safe-top flex items-start justify-between pt-6 pb-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Time<span className="text-brand-400">Certo</span>
+          </h1>
+          <p className="mt-0.5 text-sm text-ink-400">
+            Times equilibrados em segundos.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/historico')}
+          className="flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2 text-xs font-medium text-ink-300"
+        >
+          <History size={14} />
+          Partidas
+          {matches.length > 0 && (
+            <span className="text-ink-500">{matches.length}</span>
+          )}
+        </button>
       </header>
 
       {live && (
