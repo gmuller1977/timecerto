@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Copy, RotateCcw, Share2 } from 'lucide-react';
+import { ArrowLeft, Check, Copy, PlayCircle, RotateCcw, Share2 } from 'lucide-react';
+import { useMatchStore } from '@/store/useMatchStore';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
 import { SPORTS } from '@/lib/sports';
@@ -14,6 +15,7 @@ export function ResultPage() {
   const players = useAppStore((s) => s.players);
   const settings = useAppStore((s) => s.settings);
   const setResult = useAppStore((s) => s.setResult);
+  const startMatch = useMatchStore((s) => s.startMatch);
   const [copied, setCopied] = useState(false);
   const [showStars, setShowStars] = useState(false);
 
@@ -107,6 +109,26 @@ export function ResultPage() {
           </div>
         )}
       </div>
+
+      <Button
+        variant="secondary"
+        size="lg"
+        className="mt-4 w-full"
+        onClick={() => {
+          const [a, b] = result.teams;
+          startMatch({
+            sport: result.sport,
+            teams: [
+              { id: a.id, name: a.name, color: a.color, playerIds: a.players.map((p) => p.id) },
+              { id: b.id, name: b.name, color: b.color, playerIds: b.players.map((p) => p.id) },
+            ],
+          });
+          navigate('/placar');
+        }}
+      >
+        <PlayCircle size={19} />
+        Começar partida e fazer o scout
+      </Button>
 
       <button
         onClick={() => setShowStars((v) => !v)}

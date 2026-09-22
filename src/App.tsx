@@ -2,6 +2,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { PlayersPage } from '@/pages/PlayersPage';
 import { DrawPage } from '@/pages/DrawPage';
 import { ResultPage } from '@/pages/ResultPage';
+import { ScoreboardPage } from '@/pages/ScoreboardPage';
 
 export default function App() {
   return (
@@ -10,6 +11,7 @@ export default function App() {
         <Route path="/" element={<PlayersPage />} />
         <Route path="/sortear" element={<DrawPage />} />
         <Route path="/resultado" element={<ResultPage />} />
+        <Route path="/placar" element={<ScoreboardPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </HashRouter>

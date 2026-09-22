@@ -101,6 +101,112 @@ export interface Group {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Partidas e estatísticas
+// ─────────────────────────────────────────────────────────────
+
+/** Foto do time no momento da pelada — nomes podem mudar depois */
+export interface MatchTeam {
+  id: string;
+  name: string;
+  color: TeamColor;
+  playerIds: string[];
+}
+
+/** Fundamento do vôlei em que o rally terminou */
+export type VolleyAction =
+  | 'ataque'
+  | 'bloqueio'
+  | 'saque'
+  | 'recepcao'
+  | 'levantamento'
+  | 'defesa'
+  | 'falta'
+  | 'indefinido';
+
+/**
+ * Um rally do vôlei. Todo ponto é OU um acerto de quem pontuou
+ * OU um erro do adversário — essa dualidade é a base do scout.
+ */
+export interface Rally {
+  id: string;
+  /** Time que marcou o ponto */
+  teamId: string;
+  /** 'ponto' = mérito de quem marcou · 'erro' = falha do adversário */
+  kind: 'ponto' | 'erro';
+  action: VolleyAction;
+  /** Autor da ação: quem pontuou, ou quem errou */
+  playerId?: string;
+  /** Placar do set depois deste rally */
+  scoreA: number;
+  scoreB: number;
+  at: string;
+}
+
+/** Um confronto entre dois times — um set no vôlei, um jogo no futebol */
+export interface Game {
+  id: string;
+  teamAId: string;
+  teamBId: string;
+  scoreA: number;
+  scoreB: number;
+  /** Confronto ainda não jogado — ignorado nas estatísticas */
+  played: boolean;
+  finished?: boolean;
+  /** Scout detalhado, rally a rally */
+  rallies?: Rally[];
+}
+
+/** Quanto detalhe o scout captura — muda o número de toques por ponto */
+export type ScoutMode = 'placar' | 'time' | 'atleta';
+
+export interface ScoutSettings {
+  mode: ScoutMode;
+  /** Pontos para vencer o set (25 oficial, 15 ou 21 em pelada) */
+  pointsToWin: number;
+  /** Exigir 2 pontos de vantagem */
+  winByTwo: boolean;
+  /** Teto de pontos quando há vantagem (0 = sem teto) */
+  cap: number;
+}
+
+export interface Match {
+  id: string;
+  date: string;
+  sport: SportId;
+  teams: MatchTeam[];
+  games: Game[];
+  /** Gols/pontos por jogador: playerId -> quantidade */
+  scorers: Record<string, number>;
+  /** Todos que compareceram, inclusive reservas */
+  attendance: string[];
+  drawId?: string;
+  notes?: string;
+}
+
+export interface PlayerStats {
+  playerId: string;
+  name: string;
+  /** Peladas em que compareceu */
+  appearances: number;
+  /** Confrontos disputados */
+  games: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  /** Pontos corridos: 3 por vitória, 1 por empate, sobre o total possível */
+  winRate: number;
+  goals: number;
+  goalsPerGame: number;
+  /** Presença sobre o total de peladas do grupo */
+  attendanceRate: number;
+  lastPlayed?: string;
+  /** Sequência atual: positivo = vitórias seguidas, negativo = derrotas */
+  streak: number;
+  topPosition?: string;
+  currentSkill: SkillLevel;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Financeiro (fase 2)
 // ─────────────────────────────────────────────────────────────
 

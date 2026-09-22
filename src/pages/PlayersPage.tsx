@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Shuffle, Users } from 'lucide-react';
+import { ChevronRight, Plus, Radio, Search, Shuffle, Users } from 'lucide-react';
+import { useMatchStore } from '@/store/useMatchStore';
 import { SportPicker } from '@/components/sports/SportPicker';
 import { PlayerRow } from '@/components/players/PlayerRow';
 import { StarRating } from '@/components/ui/StarRating';
@@ -15,6 +16,7 @@ export function PlayersPage() {
   const players = useAppStore((s) => s.players);
   const addPlayer = useAppStore((s) => s.addPlayer);
   const setAllPresence = useAppStore((s) => s.setAllPresence);
+  const live = useMatchStore((s) => s.live);
 
   const [name, setName] = useState('');
   const [skill, setSkill] = useState<SkillLevel>(3);
@@ -53,6 +55,26 @@ export function PlayersPage() {
           Times equilibrados em segundos.
         </p>
       </header>
+
+      {live && (
+        <button
+          onClick={() => navigate('/placar')}
+          className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-brand-500/40 bg-brand-500/10 px-4 py-3 text-left"
+        >
+          <Radio size={18} className="shrink-0 animate-pulse text-brand-400" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold text-brand-200">
+              Partida em andamento
+            </span>
+            <span className="block truncate text-xs text-brand-300/70">
+              {live.teams[0].name} {live.sets[live.sets.length - 1].scoreA} ×{' '}
+              {live.sets[live.sets.length - 1].scoreB} {live.teams[1].name} ·{' '}
+              {live.sets.length}º set
+            </span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-brand-400" />
+        </button>
+      )}
 
       <SportPicker />
 
