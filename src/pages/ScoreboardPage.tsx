@@ -133,7 +133,8 @@ export function ScoreboardPage() {
         </button>
       </header>
 
-      {/* Placar — cada metade é um botão gigante */}
+      {/* Placar — cada metade é um botão gigante, com + em cima e − embaixo
+          para corrigir: − tira o último ponto do time, + marca sem scout */}
       <div className="flex min-h-0 flex-1 gap-2 px-2">
         {[
           { team: teamA, opp: teamB, score: current.scoreA },
@@ -141,66 +142,57 @@ export function ScoreboardPage() {
         ].map(({ team, opp, score }) => {
           const c = TEAM_COLOR_CLASSES[team.color];
           return (
-            <button
+            <div
               key={team.id}
-              onClick={() => handleTap(team, opp)}
-              disabled={current.finished}
               className={cn(
-                'flex flex-1 flex-col items-center justify-center rounded-3xl border transition-all active:scale-[0.98]',
-                current.finished
-                  ? 'border-ink-800 bg-ink-900/50'
-                  : 'border-ink-800 bg-ink-900 active:bg-ink-800',
+                'flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl border border-ink-800',
+                current.finished ? 'bg-ink-900/50' : 'bg-ink-900',
               )}
             >
-              <span className={cn('mb-1 size-2.5 rounded-full', c.bg)} />
-              <span className="px-2 text-center text-sm font-semibold text-ink-300">
-                {team.name.replace('Time ', '')}
-              </span>
-              <span className="mt-1 text-7xl font-bold tabular-nums text-ink-50">
-                {score}
-              </span>
-              {courtState?.servingTeamId === team.id && !current.finished && (
-                <span className="mt-1 rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-semibold text-brand-300">
-                  saque
+              <button
+                onClick={() =>
+                  addRally({ teamId: team.id, kind: 'ponto', action: 'indefinido' })
+                }
+                disabled={current.finished}
+                aria-label={`Dar um ponto para ${team.name}`}
+                className="flex h-12 shrink-0 items-center justify-center border-b border-ink-800 text-ink-300 active:bg-ink-800 disabled:opacity-30"
+              >
+                <Plus size={22} />
+              </button>
+              <button
+                onClick={() => handleTap(team, opp)}
+                disabled={current.finished}
+                className="flex min-h-0 flex-1 flex-col items-center justify-center transition-all active:scale-[0.98] active:bg-ink-800"
+              >
+                <span className={cn('mb-1 size-2.5 rounded-full', c.bg)} />
+                <span className="px-2 text-center text-sm font-semibold text-ink-300">
+                  {team.name.replace('Time ', '')}
                 </span>
-              )}
-              {run?.teamId === team.id && run.count >= 3 && (
-                <span className="mt-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-                  {run.count} seguidos
+                <span className="mt-1 text-7xl font-bold tabular-nums text-ink-50">
+                  {score}
                 </span>
-              )}
-            </button>
+                {courtState?.servingTeamId === team.id && !current.finished && (
+                  <span className="mt-1 rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-semibold text-brand-300">
+                    saque
+                  </span>
+                )}
+                {run?.teamId === team.id && run.count >= 3 && (
+                  <span className="mt-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
+                    {run.count} seguidos
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => removePoint(team.id)}
+                disabled={score === 0}
+                aria-label={`Tirar um ponto de ${team.name}`}
+                className="flex h-12 shrink-0 items-center justify-center border-t border-ink-800 text-ink-300 active:bg-ink-800 disabled:opacity-30"
+              >
+                <Minus size={22} />
+              </button>
+            </div>
           );
         })}
-      </div>
-
-      {/* Correção do placar: − tira o último ponto do time, + marca sem scout */}
-      <div className="mt-2 flex gap-2 px-2">
-        {[
-          { team: teamA, score: current.scoreA },
-          { team: teamB, score: current.scoreB },
-        ].map(({ team, score }) => (
-          <div key={team.id} className="flex flex-1 gap-2">
-            <button
-              onClick={() => removePoint(team.id)}
-              disabled={score === 0}
-              aria-label={`Tirar um ponto de ${team.name}`}
-              className="flex h-11 flex-1 items-center justify-center rounded-xl border border-ink-800 bg-ink-900 text-ink-300 active:scale-[0.98] disabled:opacity-30"
-            >
-              <Minus size={20} />
-            </button>
-            <button
-              onClick={() =>
-                addRally({ teamId: team.id, kind: 'ponto', action: 'indefinido' })
-              }
-              disabled={current.finished}
-              aria-label={`Dar um ponto para ${team.name}`}
-              className="flex h-11 flex-1 items-center justify-center rounded-xl border border-ink-800 bg-ink-900 text-ink-300 active:scale-[0.98] disabled:opacity-30"
-            >
-              <Plus size={20} />
-            </button>
-          </div>
-        ))}
       </div>
 
       {pro && courtState && current.lineup && !current.finished && (

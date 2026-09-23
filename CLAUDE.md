@@ -121,7 +121,8 @@ No scout do atleta, "quem fez?" lista só quem está em quadra mais o líbero.
 
 ### Correção do placar
 
-Cada time tem **+** e **−** abaixo do placar, nos dois modos. O `+` marca um
+No cartão de cada time, **+** fica acima do número e **−** abaixo, nos dois
+modos; o meio do cartão continua sendo o toque que abre o scout. O `+` marca um
 ponto `indefinido`, sem abrir o scout. O `−` (`removePoint`) tira o **último
 ponto daquele time**, mesmo que não seja o último rally: reconta o placar
 gravado nos rallies seguintes, puxa uma casa para trás as substituições feitas
