@@ -24,6 +24,7 @@ import {
   fetchAttendance,
   findMyGroup,
   groupLink,
+  guestLink,
   openEvent,
   shareOnWhatsApp,
   syncAmador,
@@ -34,6 +35,7 @@ import {
 } from '@/lib/cloud';
 import type { AppMode } from '@/types';
 import { cn } from '@/lib/utils';
+import { distribuirVagas, joga } from '@/lib/vagas';
 
 const fmtEvent = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', {
@@ -224,7 +226,7 @@ function Connected({ mode, email }: { mode: AppMode; email: string }) {
   );
 }
 
-// ── Amador: link do grupo + presença do próximo jogo ────────
+// ── Amador: mensalistas e convidados ────────────────────────
 
 function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: string) => void }) {
   const players = useAppStore((s) => s.players);
@@ -233,14 +235,15 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
   const [answers, setAnswers] = useState<Attendance>({});
   const [when, setWhen] = useState(defaultWhen);
   const [title, setTitle] = useState('');
+  const [slots, setSlots] = useState('');
   const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [applied, setApplied] = useState(false);
 
-  const link = groupLink(group.code);
-
+  // Sincroniza antes de ler: quem acabou de se inscrever pelo link de
+  // convidados só tem nome no aparelho depois de trazido
   const load = useCallback(async () => {
     try {
+      await syncAmador(group.id);
       const ev = await openEvent(group.id);
       setEvent(ev);
       setAnswers(ev ? await fetchAttendance(ev.id) : {});
@@ -255,9 +258,14 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
   }, [load]);
 
   async function handleCreateEvent() {
+    const n = slots.trim() ? Number(slots) : null;
+    if (n !== null && (!Number.isInteger(n) || n < 2 || n > 200)) {
+      onError('Vagas: use um número inteiro entre 2 e 200, ou deixe em branco para não ter limite.');
+      return;
+    }
     setBusy(true);
     try {
-      await createEvent(group.id, new Date(when), title);
+      await createEvent(group.id, new Date(when), title, n);
       await load();
     } catch (e) {
       onError(explain(e));
@@ -265,39 +273,46 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
     setBusy(false);
   }
 
-  function share() {
-    const quando = event ? `\n📅 ${fmtEvent(event.startsAt)}` : '';
-    shareOnWhatsApp(
-      `⚡ ${event?.title || group.name}${quando}\n\nConfirme se vai: toque no link, escolha seu nome e marque.\n${link}`,
-    );
-  }
+  const cloudPlayers = players.filter((p) => p.remoteId);
+  const dist = distribuirVagas(
+    event?.slots ?? null,
+    cloudPlayers.map((p) => ({
+      id: p.remoteId!,
+      kind: p.kind ?? 'mensalista',
+      status: answers[p.remoteId!]?.status ?? null,
+      answeredAt: answers[p.remoteId!]?.answeredAt ?? null,
+    })),
+  );
+  const sit = (p: (typeof players)[number]) => dist.situacao.get(p.remoteId!);
 
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt('Copie o link:', link);
-    }
-  }
+  const mensalistas = cloudPlayers.filter((p) => p.kind !== 'convidado');
+  const convidados = cloudPlayers.filter((p) => p.kind === 'convidado');
+  const byTipo = (list: typeof players, tipo: string) => list.filter((p) => sit(p)?.tipo === tipo);
+  const fila = convidados
+    .filter((p) => sit(p)?.tipo === 'fila')
+    .sort((a, b) => {
+      const pa = sit(a), pb = sit(b);
+      return (pa?.tipo === 'fila' ? pa.posicao : 0) - (pb?.tipo === 'fila' ? pb.posicao : 0);
+    });
 
-  // As respostas do link viram a lista de presença do sorteio
+  // Quem tem vaga entra na lista do sorteio; quem ficou na fila ou disse que
+  // não vai sai. Quem não respondeu fica como está.
   function applyToPresence() {
-    for (const p of players) {
-      const a = p.remoteId ? answers[p.remoteId] : undefined;
-      if (a) updatePlayer(p.id, { present: a === 'vou' });
+    for (const p of cloudPlayers) {
+      const s = sit(p);
+      if (!s || s.tipo === 'sem_resposta') continue;
+      updatePlayer(p.id, { present: joga(s) });
     }
     setApplied(true);
     setTimeout(() => setApplied(false), 2500);
   }
 
-  const vou = players.filter((p) => p.remoteId && answers[p.remoteId] === 'vou');
-  const naoVou = players.filter((p) => p.remoteId && answers[p.remoteId] === 'nao_vou');
-  const semResposta = players.filter((p) => !p.remoteId || !answers[p.remoteId]);
+  const quando = event ? `📅 ${fmtEvent(event.startsAt)}` : '';
+  const nome = event?.title || group.name;
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Jogo */}
       <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
         <p className="text-xs font-semibold tracking-wide text-brand-400 uppercase">
           Próximo jogo
@@ -306,28 +321,35 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
           <p className="mt-2 text-sm text-ink-500">Carregando…</p>
         ) : event ? (
           <>
-            <p className="mt-1 text-[17px] font-semibold text-ink-50">
-              {event.title || group.name}
-            </p>
+            <p className="mt-1 text-[17px] font-semibold text-ink-50">{nome}</p>
             <p className="text-sm capitalize text-ink-300">{fmtEvent(event.startsAt)}</p>
-            <div className="mt-4 flex gap-2">
-              <Button size="lg" className="flex-1" onClick={share}>
-                <MessageCircle size={19} />
-                Enviar no WhatsApp
-              </Button>
-              <Button variant="secondary" size="lg" onClick={copy} aria-label="Copiar link">
-                {copied ? <Check size={19} /> : <Copy size={19} />}
-              </Button>
-            </div>
+            <p className="mt-2 text-sm text-ink-300">
+              {event.slots ? (
+                <>
+                  <strong className="text-ink-50">
+                    {dist.mensalistasConfirmados + dist.convidadosComVaga}
+                  </strong>{' '}
+                  de {event.slots} vagas preenchidas
+                  {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
+                </>
+              ) : (
+                <>
+                  <strong className="text-ink-50">
+                    {dist.mensalistasConfirmados + dist.convidadosComVaga}
+                  </strong>{' '}
+                  confirmados · sem limite de vagas
+                </>
+              )}
+            </p>
           </>
         ) : (
           <p className="mt-2 text-sm leading-relaxed text-ink-400">
-            Marque o jogo para o grupo responder. O link é sempre o mesmo — ele
-            mostra o jogo que estiver aberto.
+            Marque o jogo para mensalistas e convidados responderem. Os links são
+            sempre os mesmos — eles mostram o jogo que estiver aberto.
           </p>
         )}
 
-        <details className="mt-4 group" open={event === null}>
+        <details className="mt-4" open={event === null}>
           <summary className="cursor-pointer list-none text-sm font-medium text-brand-400">
             <CalendarPlus size={15} className="mr-1.5 inline" />
             {event ? 'Marcar outro jogo' : 'Marcar jogo'}
@@ -345,62 +367,161 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
               placeholder="Título (opcional) — ex.: Pelada de quinta"
               className="w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
             />
+            <input
+              value={slots}
+              onChange={(e) => setSlots(e.target.value.replace(/\D/g, ''))}
+              inputMode="numeric"
+              placeholder="Vagas (ex.: 20) — em branco, sem limite"
+              className="w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
+            />
             <Button variant="secondary" disabled={busy || !when} onClick={handleCreateEvent}>
               {busy ? 'Salvando…' : event ? 'Trocar pelo novo jogo' : 'Marcar'}
             </Button>
-            {event && (
-              <p className="text-[11px] leading-relaxed text-ink-500">
-                O jogo atual fecha e as respostas dele ficam guardadas.
-              </p>
-            )}
+            <p className="text-[11px] leading-relaxed text-ink-500">
+              Mensalista que confirma sempre joga. Convidado entra numa fila e joga
+              se sobrar vaga, por ordem de chegada.
+              {event && ' Marcar outro jogo fecha o atual; as respostas dele ficam guardadas.'}
+            </p>
           </div>
         </details>
       </section>
 
       {event && (
-        <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-ink-100">
-              {vou.length} vão · {naoVou.length} não vão · {semResposta.length} sem resposta
-            </p>
-            <button onClick={load} className="p-1 text-ink-500" aria-label="Atualizar respostas">
-              <RefreshCw size={16} />
-            </button>
-          </div>
-
-          <NameList label="Vão" tone="ok" names={vou.map((p) => p.name)} />
-          <NameList label="Não vão" tone="no" names={naoVou.map((p) => p.name)} />
-          <NameList label="Sem resposta" tone="none" names={semResposta.map((p) => p.name)} />
-
-          <Button
-            variant="secondary"
-            className="mt-4 w-full"
-            disabled={vou.length + naoVou.length === 0}
-            onClick={applyToPresence}
-          >
-            {applied ? <Check size={17} /> : null}
-            {applied ? 'Lista de presença atualizada' : 'Usar respostas na lista de presença'}
-          </Button>
-          <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-            Quem respondeu entra ou sai da lista do sorteio. Quem não respondeu fica
-            como está.
-          </p>
-          <button
-            onClick={async () => {
-              if (!window.confirm('Fechar as respostas? O link deixa de aceitar confirmações.')) return;
-              try {
-                await closeEvent(event.id);
-                await load();
-              } catch (e) {
-                onError(explain(e));
+        <>
+          {/* Mensalistas */}
+          <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-[15px] font-semibold text-ink-50">Mensalistas</p>
+                <p className="text-xs text-ink-400">
+                  {dist.mensalistasConfirmados} vão · {byTipo(mensalistas, 'nao_vou').length}{' '}
+                  não vão · {byTipo(mensalistas, 'sem_resposta').length +
+                    mensalistas.filter((p) => !sit(p)).length}{' '}
+                  sem resposta
+                </p>
+              </div>
+              <button onClick={load} className="p-1 text-ink-500" aria-label="Atualizar respostas">
+                <RefreshCw size={16} />
+              </button>
+            </div>
+            <ShareRow
+              link={groupLink(group.code)}
+              onShare={() =>
+                shareOnWhatsApp(
+                  `⚡ ${nome}\n${quando}\n\nMensalistas, confirmem: toque no link, escolha seu nome e marque se vai.\n${groupLink(group.code)}`,
+                )
               }
-            }}
-            className="mt-3 text-xs text-ink-500 underline"
-          >
-            Fechar respostas deste jogo
-          </button>
-        </section>
+            />
+            <NameList label="Vão" tone="ok" names={byTipo(mensalistas, 'confirmado').map((p) => p.name)} />
+            <NameList label="Não vão" tone="no" names={byTipo(mensalistas, 'nao_vou').map((p) => p.name)} />
+            <NameList
+              label="Sem resposta"
+              tone="none"
+              names={mensalistas.filter((p) => !sit(p) || sit(p)?.tipo === 'sem_resposta').map((p) => p.name)}
+            />
+          </section>
+
+          {/* Convidados */}
+          <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+            <p className="text-[15px] font-semibold text-ink-50">Convidados</p>
+            <p className="text-xs text-ink-400">
+              {dist.convidadosComVaga} com vaga · {dist.naFila} na fila
+              {event.slots != null && ` · ${dist.livres} vagas livres`}
+            </p>
+            {group.guestCode ? (
+              <ShareRow
+                link={guestLink(group.guestCode)}
+                onShare={() =>
+                  shareOnWhatsApp(
+                    `⚡ ${nome}\n${quando}\n\nQuer jogar? Coloque seu nome na lista de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.\n${guestLink(group.guestCode!)}`,
+                  )
+                }
+              />
+            ) : (
+              <p className="mt-3 text-xs text-ink-500">
+                O link de convidados aparece depois da atualização do banco (migração 005).
+              </p>
+            )}
+            <NameList label="Com vaga" tone="ok" names={byTipo(convidados, 'vaga').map((p) => p.name)} />
+            {fila.length > 0 && (
+              <div className="mt-3">
+                <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-ink-500 uppercase">
+                  Fila
+                </p>
+                <ol className="flex flex-col gap-1">
+                  {fila.map((p) => {
+                    const s = sit(p);
+                    return (
+                      <li key={p.id} className="flex items-center gap-2 text-sm text-ink-300">
+                        <span className="w-5 shrink-0 text-right text-xs tabular-nums text-ink-500">
+                          {s?.tipo === 'fila' ? `${s.posicao}º` : ''}
+                        </span>
+                        {p.name}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            )}
+            <NameList label="Não vão" tone="no" names={byTipo(convidados, 'nao_vou').map((p) => p.name)} />
+          </section>
+
+          <section>
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={dist.mensalistasConfirmados + dist.convidadosComVaga === 0}
+              onClick={applyToPresence}
+            >
+              {applied ? <Check size={17} /> : null}
+              {applied ? 'Lista de presença atualizada' : 'Usar respostas na lista de presença'}
+            </Button>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+              Entra no sorteio quem tem vaga. Quem ficou na fila ou não vai sai da lista;
+              quem não respondeu fica como está.
+            </p>
+            <button
+              onClick={async () => {
+                if (!window.confirm('Fechar as respostas? Os links deixam de aceitar confirmações.')) return;
+                try {
+                  await closeEvent(event.id);
+                  await load();
+                } catch (e) {
+                  onError(explain(e));
+                }
+              }}
+              className="mt-3 text-xs text-ink-500 underline"
+            >
+              Fechar respostas deste jogo
+            </button>
+          </section>
+        </>
       )}
+    </div>
+  );
+}
+
+/** Enviar no WhatsApp + copiar o link */
+function ShareRow({ link, onShare }: { link: string; onShare: () => void }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      window.prompt('Copie o link:', link);
+    }
+  }
+  return (
+    <div className="mt-3 flex gap-2">
+      <Button className="flex-1" onClick={onShare}>
+        <MessageCircle size={18} />
+        Enviar no WhatsApp
+      </Button>
+      <Button variant="secondary" onClick={copy} aria-label="Copiar link">
+        {copied ? <Check size={18} /> : <Copy size={18} />}
+      </Button>
     </div>
   );
 }

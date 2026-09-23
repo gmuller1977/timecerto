@@ -13,6 +13,8 @@ export function PlayerRow({ player }: { player: Player }) {
   const setSkill = useAppStore((s) => s.setSkill);
   const setPosition = useAppStore((s) => s.setPosition);
   const removePlayer = useAppStore((s) => s.removePlayer);
+  const updatePlayer = useAppStore((s) => s.updatePlayer);
+  const convidado = player.kind === 'convidado';
 
   const skill = (player.skills[sport] ?? 3) as SkillLevel;
   const position = player.positions[sport] ?? '';
@@ -41,12 +43,29 @@ export function PlayerRow({ player }: { player: Player }) {
       </button>
 
       <div className="min-w-0 flex-1">
-        <button
-          onClick={() => navigate(`/jogador/${player.id}`)}
-          className="block max-w-full truncate text-left text-[15px] font-medium text-ink-50"
-        >
-          {player.name}
-        </button>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            onClick={() => navigate(`/jogador/${player.id}`)}
+            className="min-w-0 truncate text-left text-[15px] font-medium text-ink-50"
+          >
+            {player.name}
+          </button>
+          {/* Um toque troca: o administrador decide quem é mensalista */}
+          <button
+            onClick={() =>
+              updatePlayer(player.id, { kind: convidado ? 'mensalista' : 'convidado' })
+            }
+            aria-label={`${player.name} é ${convidado ? 'convidado' : 'mensalista'}. Tocar para trocar`}
+            className={cn(
+              'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
+              convidado
+                ? 'border border-ink-700 text-ink-400'
+                : 'bg-brand-500/15 text-brand-300',
+            )}
+          >
+            {convidado ? 'Convidado' : 'Mensalista'}
+          </button>
+        </div>
         <div className="mt-1 flex items-center gap-2">
           <StarRating value={skill} onChange={(v) => setSkill(player.id, v)} size={15} />
           <select

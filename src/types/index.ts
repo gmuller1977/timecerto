@@ -47,7 +47,15 @@ export interface Player {
   remoteId?: string;
   /** Entrou pelo link do grupo — nível e posição ainda são um palpite */
   addedViaLink?: boolean;
+  /** Ausente = mensalista (todo cadastro de antes desta distinção) */
+  kind?: PlayerKind;
 }
+
+/**
+ * Mensalista tem vaga garantida quando confirma; convidado entra na fila e
+ * joga se sobrar vaga (`lib/vagas.ts`). Quem define é o administrador.
+ */
+export type PlayerKind = 'mensalista' | 'convidado';
 
 export interface Team {
   id: string;

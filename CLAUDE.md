@@ -50,11 +50,46 @@ dos atletas, inclusive nascimento de menores e os tokens pessoais.
 
 Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
 
-- `/#/c/CÓDIGO` — link do grupo (amador): escolhe o próprio nome (o aparelho
-  lembra) e marca vou / não vou no jogo aberto. Qualquer um com o link marca
-  por qualquer um; aceito, o organizador vê a lista.
+- `/#/c/CÓDIGO` — link dos **mensalistas** (amador): escolhe o próprio nome
+  (o aparelho lembra), marca vou / não vou, e pode "levar alguém de fora", que
+  entra na fila de convidados. Qualquer um com o link marca por qualquer um;
+  aceito, o organizador vê a lista.
+- `/#/v/CÓDIGO` — link de **convidados** (amador, `groups.guest_code`): põe o
+  nome e entra na fila. Nome de convidado que já existe = a mesma pessoa
+  voltando; nome de mensalista é recusado.
 - `/#/a/TOKEN` — link pessoal do atleta: completa nascimento, altura e peso.
   Menor de idade exige o aceite do responsável (LGPD).
+
+### Mensalistas e convidados (amador)
+
+Decidido pelo Guilherme em 23/09/2026. O **administrador define no cadastro**
+quem é mensalista e quem é convidado (`Player.kind`; ausente = mensalista).
+
+- O jogo tem **vagas** (`events.slots`; nulo = sem limite).
+- **Mensalista que confirma sempre joga**, mesmo acima das vagas.
+- **Convidado entra numa fila** por ordem de resposta e joga só se sobrar vaga.
+  Mensalista desistiu, o primeiro da fila entra sozinho.
+- Convidado chega pelo organizador, por um mensalista ou se inscrevendo sozinho.
+
+**A fila não é guardada**: sai de `answered_at`, calculada por
+`distribuirVagas` em `lib/vagas.ts`. É a única implementação — a tela do
+organizador e os dois links chamam ela. `answered_at` só muda quando a resposta
+muda: apertar "vou" de novo não pode jogar o convidado para o fim da fila.
+
+"Usar respostas na lista de presença" marca para o sorteio só quem **tem vaga**
+(`joga()`); fila e "não vou" saem; sem resposta fica como está.
+
+Pagamento (mensalidade, avulso) fica para a etapa do financeiro.
+
+### Roteiro do Amador
+
+O foco atual é o **modo amador**; o profissional espera. Ordem combinada:
+
+1. Mensalistas e convidados — **feito**
+2. Do convite ao sorteio: fechar a lista, sortear só quem tem vaga, times no link
+3. Partidas na nuvem: resultados e estatística no link, histórico em outro aparelho
+4. Financeiro: mensalidade, avulso, Pix, quem pagou
+5. Acabamento: co-organizador, offline no ginásio (service worker), avisos
 
 Todo acesso do convidado passa pelas funções `guest_*` do esquema, que
 conferem código ou token. **Nenhuma tabela é aberta para `anon`** — não

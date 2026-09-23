@@ -5,6 +5,7 @@ import type {
   DrawResult,
   DrawSettings,
   Player,
+  PlayerKind,
   RotationSystem,
   SkillLevel,
   SportId,
@@ -35,7 +36,12 @@ interface AppState {
   }) => Squad;
   updateSquad: (id: string, patch: Partial<Squad>) => void;
   removeSquad: (id: string) => void;
-  addPlayer: (input: { name: string; skill: SkillLevel; position?: string }) => void;
+  addPlayer: (input: {
+    name: string;
+    skill: SkillLevel;
+    position?: string;
+    kind?: PlayerKind;
+  }) => void;
   updatePlayer: (id: string, patch: Partial<Player>) => void;
   removePlayer: (id: string) => void;
   togglePresence: (id: string) => void;
@@ -113,7 +119,7 @@ export const useAppStore = create<AppState>()(
           },
         })),
 
-      addPlayer: ({ name, skill, position }) => {
+      addPlayer: ({ name, skill, position, kind }) => {
         const sport = get().sport;
         const player: Player = {
           id: uid(),
@@ -122,6 +128,7 @@ export const useAppStore = create<AppState>()(
           positions: position ? { [sport]: position } : {},
           present: true,
           createdAt: new Date().toISOString(),
+          kind: kind ?? 'mensalista',
         };
         set((s) => ({ players: [...s.players, player] }));
       },

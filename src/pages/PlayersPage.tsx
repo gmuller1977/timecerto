@@ -7,8 +7,9 @@ import { PlayerRow } from '@/components/players/PlayerRow';
 import { StarRating } from '@/components/ui/StarRating';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
-import type { SkillLevel } from '@/types';
+import type { PlayerKind, SkillLevel } from '@/types';
 import { SPORTS } from '@/lib/sports';
+import { cn } from '@/lib/utils';
 
 export function PlayersPage() {
   const navigate = useNavigate();
@@ -24,14 +25,21 @@ export function PlayersPage() {
   const [name, setName] = useState('');
   const [skill, setSkill] = useState<SkillLevel>(3);
   const [position, setPosition] = useState('');
+  const [kind, setKind] = useState<PlayerKind>('mensalista');
   const [query, setQuery] = useState('');
 
   const present = players.filter((p) => p.present).length;
+  const convidados = players.filter((p) => p.kind === 'convidado').length;
 
+  // Presentes primeiro; dentro de cada bloco, mensalistas antes de convidados
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = q ? players.filter((p) => p.name.toLowerCase().includes(q)) : players;
-    return [...list].sort((a, b) => Number(b.present) - Number(a.present));
+    return [...list].sort(
+      (a, b) =>
+        Number(b.present) - Number(a.present) ||
+        Number(a.kind === 'convidado') - Number(b.kind === 'convidado'),
+    );
   }, [players, query]);
 
   function handleAdd(e: React.FormEvent) {
@@ -42,7 +50,7 @@ export function PlayersPage() {
       .split(/[,\n]/)
       .map((n) => n.trim())
       .filter(Boolean);
-    names.forEach((n) => addPlayer({ name: n, skill, position: position || undefined }));
+    names.forEach((n) => addPlayer({ name: n, skill, position: position || undefined, kind }));
     setName('');
     setPosition('');
     setSkill(3);
@@ -113,6 +121,23 @@ export function PlayersPage() {
           placeholder="Nome do jogador (ou cole vários, separados por vírgula)"
           className="w-full bg-transparent text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
         />
+        <div className="mt-3 flex gap-1.5">
+          {(['mensalista', 'convidado'] as PlayerKind[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={cn(
+                'flex-1 rounded-lg border py-1.5 text-xs font-semibold',
+                kind === k
+                  ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                  : 'border-ink-800 bg-ink-950 text-ink-400',
+              )}
+            >
+              {k === 'mensalista' ? 'Mensalista' : 'Convidado'}
+            </button>
+          ))}
+        </div>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <StarRating value={skill} onChange={setSkill} size={17} />
@@ -142,6 +167,12 @@ export function PlayersPage() {
           <span>
             <strong className="text-ink-100">{present}</strong> de {players.length}{' '}
             presentes
+            {convidados > 0 && (
+              <span className="text-ink-500">
+                {' '}· {players.length - convidados} mensalistas, {convidados}{' '}
+                {convidados === 1 ? 'convidado' : 'convidados'}
+              </span>
+            )}
           </span>
         </div>
         {players.length > 0 && (

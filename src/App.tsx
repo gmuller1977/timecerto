@@ -43,6 +43,7 @@ export default function App() {
           <Route path="/convites" element={<InvitePage />} />
           {/* Links do WhatsApp — abertos por quem não tem conta */}
           <Route path="/c/:code" element={<GuestGroupPage />} />
+          <Route path="/v/:code" element={<GuestGroupPage />} />
           <Route path="/a/:token" element={<GuestAthletePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

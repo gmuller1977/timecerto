@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
-import type { AppMode } from '@/types';
+import type { AppMode, PlayerKind } from '@/types';
 
 /**
  * Tudo o que fala com o banco em nome do ORGANIZADOR (logado, sob RLS).
@@ -15,16 +15,37 @@ import type { AppMode } from '@/types';
 export interface CloudGroup {
   id: string;
   name: string;
+  /** Link dos mensalistas */
   code: string;
+  /** Link de convidados (só amador) */
+  guestCode: string | null;
 }
 
 export interface CloudEvent {
   id: string;
   title: string | null;
   startsAt: string;
+  /** Vagas do jogo; null = sem limite */
+  slots: number | null;
 }
 
-export type Attendance = Record<string, 'vou' | 'nao_vou'>;
+/** Resposta de cada jogador, pelo id da NUVEM */
+export type Attendance = Record<string, { status: 'vou' | 'nao_vou'; answeredAt: string }>;
+
+const GROUP_COLS = 'id, name, invite_code, guest_code';
+const toGroup = (d: { id: string; name: string; invite_code: string; guest_code: string | null }) => ({
+  id: d.id,
+  name: d.name,
+  code: d.invite_code,
+  guestCode: d.guest_code,
+});
+const EVENT_COLS = 'id, title, starts_at, slots';
+const toEvent = (d: { id: string; title: string | null; starts_at: string; slots: number | null }) => ({
+  id: d.id,
+  title: d.title,
+  startsAt: d.starts_at,
+  slots: d.slots,
+});
 
 function db() {
   if (!supabase) throw new Error('Supabase não configurado');
@@ -41,14 +62,14 @@ async function uid(): Promise<string> {
 export async function findMyGroup(mode: AppMode): Promise<CloudGroup | null> {
   const { data, error } = await db()
     .from('groups')
-    .select('id, name, invite_code')
+    .select(GROUP_COLS)
     .eq('owner_id', await uid())
     .eq('mode', mode)
     .order('created_at')
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data && { id: data.id, name: data.name, code: data.invite_code };
+  return data && toGroup(data);
 }
 
 export async function createGroup(mode: AppMode, name: string): Promise<CloudGroup> {
@@ -56,10 +77,10 @@ export async function createGroup(mode: AppMode, name: string): Promise<CloudGro
   const { data, error } = await db()
     .from('groups')
     .insert({ name: name.trim(), sport, mode, owner_id: await uid() })
-    .select('id, name, invite_code')
+    .select(GROUP_COLS)
     .single();
   if (error) throw error;
-  return { id: data.id, name: data.name, code: data.invite_code };
+  return toGroup(data);
 }
 
 /**
@@ -69,6 +90,9 @@ export async function createGroup(mode: AppMode, name: string): Promise<CloudGro
  * histórico.
  */
 export async function syncAmador(groupId: string): Promise<number> {
+  // Quem se inscrever pelo link DEPOIS deste instante ainda não está no
+  // aparelho, e não pode ser aposentado por isso
+  const startedAt = new Date().toISOString();
   const added = await pullLinkAdded(groupId);
   const { players, updatePlayer } = useAppStore.getState();
   const rows = players.map((p) => {
@@ -81,10 +105,11 @@ export async function syncAmador(groupId: string): Promise<number> {
       skills: p.skills,
       positions: p.positions,
       is_keeper: Boolean(p.isKeeper),
+      kind: p.kind ?? 'mensalista',
       active: true,
     };
   });
-  await upsertAndRetire(groupId, rows);
+  await upsertAndRetire(groupId, rows, startedAt);
   return added;
 }
 
@@ -97,7 +122,7 @@ export async function syncAmador(groupId: string): Promise<number> {
 async function pullLinkAdded(groupId: string): Promise<number> {
   const { data, error } = await db()
     .from('players')
-    .select('id, name, skills, positions, created_at')
+    .select('id, name, skills, positions, kind, created_at')
     .eq('group_id', groupId)
     .eq('active', true)
     .eq('added_via_link', true);
@@ -122,6 +147,7 @@ async function pullLinkAdded(groupId: string): Promise<number> {
         createdAt: r.created_at,
         remoteId: r.id,
         addedViaLink: true,
+        kind: r.kind === 'mensalista' ? ('mensalista' as const) : ('convidado' as const),
       })),
     ],
   }));
@@ -180,7 +206,11 @@ export async function syncPro(groupId: string): Promise<void> {
   }
 }
 
-async function upsertAndRetire(groupId: string, rows: { id: string }[]) {
+/**
+ * `protectFrom`: não aposenta quem foi criado a partir deste instante — é quem
+ * se inscreveu pelo link enquanto a sincronização rodava.
+ */
+async function upsertAndRetire(groupId: string, rows: { id: string }[], protectFrom?: string) {
   if (rows.length > 0) {
     const { error } = await db().from('players').upsert(rows);
     if (error) throw error;
@@ -188,6 +218,7 @@ async function upsertAndRetire(groupId: string, rows: { id: string }[]) {
   const keep = rows.map((r) => r.id);
   let q = db().from('players').update({ active: false }).eq('group_id', groupId);
   if (keep.length > 0) q = q.not('id', 'in', `(${keep.join(',')})`);
+  if (protectFrom) q = q.lt('created_at', protectFrom);
   const { error } = await q;
   if (error) throw error;
 }
@@ -197,14 +228,14 @@ async function upsertAndRetire(groupId: string, rows: { id: string }[]) {
 export async function openEvent(groupId: string): Promise<CloudEvent | null> {
   const { data, error } = await db()
     .from('events')
-    .select('id, title, starts_at')
+    .select(EVENT_COLS)
     .eq('group_id', groupId)
     .eq('closed', false)
     .order('starts_at')
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data && { id: data.id, title: data.title, startsAt: data.starts_at };
+  return data && toEvent(data);
 }
 
 /** Marca o próximo jogo. O link mostra um jogo por vez: os abertos fecham. */
@@ -212,6 +243,7 @@ export async function createEvent(
   groupId: string,
   startsAt: Date,
   title: string,
+  slots: number | null,
 ): Promise<CloudEvent> {
   const { error: e1 } = await db()
     .from('events')
@@ -221,11 +253,16 @@ export async function createEvent(
   if (e1) throw e1;
   const { data, error } = await db()
     .from('events')
-    .insert({ group_id: groupId, starts_at: startsAt.toISOString(), title: title.trim() || null })
-    .select('id, title, starts_at')
+    .insert({
+      group_id: groupId,
+      starts_at: startsAt.toISOString(),
+      title: title.trim() || null,
+      slots,
+    })
+    .select(EVENT_COLS)
     .single();
   if (error) throw error;
-  return { id: data.id, title: data.title, startsAt: data.starts_at };
+  return toEvent(data);
 }
 
 export async function closeEvent(id: string): Promise<void> {
@@ -237,10 +274,12 @@ export async function closeEvent(id: string): Promise<void> {
 export async function fetchAttendance(eventId: string): Promise<Attendance> {
   const { data, error } = await db()
     .from('attendance')
-    .select('player_id, status')
+    .select('player_id, status, answered_at')
     .eq('event_id', eventId);
   if (error) throw error;
-  return Object.fromEntries(data.map((a) => [a.player_id, a.status]));
+  return Object.fromEntries(
+    data.map((a) => [a.player_id, { status: a.status, answeredAt: a.answered_at }]),
+  );
 }
 
 // ── Links ───────────────────────────────────────────────────
@@ -248,7 +287,10 @@ export async function fetchAttendance(eventId: string): Promise<Attendance> {
 function base(): string {
   return `${location.origin}${location.pathname}`;
 }
+/** Link dos mensalistas */
 export const groupLink = (code: string) => `${base()}#/c/${code}`;
+/** Link de convidados — se inscrevem na fila */
+export const guestLink = (code: string) => `${base()}#/v/${code}`;
 export const athleteLink = (token: string) => `${base()}#/a/${token}`;
 
 /** Abre o WhatsApp com a mensagem pronta; a pessoa escolhe o contato ou grupo */
@@ -259,16 +301,27 @@ export function shareOnWhatsApp(text: string) {
 // ── Convidado sem conta ─────────────────────────────────────
 
 export interface GuestGroup {
+  /** Por qual link a pessoa entrou */
+  via: 'mensalistas' | 'convidados';
   group: { name: string; sport: string; mode: AppMode };
   event: CloudEvent | null;
   players: {
     id: string;
     name: string;
+    kind: PlayerKind;
     position: string | null;
     status: 'vou' | 'nao_vou' | null;
+    answeredAt: string | null;
     /** Nome de quem levou, quando a pessoa entrou como convidado */
     invitedBy: string | null;
   }[];
+}
+
+/** O convidado se inscreve pelo link de convidados e entra na fila */
+export async function guestJoin(code: string, eventId: string, name: string): Promise<string> {
+  const { data, error } = await db().rpc('guest_join', { code, p_event: eventId, p_name: name });
+  if (error) throw error;
+  return data as string;
 }
 
 /**
