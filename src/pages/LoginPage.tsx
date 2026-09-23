@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Mail } from 'lucide-react';
+import { ArrowLeft, LogOut, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/store/useAuth';
@@ -17,6 +17,7 @@ export function LoginPage() {
   const back = params.get('volta') || '/';
   const session = useAuth((s) => s.session);
   const ready = useAuth((s) => s.ready);
+  const signOut = useAuth((s) => s.signOut);
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -33,7 +34,41 @@ export function LoginPage() {
       </Shell>
     );
   }
-  if (ready && session) return <Navigate to={back} replace />;
+  if (!ready) return null;
+  // Veio de uma tela que pediu login: devolve para ela
+  if (session && params.get('volta')) return <Navigate to={back} replace />;
+  // Veio pelo botão da home: mostra a conta
+  if (session) {
+    return (
+      <Shell onBack={() => navigate('/')}>
+        <div className="rounded-2xl border border-ink-800 bg-ink-900 p-5">
+          <p className="text-xs text-ink-500">Conectado como</p>
+          <p className="mt-0.5 truncate text-[15px] font-semibold text-ink-50">
+            {session.user.email}
+          </p>
+          <p className="mt-3 text-sm leading-relaxed text-ink-400">
+            Os convites ficam dentro de cada modo — no Amador ou no Profissional,
+            toque em Convidar.
+          </p>
+        </div>
+        <Button
+          variant="secondary"
+          size="lg"
+          className="mt-4 w-full"
+          onClick={async () => {
+            await signOut();
+            navigate('/', { replace: true });
+          }}
+        >
+          <LogOut size={18} />
+          Sair da conta
+        </Button>
+        <p className="mt-3 text-center text-xs leading-relaxed text-ink-500">
+          Sair não apaga nada: jogadores e partidas continuam neste aparelho.
+        </p>
+      </Shell>
+    );
+  }
 
   async function sendCode(e: React.FormEvent) {
     e.preventDefault();

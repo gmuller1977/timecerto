@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ClipboardList, Radio, Shuffle } from 'lucide-react';
+import { ChevronRight, ClipboardList, Radio, Shuffle, UserRound } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
 import { SPORT_LIST } from '@/lib/sports';
@@ -37,6 +37,24 @@ const MODES: {
   },
 ];
 
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const isSupabaseConfigured = Boolean(supabaseUrl);
+
+/**
+ * A home abre em todo uso do app, inclusive no ginásio; importar o cliente do
+ * Supabase aqui traria 200 kB para o pacote principal só para decidir um
+ * rótulo. A chave abaixo é onde o cliente guarda a sessão — basta saber se
+ * ela existe. Errar custa só o texto do botão; a tela de login confere de verdade.
+ */
+function hasSavedSession(): boolean {
+  try {
+    const ref = new URL(supabaseUrl!).hostname.split('.')[0];
+    return localStorage.getItem(`sb-${ref}-auth-token`) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function HomePage() {
   const navigate = useNavigate();
   const live = useMatchStore((s) => s.live);
@@ -49,11 +67,22 @@ export function HomePage() {
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
-      <header className="safe-top pt-10 pb-6">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Time<span className="text-brand-400">Certo</span>
-        </h1>
-        <p className="mt-1 text-sm text-ink-400">Como você joga hoje?</p>
+      <header className="safe-top flex items-start justify-between gap-3 pt-10 pb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Time<span className="text-brand-400">Certo</span>
+          </h1>
+          <p className="mt-1 text-sm text-ink-400">Como você joga hoje?</p>
+        </div>
+        {isSupabaseConfigured && (
+          <button
+            onClick={() => navigate('/entrar')}
+            className="mt-1 flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2 text-xs font-medium text-ink-300"
+          >
+            <UserRound size={15} />
+            {hasSavedSession() ? 'Minha conta' : 'Entrar'}
+          </button>
+        )}
       </header>
 
       {live && (
