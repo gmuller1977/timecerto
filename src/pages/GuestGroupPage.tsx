@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, X } from 'lucide-react';
-import { guestGroup, guestSetAttendance, type GuestGroup } from '@/lib/cloud';
+import { Check, UserPlus, X } from 'lucide-react';
+import { guestAddPlayer, guestGroup, guestSetAttendance, type GuestGroup } from '@/lib/cloud';
 import { getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
 import { cn } from '@/lib/utils';
@@ -34,6 +34,10 @@ export function GuestGroupPage() {
   const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<string | null>(() => readMe(code));
   const [saving, setSaving] = useState(false);
+  // Incluir quem não está na lista: 'eu' = me incluir · 'convidado' = levar alguém
+  const [adding, setAdding] = useState<'eu' | 'convidado' | null>(null);
+  const [newName, setNewName] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -68,6 +72,34 @@ export function GuestGroupPage() {
     } catch (e) {
       console.error('resposta de presença', e);
       setError('Não deu para salvar. Confira a internet e tente de novo.');
+    }
+    setSaving(false);
+  }
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!data?.event || !adding) return;
+    setSaving(true);
+    setAddError(null);
+    try {
+      const id = await guestAddPlayer(
+        code,
+        data.event.id,
+        newName,
+        adding === 'convidado' ? (mine?.id ?? null) : null,
+      );
+      if (adding === 'eu') {
+        writeMe(code, id);
+        setMe(id);
+      }
+      setAdding(null);
+      setNewName('');
+      await load();
+    } catch (err) {
+      console.error('incluir pelo link', err);
+      // As mensagens do banco já vêm em português ("Já existe alguém com esse nome")
+      const msg = (err as { message?: string })?.message;
+      setAddError(msg && !/fetch|network/i.test(msg) ? msg : 'Não deu para incluir. Confira a internet.');
     }
     setSaving(false);
   }
@@ -171,7 +203,14 @@ export function GuestGroupPage() {
                 !mine && 'active:scale-[0.99]',
               )}
             >
-              <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">{p.name}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] text-ink-50">{p.name}</span>
+                {p.invitedBy && (
+                  <span className="block truncate text-[11px] text-ink-500">
+                    convidado de {p.invitedBy}
+                  </span>
+                )}
+              </span>
               {p.position && (
                 <span className="shrink-0 text-xs text-ink-500">
                   {getPositionLabel(data.group.sport as SportId, p.position)}
@@ -188,6 +227,60 @@ export function GuestGroupPage() {
           <p className="text-sm text-ink-500">O organizador ainda não cadastrou ninguém.</p>
         )}
       </section>
+
+      {/* Quem não está na lista: se incluir, ou levar alguém de fora */}
+      {data.event && (
+        <section className="mt-4">
+          {adding ? (
+            <form onSubmit={add} className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+              <p className="text-[15px] font-semibold text-ink-50">
+                {adding === 'eu' ? 'Qual é o seu nome?' : 'Quem você vai levar?'}
+              </p>
+              <p className="mt-1 text-xs text-ink-500">
+                {adding === 'eu'
+                  ? 'Você entra na lista já confirmado neste jogo.'
+                  : `Entra na lista como seu convidado, já confirmado.`}
+              </p>
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                maxLength={40}
+                placeholder="Nome e sobrenome"
+                className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
+              />
+              {addError && <p className="mt-2 text-sm text-red-300">{addError}</p>}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdding(null);
+                    setAddError(null);
+                  }}
+                  className="h-12 rounded-xl border border-ink-700 px-4 text-sm text-ink-300"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || newName.trim().length < 2}
+                  className="h-12 flex-1 rounded-xl bg-brand-500 font-semibold text-ink-950 disabled:opacity-40"
+                >
+                  {saving ? 'Incluindo…' : 'Incluir e confirmar'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              onClick={() => setAdding(mine ? 'convidado' : 'eu')}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 py-3.5 text-sm font-medium text-brand-300"
+            >
+              <UserPlus size={17} />
+              {mine ? 'Levar alguém de fora' : 'Não achei meu nome'}
+            </button>
+          )}
+        </section>
+      )}
     </Frame>
   );
 }

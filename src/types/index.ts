@@ -45,6 +45,8 @@ export interface Player {
   notes?: string;
   /** Id na nuvem (players.id), depois que o grupo foi criado no banco */
   remoteId?: string;
+  /** Entrou pelo link do grupo — nível e posição ainda são um palpite */
+  addedViaLink?: boolean;
 }
 
 export interface Team {

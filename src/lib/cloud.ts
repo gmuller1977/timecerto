@@ -68,7 +68,8 @@ export async function createGroup(mode: AppMode, name: string): Promise<CloudGro
  * Quem sumiu do aparelho fica inativo na nuvem — some do link, não do
  * histórico.
  */
-export async function syncAmador(groupId: string): Promise<void> {
+export async function syncAmador(groupId: string): Promise<number> {
+  const added = await pullLinkAdded(groupId);
   const { players, updatePlayer } = useAppStore.getState();
   const rows = players.map((p) => {
     const id = p.remoteId ?? crypto.randomUUID();
@@ -84,6 +85,47 @@ export async function syncAmador(groupId: string): Promise<void> {
     };
   });
   await upsertAndRetire(groupId, rows);
+  return added;
+}
+
+/**
+ * Traz para o aparelho quem se incluiu pelo link (ou foi levado por alguém).
+ * Precisa rodar ANTES do upsert: quem está na nuvem e não no aparelho é
+ * aposentado pelo upsertAndRetire, e essas pessoas só existem na nuvem.
+ * Devolve quantas chegaram agora.
+ */
+async function pullLinkAdded(groupId: string): Promise<number> {
+  const { data, error } = await db()
+    .from('players')
+    .select('id, name, skills, positions, created_at')
+    .eq('group_id', groupId)
+    .eq('active', true)
+    .eq('added_via_link', true);
+  if (error) throw error;
+
+  const known = new Set(
+    useAppStore.getState().players.map((p) => p.remoteId).filter(Boolean),
+  );
+  const novos = data.filter((r) => !known.has(r.id));
+  if (novos.length === 0) return 0;
+
+  useAppStore.setState((s) => ({
+    players: [
+      ...s.players,
+      ...novos.map((r) => ({
+        id: crypto.randomUUID(),
+        name: r.name,
+        skills: r.skills ?? {},
+        positions: r.positions ?? {},
+        // Entra ausente: quem decide a lista do sorteio é "Usar respostas"
+        present: false,
+        createdAt: r.created_at,
+        remoteId: r.id,
+        addedViaLink: true,
+      })),
+    ],
+  }));
+  return novos.length;
 }
 
 /**
@@ -219,7 +261,36 @@ export function shareOnWhatsApp(text: string) {
 export interface GuestGroup {
   group: { name: string; sport: string; mode: AppMode };
   event: CloudEvent | null;
-  players: { id: string; name: string; position: string | null; status: 'vou' | 'nao_vou' | null }[];
+  players: {
+    id: string;
+    name: string;
+    position: string | null;
+    status: 'vou' | 'nao_vou' | null;
+    /** Nome de quem levou, quando a pessoa entrou como convidado */
+    invitedBy: string | null;
+  }[];
+}
+
+/**
+ * Inclui alguém que não está na lista e já confirma no jogo aberto.
+ * `invitedBy` nulo = a pessoa se incluiu; preenchido = foi levada por alguém.
+ * Devolve o id da pessoa nova. Erros do banco vêm em português e podem ir
+ * direto para a tela.
+ */
+export async function guestAddPlayer(
+  code: string,
+  eventId: string,
+  name: string,
+  invitedBy: string | null,
+): Promise<string> {
+  const { data, error } = await db().rpc('guest_add_player', {
+    code,
+    p_event: eventId,
+    p_name: name,
+    p_invited_by: invitedBy,
+  });
+  if (error) throw error;
+  return data as string;
 }
 
 export async function guestGroup(code: string): Promise<GuestGroup> {

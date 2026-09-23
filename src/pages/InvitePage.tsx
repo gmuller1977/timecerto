@@ -130,9 +130,15 @@ function Connected({ mode, email }: { mode: AppMode; email: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState(mode === 'profissional' ? 'Meu time' : 'Pelada');
+  // Quantos chegaram ao cadastro pelo link desde a última abertura
+  const [linkAdded, setLinkAdded] = useState(0);
 
   const sync = useCallback(
-    (g: CloudGroup) => (mode === 'profissional' ? syncPro(g.id) : syncAmador(g.id)),
+    async (g: CloudGroup) => {
+      if (mode === 'profissional') return syncPro(g.id);
+      const n = await syncAmador(g.id);
+      if (n > 0) setLinkAdded(n);
+    },
     [mode],
   );
 
@@ -175,6 +181,14 @@ function Connected({ mode, email }: { mode: AppMode; email: string }) {
   return (
     <>
       <p className="mb-3 text-xs text-ink-500">Conectado como {email}</p>
+      {linkAdded > 0 && (
+        <p className="mb-3 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm leading-relaxed text-brand-200">
+          {linkAdded === 1
+            ? '1 pessoa entrou pelo link e já está no seu cadastro'
+            : `${linkAdded} pessoas entraram pelo link e já estão no seu cadastro`}{' '}
+          com nível 3. Ajuste nível e posição antes de sortear.
+        </p>
+      )}
       {error && (
         <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
           {error}
