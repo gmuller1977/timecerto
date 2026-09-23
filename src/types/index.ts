@@ -53,6 +53,8 @@ export interface Player {
   pending?: boolean;
   /** AAAA-MM-DD. Só o administrador vê */
   birthDate?: string;
+  /** Como o grupo conhece a pessoa — aparece no lugar do nome (`nomeDeExibicao`) */
+  nickname?: string;
   /** Só dígitos, com DDD. Só o administrador vê */
   phone?: string;
 }

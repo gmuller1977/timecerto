@@ -22,6 +22,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
   const removePlayer = useAppStore((s) => s.removePlayer);
 
   const [name, setName] = useState(player.name);
+  const [nickname, setNickname] = useState(player.nickname ?? '');
   const [kind, setKind] = useState<PlayerKind>(player.kind ?? 'mensalista');
   const [birth, setBirth] = useState(player.birthDate ?? '');
   const [phone, setPhone] = useState(player.phone ? formatPhone(player.phone) : '');
@@ -37,6 +38,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
     if (fone && !isValidPhone(fone)) return setError('Telefone inválido — use DDD e número.');
     updatePlayer(player.id, {
       name: name.trim(),
+      nickname: nickname.trim() || undefined,
       kind,
       birthDate: birth || undefined,
       phone: fone || undefined,
@@ -58,13 +60,30 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
           </button>
         </div>
 
-        <label className="block text-xs font-medium text-ink-400">Nome</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={40}
-          className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 outline-none"
-        />
+        <div className="flex gap-3">
+          <div className="min-w-0 flex-[3]">
+            <label className="block text-xs font-medium text-ink-400">Nome</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={40}
+              className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 outline-none"
+            />
+          </div>
+          <div className="min-w-0 flex-[2]">
+            <label className="block text-xs font-medium text-ink-400">Apelido</label>
+            <input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              maxLength={20}
+              placeholder="opcional"
+              className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-600 outline-none"
+            />
+          </div>
+        </div>
+        <p className="mt-1.5 text-[11px] text-ink-500">
+          Com apelido, é ele que aparece nas listas, nos links e nos times.
+        </p>
 
         <p className="mt-4 text-xs font-medium text-ink-400">Tipo</p>
         <div className="mt-1 flex gap-2">

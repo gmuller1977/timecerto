@@ -22,6 +22,7 @@ export function GuestRegisterPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState('');
+  const [nickname, setNickname] = useState('');
   const [birth, setBirth] = useState('');
   const [phone, setPhone] = useState('');
   const [position, setPosition] = useState('');
@@ -74,7 +75,7 @@ export function GuestRegisterPage() {
     setFormError(null);
     setSaving(true);
     try {
-      await guestRegister(code, { name, birthDate: birth, phone: fone, position, level });
+      await guestRegister(code, { name, nickname, birthDate: birth, phone: fone, position, level });
       setDone(true);
     } catch (err) {
       console.error('cadastro pelo link', err);
@@ -104,6 +105,17 @@ export function GuestRegisterPage() {
           maxLength={40}
           autoComplete="name"
           placeholder="Nome e sobrenome"
+          className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
+        />
+
+        <label className="mt-4 block text-xs font-medium text-ink-400">
+          Apelido <span className="font-normal text-ink-500">— opcional, é como aparece na lista</span>
+        </label>
+        <input
+          value={nickname}
+          onChange={(e) => setNickname(e.target.value)}
+          maxLength={20}
+          placeholder="Ex.: Cadu"
           className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
         />
 

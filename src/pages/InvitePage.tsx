@@ -43,6 +43,7 @@ import { StarRating } from '@/components/ui/StarRating';
 import { ageOn } from '@/lib/pro';
 import { getPositionLabel } from '@/lib/sports';
 import { formatPhone } from '@/lib/phone';
+import { nomeDeExibicao } from '@/lib/nome';
 import { cn } from '@/lib/utils';
 import { distribuirVagas, joga } from '@/lib/vagas';
 
@@ -411,7 +412,7 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
                   <div key={p.id} className="rounded-xl border border-ink-800 bg-ink-950 p-3">
                     <div className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink-50">
-                        {p.name}
+                        {p.name}{p.nickname && ` · ${p.nickname}`}
                       </span>
                       <StarRating value={level as SkillLevel} size={13} readOnly />
                     </div>
@@ -566,9 +567,9 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
               {dist.mensalistasConfirmados} vão · {byTipo(mensalistas, 'nao_vou').length} não vão ·{' '}
               {semResposta(mensalistas).length} sem resposta
             </p>
-            <NameList label="Vão" tone="ok" names={byTipo(mensalistas, 'confirmado').map((p) => p.name)} />
-            <NameList label="Não vão" tone="no" names={byTipo(mensalistas, 'nao_vou').map((p) => p.name)} />
-            <NameList label="Sem resposta" tone="none" names={semResposta(mensalistas).map((p) => p.name)} />
+            <NameList label="Vão" tone="ok" names={byTipo(mensalistas, 'confirmado').map((p) => nomeDeExibicao(p))} />
+            <NameList label="Não vão" tone="no" names={byTipo(mensalistas, 'nao_vou').map((p) => nomeDeExibicao(p))} />
+            <NameList label="Sem resposta" tone="none" names={semResposta(mensalistas).map((p) => nomeDeExibicao(p))} />
           </section>
 
           <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
@@ -577,7 +578,7 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
               {dist.convidadosComVaga} com vaga · {dist.naFila} na fila
               {event.slots != null && ` · ${dist.livres} vagas livres`}
             </p>
-            <NameList label="Com vaga" tone="ok" names={byTipo(convidados, 'vaga').map((p) => p.name)} />
+            <NameList label="Com vaga" tone="ok" names={byTipo(convidados, 'vaga').map((p) => nomeDeExibicao(p))} />
             {fila.length > 0 && (
               <div className="mt-3">
                 <p className="mb-1.5 text-[11px] font-semibold tracking-wide text-ink-500 uppercase">
@@ -591,14 +592,14 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
                         <span className="w-5 shrink-0 text-right text-xs tabular-nums text-ink-500">
                           {s?.tipo === 'fila' ? `${s.posicao}º` : ''}
                         </span>
-                        {p.name}
+                        {nomeDeExibicao(p)}
                       </li>
                     );
                   })}
                 </ol>
               </div>
             )}
-            <NameList label="Não vão" tone="no" names={byTipo(convidados, 'nao_vou').map((p) => p.name)} />
+            <NameList label="Não vão" tone="no" names={byTipo(convidados, 'nao_vou').map((p) => nomeDeExibicao(p))} />
             {convidados.length === 0 && (
               <p className="mt-2 text-xs text-ink-500">Nenhum convidado inscrito ainda.</p>
             )}

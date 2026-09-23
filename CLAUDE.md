@@ -58,7 +58,7 @@ Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
   nome e entra na fila. Nome de convidado que já existe = a mesma pessoa
   voltando; nome de mensalista é recusado.
 - `/#/r/CÓDIGO` — link de **cadastro de mensalistas** (`groups.register_code`):
-  nome, nascimento, telefone, posição e nível. Fica **pendente**
+  nome, **apelido**, nascimento, telefone, posição e nível. Fica **pendente**
   (`players.pending`) até o administrador aprovar na tela Convidar; pendente
   não aparece em link nenhum nem entra no sorteio. O nível é sugestão — o
   sorteio usa o que o administrador deixar.
@@ -67,6 +67,12 @@ Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
 
 **Telefone e nascimento nunca saem pelas funções `guest_*`.** Só o
 administrador vê, na ficha do jogador (`PlayerSheet`).
+
+**Apelido** (`Player.nickname`, opcional): na pelada é o nome de verdade, então
+aparece no lugar do nome em listas, links, times, WhatsApp e placar —
+`nomeDeExibicao` em `lib/nome.ts`; nos links, `guest_group` faz a mesma conta.
+As telas de partida recebem o apelido pronto de `useRoster`. O nome completo
+fica na ficha.
 
 ### Fluxo do administrador (amador)
 

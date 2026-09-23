@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Trash2 } from 'lucide-react';
 import type { Player, SkillLevel } from '@/types';
 import { PlayerSheet } from '@/components/players/PlayerSheet';
+import { nomeDeExibicao } from '@/lib/nome';
 import { StarRating } from '@/components/ui/StarRating';
 import { useAppStore } from '@/store/useAppStore';
 import { cn, initials } from '@/lib/utils';
@@ -45,11 +46,13 @@ export function PlayerRow({ player }: { player: Player }) {
 
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <button
-            onClick={() => setEditing(true)}
-            className="min-w-0 truncate text-left text-[15px] font-medium text-ink-50"
-          >
-            {player.name}
+          <button onClick={() => setEditing(true)} className="min-w-0 text-left">
+            <span className="block truncate text-[15px] font-medium text-ink-50">
+              {nomeDeExibicao(player)}
+            </span>
+            {player.nickname?.trim() && (
+              <span className="block truncate text-[11px] text-ink-500">{player.name}</span>
+            )}
           </button>
           {/* Um toque troca: o administrador decide quem é mensalista */}
           <button

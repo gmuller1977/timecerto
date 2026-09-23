@@ -3,6 +3,7 @@ import type { Player } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
 import { proToPlayer } from '@/lib/pro';
+import { nomeDeExibicao } from '@/lib/nome';
 
 /**
  * Todos os jogadores que uma partida pode citar: o cadastro amador e o
@@ -12,5 +13,9 @@ import { proToPlayer } from '@/lib/pro';
 export function useRoster(): Player[] {
   const amador = useAppStore((s) => s.players);
   const pro = useProStore((s) => s.players);
-  return useMemo(() => [...amador, ...pro.map(proToPlayer)], [amador, pro]);
+  // Placar, scout e resumo mostram o apelido: é como o grupo chama a pessoa
+  return useMemo(
+    () => [...amador.map((p) => ({ ...p, name: nomeDeExibicao(p) })), ...pro.map(proToPlayer)],
+    [amador, pro],
+  );
 }

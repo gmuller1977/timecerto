@@ -1,3 +1,4 @@
+import { nomeDeExibicao } from '@/lib/nome';
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Copy, PlayCircle, RotateCcw, Share2 } from 'lucide-react';
@@ -87,7 +88,7 @@ export function ResultPage() {
                     className="flex items-center gap-3 border-b border-ink-800/60 px-4 py-2.5 last:border-b-0"
                   >
                     <span className="w-4 text-xs text-ink-600">{i + 1}</span>
-                    <span className="flex-1 text-[15px] text-ink-100">{p.name}</span>
+                    <span className="flex-1 text-[15px] text-ink-100">{nomeDeExibicao(p)}</span>
                     <span className="text-xs text-amber-400/80">
                       {'★'.repeat(skillOf(p, result.sport))}
                     </span>
@@ -104,7 +105,7 @@ export function ResultPage() {
               Reservas ({result.bench.length})
             </p>
             <p className="mt-1 text-sm text-ink-300">
-              {result.bench.map((p) => p.name).join(' · ')}
+              {result.bench.map((p) => nomeDeExibicao(p)).join(' · ')}
             </p>
           </div>
         )}

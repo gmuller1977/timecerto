@@ -1,6 +1,7 @@
 import type { DrawResult } from '@/types';
 import { SPORTS } from '@/lib/sports';
 import { skillOf } from '@/lib/draw';
+import { nomeDeExibicao } from '@/lib/nome';
 
 export function formatResultText(result: DrawResult, opts?: { showStars?: boolean }): string {
   const sport = SPORTS[result.sport];
@@ -18,14 +19,14 @@ export function formatResultText(result: DrawResult, opts?: { showStars?: boolea
     lines.push(`*${team.name.toUpperCase()}*`);
     team.players.forEach((p, i) => {
       const stars = showStars ? ` ${'⭐'.repeat(skillOf(p, result.sport))}` : '';
-      lines.push(`${i + 1}. ${p.name}${stars}`);
+      lines.push(`${i + 1}. ${nomeDeExibicao(p)}${stars}`);
     });
     lines.push('');
   });
 
   if (result.bench.length > 0) {
     lines.push('*RESERVAS*');
-    result.bench.forEach((p, i) => lines.push(`${i + 1}. ${p.name}`));
+    result.bench.forEach((p, i) => lines.push(`${i + 1}. ${nomeDeExibicao(p)}`));
     lines.push('');
   }
 

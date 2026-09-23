@@ -126,6 +126,7 @@ export async function syncAmador(groupId: string): Promise<number> {
       pending: Boolean(p.pending),
       birth_date: p.birthDate ?? null,
       phone: p.phone ?? null,
+      nickname: p.nickname ?? null,
       active: true,
     };
   });
@@ -142,7 +143,7 @@ export async function syncAmador(groupId: string): Promise<number> {
 export async function pullLinkAdded(groupId: string): Promise<number> {
   const { data, error } = await db()
     .from('players')
-    .select('id, name, skills, positions, kind, pending, birth_date, phone, created_at')
+    .select('id, name, nickname, skills, positions, kind, pending, birth_date, phone, created_at')
     .eq('group_id', groupId)
     .eq('active', true)
     .eq('added_via_link', true);
@@ -171,6 +172,7 @@ export async function pullLinkAdded(groupId: string): Promise<number> {
         pending: Boolean(r.pending),
         birthDate: r.birth_date ?? undefined,
         phone: r.phone ?? undefined,
+        nickname: r.nickname ?? undefined,
       })),
     ],
   }));
@@ -353,7 +355,14 @@ export async function guestRegisterInfo(code: string): Promise<{ name: string; s
 /** Pedido de cadastro do mensalista. Fica pendente até o administrador aprovar. */
 export async function guestRegister(
   code: string,
-  input: { name: string; birthDate: string; phone: string; position: string; level: number },
+  input: {
+    name: string;
+    nickname: string;
+    birthDate: string;
+    phone: string;
+    position: string;
+    level: number;
+  },
 ): Promise<void> {
   const { error } = await db().rpc('guest_register', {
     code,
@@ -362,6 +371,7 @@ export async function guestRegister(
     p_phone: input.phone,
     p_position: input.position,
     p_level: input.level,
+    p_nickname: input.nickname.trim() || null,
   });
   if (error) throw error;
 }
