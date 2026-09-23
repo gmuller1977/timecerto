@@ -271,6 +271,13 @@ drop policy if exists groups_member_read on public.groups;
 create policy groups_member_read on public.groups
   for select using (public.is_group_member(id));
 
+-- O dono lê o próprio grupo sem depender de ser membro. Necessário no
+-- insert ... returning: a leitura é conferida ANTES do gatilho que o torna
+-- membro (on_group_created, after insert), e sem isto criar grupo falha.
+drop policy if exists groups_owner_read on public.groups;
+create policy groups_owner_read on public.groups
+  for select using (owner_id = auth.uid());
+
 drop policy if exists groups_owner_create on public.groups;
 create policy groups_owner_create on public.groups
   for insert with check (owner_id = auth.uid());

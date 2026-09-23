@@ -44,12 +44,18 @@ const fmtEvent = (iso: string) =>
     minute: '2-digit',
   });
 
-/** Mensagem legível para o organizador; o detalhe técnico vai para o console */
+/**
+ * Mensagem legível para o organizador. O código técnico vai junto, entre
+ * parênteses: é o que permite diagnosticar pelo print, sem abrir o console.
+ */
 function explain(e: unknown): string {
   console.error('convites', e);
-  return navigator.onLine
-    ? 'Algo deu errado ao falar com o servidor. Tente de novo.'
-    : 'Sem internet. Os convites precisam de conexão — o resto do app funciona normal.';
+  if (!navigator.onLine) {
+    return 'Sem internet. Os convites precisam de conexão — o resto do app funciona normal.';
+  }
+  const err = e as { code?: string; message?: string };
+  const detail = err?.code || err?.message;
+  return `Algo deu errado ao falar com o servidor. Tente de novo.${detail ? ` (${detail})` : ''}`;
 }
 
 export function InvitePage() {
