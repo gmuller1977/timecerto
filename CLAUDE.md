@@ -50,6 +50,20 @@ src/
   types/index.ts    Todos os tipos do domínio
 ```
 
+## Dois modos
+
+A rota `/` é um menu com **Amador** e **Profissional**. `useAppStore.mode`
+guarda a escolha.
+
+- **Amador** (`/amador`) — pelada: cadastro, presença, sorteio, placar.
+  Os três esportes.
+- **Profissional** (`/profissional`) — treinador: escalação manual com
+  posicionamento na quadra, titulares, reservas, líbero, rodízio, placar e
+  scout já em modo atleta. **Só vôlei** — entrar nesse modo força
+  `sport = 'volei'`.
+
+Os jogadores são os mesmos nos dois modos, o cadastro é um só.
+
 ## Regras do domínio — não invente, confira aqui
 
 ### Sorteio (`lib/draw.ts`)
@@ -69,6 +83,50 @@ Quatro camadas, nesta ordem:
 No vôlei, **o sistema de jogo manda no sorteio**: `settersNeeded(rotation)`
 define quantos levantadores por time. 6x0 não reserva ninguém, 5x1 e fixo
 pedem 1, 4x2 e 6x2 pedem 2. Não existe mais o toggle binário de levantador.
+
+### Quadra e rodízio (`lib/court.ts`)
+
+Numeração oficial: `4 3 2` na rede, `5 6 1` no fundo. **A 1 saca.** O rodízio é
+horário — quem está na 2 vai para a 1, a 1 vai para a 6, e assim por diante.
+`rotateCourt` implementa isso; seis chamadas voltam ao início.
+
+`validateLineup` cobra o sistema de jogo: número de levantadores em quadra,
+posições vazias, jogador repetido, e avisa quando os dois levantadores de um
+4x2/6x2 não estão opostos (três posições de distância no ciclo `1,6,5,4,3,2`).
+
+Erro bloqueia o início da partida; aviso só alerta.
+
+### Quadra durante a partida
+
+**Quem está onde é DERIVADO dos rallies, nunca guardado.** O set guarda só
+`Game.lineup`: a quadra do primeiro saque, quem sacou primeiro e a lista de
+substituições com o rally em que cada uma entrou. `courtStateAt` refaz o set
+a cada render. É isso que mantém o `undoRally` certo sem código extra — guardar
+a quadra atual exigiria desfazer rodízio à mão.
+
+O time gira só no **side-out**: ganhar o ponto sobre o saque do adversário.
+Ponto no próprio saque mantém o sacador. O sistema `fixo` conta a rotação mas
+não mexe na quadra.
+
+Antes do primeiro ponto do set, trocar alguém de lugar é **ajuste de
+escalação** (`setStartCourt`) e não gasta substituição; o primeiro saque também
+só pode ser escolhido nessa hora. Depois, é `substitute`, contado contra o
+limite de 6 por set — o app avisa quando passa, mas não bloqueia.
+
+O set seguinte começa com a escalação **inicial** do anterior e o primeiro
+saque alternado. Desfazer tira primeiro a substituição feita depois do último
+ponto, e só então o ponto.
+
+No scout do atleta, "quem fez?" lista só quem está em quadra mais o líbero.
+
+### Correção do placar
+
+Cada time tem **+** e **−** abaixo do placar, nos dois modos. O `+` marca um
+ponto `indefinido`, sem abrir o scout. O `−` (`removePoint`) tira o **último
+ponto daquele time**, mesmo que não seja o último rally: reconta o placar
+gravado nos rallies seguintes, puxa uma casa para trás as substituições feitas
+depois dele e reabre o set se ele tinha fechado. Como a quadra é derivada,
+rodízio e saque se corrigem sozinhos.
 
 ### Scout de vôlei (`lib/volley.ts`, `types/index.ts`)
 

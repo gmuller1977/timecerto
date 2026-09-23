@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Check, ChevronRight, Flag, Settings2, Undo2, X } from 'lucide-react';
+import { Check, ChevronRight, Flag, Minus, Plus, Settings2, Undo2, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useHydrated } from '@/store/useHydrated';
 import { PointSheet, type PointDraft } from '@/components/scout/PointSheet';
+import { CourtPanel } from '@/components/scout/CourtPanel';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ACTION_LABEL, POINTS_OPTIONS, currentRun } from '@/lib/volley';
+import { courtPlayerIds, courtStateAt } from '@/lib/court';
+import { ROTATIONS } from '@/lib/rotation';
 import type { MatchTeam, ScoutMode } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -23,10 +26,14 @@ export function ScoreboardPage() {
   const players = useAppStore((s) => s.players);
   const addRally = useMatchStore((s) => s.addRally);
   const undoRally = useMatchStore((s) => s.undoRally);
+  const removePoint = useMatchStore((s) => s.removePoint);
   const startNextSet = useMatchStore((s) => s.startNextSet);
   const finishMatch = useMatchStore((s) => s.finishMatch);
   const discardMatch = useMatchStore((s) => s.discardMatch);
   const updateScout = useMatchStore((s) => s.updateScout);
+  const setFirstServe = useMatchStore((s) => s.setFirstServe);
+  const setStartCourt = useMatchStore((s) => s.setStartCourt);
+  const substitute = useMatchStore((s) => s.substitute);
 
   const [pending, setPending] = useState<{ team: MatchTeam; opp: MatchTeam } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -41,6 +48,26 @@ export function ScoreboardPage() {
   const current = live.sets[live.sets.length - 1];
   const rallies = current.rallies ?? [];
   const run = currentRun(rallies);
+
+  // Modo profissional: a quadra é derivada dos rallies a cada render
+  const pro = live.pro;
+  const rotates = pro ? ROTATIONS[pro.system].rotates : true;
+  const courtState =
+    pro && current.lineup
+      ? courtStateAt(current.lineup, rallies, pro.homeTeamId, rotates)
+      : null;
+
+  // No scout do atleta, "quem fez?" lista só quem está em quadra
+  const active = (team: MatchTeam): MatchTeam =>
+    courtState && team.id === pro?.homeTeamId
+      ? {
+          ...team,
+          playerIds: [
+            ...courtPlayerIds(courtState.court),
+            ...(pro.liberoId ? [pro.liberoId] : []),
+          ],
+        }
+      : team;
 
   const setsWon = live.teams.map(
     (t) =>
@@ -58,7 +85,7 @@ export function ScoreboardPage() {
       addRally({ teamId: team.id, kind: 'ponto', action: 'indefinido' });
       return;
     }
-    setPending({ team, opp });
+    setPending({ team: active(team), opp: active(opp) });
   }
 
   function confirm(draft: PointDraft) {
@@ -132,6 +159,11 @@ export function ScoreboardPage() {
               <span className="mt-1 text-7xl font-bold tabular-nums text-ink-50">
                 {score}
               </span>
+              {courtState?.servingTeamId === team.id && !current.finished && (
+                <span className="mt-1 rounded-full bg-brand-500/15 px-2 py-0.5 text-[11px] font-semibold text-brand-300">
+                  saque
+                </span>
+              )}
               {run?.teamId === team.id && run.count >= 3 && (
                 <span className="mt-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
                   {run.count} seguidos
@@ -141,6 +173,51 @@ export function ScoreboardPage() {
           );
         })}
       </div>
+
+      {/* Correção do placar: − tira o último ponto do time, + marca sem scout */}
+      <div className="mt-2 flex gap-2 px-2">
+        {[
+          { team: teamA, score: current.scoreA },
+          { team: teamB, score: current.scoreB },
+        ].map(({ team, score }) => (
+          <div key={team.id} className="flex flex-1 gap-2">
+            <button
+              onClick={() => removePoint(team.id)}
+              disabled={score === 0}
+              aria-label={`Tirar um ponto de ${team.name}`}
+              className="flex h-11 flex-1 items-center justify-center rounded-xl border border-ink-800 bg-ink-900 text-ink-300 active:scale-[0.98] disabled:opacity-30"
+            >
+              <Minus size={20} />
+            </button>
+            <button
+              onClick={() =>
+                addRally({ teamId: team.id, kind: 'ponto', action: 'indefinido' })
+              }
+              disabled={current.finished}
+              aria-label={`Dar um ponto para ${team.name}`}
+              className="flex h-11 flex-1 items-center justify-center rounded-xl border border-ink-800 bg-ink-900 text-ink-300 active:scale-[0.98] disabled:opacity-30"
+            >
+              <Plus size={20} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {pro && courtState && current.lineup && !current.finished && (
+        <CourtPanel
+          home={teamA.id === pro.homeTeamId ? teamA : teamB}
+          away={teamA.id === pro.homeTeamId ? teamB : teamA}
+          lineup={current.lineup}
+          state={courtState}
+          beforeFirstRally={rallies.length === 0}
+          rotates={rotates}
+          liberoId={pro.liberoId}
+          players={players}
+          onFirstServe={setFirstServe}
+          onStartCourt={setStartCourt}
+          onSubstitute={substitute}
+        />
+      )}
 
       {/* Últimos rallies */}
       <div className="no-scrollbar mt-2 flex gap-1.5 overflow-x-auto px-3 py-1">

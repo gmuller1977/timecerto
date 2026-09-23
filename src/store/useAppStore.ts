@@ -1,8 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
+  AppMode,
   DrawResult,
   DrawSettings,
+  Lineup,
   Player,
   RotationSystem,
   SkillLevel,
@@ -15,13 +17,18 @@ import { DEFAULT_ROTATION } from '@/lib/rotation';
 import { uid } from '@/lib/utils';
 
 interface AppState {
+  mode: AppMode | null;
   sport: SportId;
   players: Player[];
   settings: DrawSettings;
   lastResult: DrawResult | null;
   history: DrawResult[];
   squads: Squad[];
+  /** Última escalação do modo profissional — o time costuma repetir */
+  lastLineup: Lineup | null;
 
+  setMode: (mode: AppMode) => void;
+  saveLineup: (lineup: Lineup) => void;
   setSport: (sport: SportId) => void;
   addSquad: (input: {
     name: string;
@@ -58,12 +65,16 @@ const defaultSettings = (sport: SportId): DrawSettings => ({
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      mode: null,
       sport: 'futebol',
       players: [],
       settings: defaultSettings('futebol'),
       lastResult: null,
       history: [],
       squads: [],
+      lastLineup: null,
+
+      saveLineup: (lineup) => set({ lastLineup: lineup }),
 
       addSquad: ({ name, playerIds, color, isMine, system }) => {
         const squad: Squad = {
@@ -87,6 +98,17 @@ export const useAppStore = create<AppState>()(
 
       removeSquad: (id) =>
         set((s) => ({ squads: s.squads.filter((q) => q.id !== id) })),
+
+      setMode: (mode) =>
+        set((s) => ({
+          mode,
+          // O modo profissional hoje só existe para o vôlei
+          sport: mode === 'profissional' ? 'volei' : s.sport,
+          settings:
+            mode === 'profissional'
+              ? { ...s.settings, sport: 'volei' as SportId }
+              : s.settings,
+        })),
 
       setSport: (sport) =>
         set((s) => ({
@@ -159,12 +181,14 @@ export const useAppStore = create<AppState>()(
     {
       name: 'timecerto:v1',
       partialize: (s) => ({
+        mode: s.mode,
         sport: s.sport,
         players: s.players,
         settings: s.settings,
         lastResult: s.lastResult,
         history: s.history,
         squads: s.squads,
+        lastLineup: s.lastLineup,
       }),
     },
   ),

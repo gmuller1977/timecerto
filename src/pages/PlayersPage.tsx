@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, History, Plus, Radio, Search, Shuffle, Swords, Users } from 'lucide-react';
+import { ArrowLeft, ChevronRight, History, Plus, Radio, Search, Shuffle, Swords, Users } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { SportPicker } from '@/components/sports/SportPicker';
 import { PlayerRow } from '@/components/players/PlayerRow';
@@ -49,13 +49,16 @@ export function PlayersPage() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
       <header className="safe-top flex items-start justify-between pt-6 pb-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Time<span className="text-brand-400">Certo</span>
-          </h1>
-          <p className="mt-0.5 text-sm text-ink-400">
-            Times equilibrados em segundos.
-          </p>
+        <div className="flex items-start gap-2">
+          <button onClick={() => navigate('/')} className="p-1 pt-0.5 text-ink-400">
+            <ArrowLeft size={22} />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Amador</h1>
+            <p className="mt-0.5 text-sm text-ink-400">
+              Times equilibrados em segundos.
+            </p>
+          </div>
         </div>
         <button
           onClick={() => navigate('/historico')}

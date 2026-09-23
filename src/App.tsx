@@ -1,5 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HomePage } from '@/pages/HomePage';
 import { PlayersPage } from '@/pages/PlayersPage';
+import { LineupPage } from '@/pages/LineupPage';
 import { DrawPage } from '@/pages/DrawPage';
 import { ResultPage } from '@/pages/ResultPage';
 import { ScoreboardPage } from '@/pages/ScoreboardPage';
@@ -12,7 +14,9 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/" element={<PlayersPage />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/amador" element={<PlayersPage />} />
+        <Route path="/profissional" element={<LineupPage />} />
         <Route path="/sortear" element={<DrawPage />} />
         <Route path="/resultado" element={<ResultPage />} />
         <Route path="/partida" element={<QuickMatchPage />} />

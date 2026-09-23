@@ -156,6 +156,28 @@ export interface Game {
   finished?: boolean;
   /** Scout detalhado, rally a rally */
   rallies?: Rally[];
+  /** Modo profissional: escalação do time da casa neste set */
+  lineup?: SetLineup;
+}
+
+/** Troca de jogador no meio do set */
+export interface Substitution {
+  /** Quantos rallies o set tinha quando a troca foi feita */
+  atRally: number;
+  outId: string;
+  inId: string;
+}
+
+/**
+ * O que o set guarda da escalação. Quem está em cada posição num dado
+ * momento NÃO é guardado — sai de `courtStateAt`, recalculado a partir dos
+ * rallies. É isso que mantém o desfazer certo sem código extra.
+ */
+export interface SetLineup {
+  /** Posicionamento no primeiro saque do set */
+  court: Partial<Record<CourtPosition, string>>;
+  firstServeTeamId: string;
+  subs: Substitution[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -173,6 +195,30 @@ export interface RotationConfig {
   description: string;
   /** O time roda ou joga em posições fixas */
   rotates: boolean;
+}
+
+/** Modo de uso do app — decide o fluxo inteiro */
+export type AppMode = 'amador' | 'profissional';
+
+/**
+ * Posição na quadra de vôlei, numeração oficial.
+ * 4 3 2 na rede · 5 6 1 no fundo · saque sai da 1.
+ */
+export type CourtPosition = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** Escalação do treinador: quem começa, onde, e quem fica no banco */
+export interface Lineup {
+  id: string;
+  sport: SportId;
+  system: RotationSystem;
+  squadId?: string;
+  teamName: string;
+  color: TeamColor;
+  /** posição na quadra -> id do jogador */
+  court: Partial<Record<CourtPosition, string>>;
+  liberoId?: string;
+  bench: string[];
+  createdAt: string;
 }
 
 /** Elenco fixo — um time que existe fora do sorteio */
