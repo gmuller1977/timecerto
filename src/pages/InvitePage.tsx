@@ -109,7 +109,7 @@ export function InvitePage() {
             className="mt-4 w-full"
             onClick={() => navigate('/entrar?volta=/convites')}
           >
-            Entrar com e-mail
+            Entrar com Google
           </Button>
         </div>
       ) : (

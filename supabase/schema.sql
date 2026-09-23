@@ -15,10 +15,18 @@ create table if not exists public.profiles (
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, name)
+  -- Login pelo Google: o nome vem em full_name. O perfil nunca fica sem nome
+  -- (name é not null, e um insert que falha aqui derruba o login inteiro).
+  insert into public.profiles (id, name, avatar_url)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1))
+    coalesce(
+      new.raw_user_meta_data->>'full_name',
+      new.raw_user_meta_data->>'name',
+      nullif(split_part(coalesce(new.email, ''), '@', 1), ''),
+      'Organizador'
+    ),
+    new.raw_user_meta_data->>'avatar_url'
   )
   on conflict (id) do nothing;
   return new;
@@ -570,5 +578,8 @@ grant  execute on function public.guest_athlete(text)                           
 grant  execute on function public.guest_update_athlete(text, date, int, numeric) to anon, authenticated;
 grant  execute on function public.guest_matches(text, text)                      to anon, authenticated;
 
-revoke execute on function public.join_group(text) from public, anon;
-grant  execute on function public.join_group(text) to authenticated;
+-- join_group fica sem permissão para todos. Com login aberto, quem tem o
+-- código do grupo (ele vai no WhatsApp) viraria membro e leria pela RLS o
+-- cadastro inteiro dos atletas. Co-organizador, quando existir, entra por
+-- convite do dono.
+revoke execute on function public.join_group(text) from public, anon, authenticated;

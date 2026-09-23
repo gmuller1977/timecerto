@@ -35,10 +35,18 @@ key nunca vai para o app.
 
 ## Convites
 
-Só organizador e técnico têm conta — login por **código de 6 dígitos no
-e-mail** (`/entrar`). Código e não link mágico: o link abriria no navegador e
-o app instalado ficaria de fora. O template "Magic Link" do Supabase foi
-trocado para mostrar `{{ .Token }}`.
+Só o administrador (amador) e o técnico (profissional) têm conta — login pela
+**conta Google** (`/entrar`), decidido pelo Guilherme em 23/09/2026. E-mail
+com código foi descartado: ninguém quer esperar e-mail para entrar.
+
+O Google devolve para `#/entrar?volta=…` com `?code=` na query (PKCE). A volta
+cai em `/entrar` de propósito: é a tela carregada sob demanda que traz o
+cliente do Supabase, e só ele troca o código pela sessão. Voltar para a home
+deixaria o código sem ninguém para lê-lo.
+
+`join_group` está sem permissão para todos: com login aberto, quem tem o
+código do grupo (vai no WhatsApp) viraria membro e leria pela RLS o cadastro
+dos atletas, inclusive nascimento de menores e os tokens pessoais.
 
 Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
 

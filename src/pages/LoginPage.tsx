@@ -1,29 +1,32 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, LogOut, Mail } from 'lucide-react';
+import { ArrowLeft, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/store/useAuth';
+import { oauthError, useAuth } from '@/store/useAuth';
 
 /**
- * Login do organizador e do técnico, por código de 6 dígitos no e-mail.
- * Código e não link: o link do e-mail abre no navegador, e o app instalado
- * (PWA) ficaria de fora. Jogador e atleta não passam por aqui — entram pelo
- * link do WhatsApp, sem conta.
+ * Login do administrador (amador) e do técnico (profissional), pela conta
+ * Google. Jogador e atleta não passam por aqui — entram pelo link do
+ * WhatsApp, sem conta.
+ *
+ * É também a tela para onde o Google devolve a pessoa (`#/entrar?code=`):
+ * carregar esta tela carrega o cliente do Supabase, que troca o código pela
+ * sessão.
  */
 export function LoginPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const back = params.get('volta') || '/';
+  const volta = params.get('volta');
   const session = useAuth((s) => s.session);
   const ready = useAuth((s) => s.ready);
+  const signInWithGoogle = useAuth((s) => s.signInWithGoogle);
   const signOut = useAuth((s) => s.signOut);
 
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [step, setStep] = useState<'email' | 'code'>('email');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    oauthError ? 'O login com o Google não foi concluído. Tente de novo.' : null,
+  );
 
   if (!supabase) {
     return (
@@ -36,25 +39,36 @@ export function LoginPage() {
   }
   if (!ready) return null;
   // Veio de uma tela que pediu login: devolve para ela
-  if (session && params.get('volta')) return <Navigate to={back} replace />;
-  // Veio pelo botão da home: mostra a conta
+  if (session && volta) return <Navigate to={volta} replace />;
+
   if (session) {
+    const meta = session.user.user_metadata as { full_name?: string; avatar_url?: string };
     return (
       <Shell onBack={() => navigate('/')}>
-        <div className="rounded-2xl border border-ink-800 bg-ink-900 p-5">
-          <p className="text-xs text-ink-500">Conectado como</p>
-          <p className="mt-0.5 truncate text-[15px] font-semibold text-ink-50">
-            {session.user.email}
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-ink-400">
-            Os convites ficam dentro de cada modo — no Amador ou no Profissional,
-            toque em Convidar.
-          </p>
+        <div className="flex items-center gap-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+          {meta.avatar_url && (
+            <img
+              src={meta.avatar_url}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="size-11 shrink-0 rounded-full"
+            />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-semibold text-ink-50">
+              {meta.full_name ?? 'Conectado'}
+            </p>
+            <p className="truncate text-xs text-ink-400">{session.user.email}</p>
+          </div>
         </div>
+        <p className="mt-3 text-sm leading-relaxed text-ink-400">
+          Os convites ficam dentro de cada modo — no Amador ou no Profissional,
+          toque em Convidar.
+        </p>
         <Button
           variant="secondary"
           size="lg"
-          className="mt-4 w-full"
+          className="mt-5 w-full"
           onClick={async () => {
             await signOut();
             navigate('/', { replace: true });
@@ -70,106 +84,51 @@ export function LoginPage() {
     );
   }
 
-  async function sendCode(e: React.FormEvent) {
-    e.preventDefault();
-    const addr = email.trim().toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(addr)) return setError('Confira o e-mail.');
+  async function google() {
     setBusy(true);
     setError(null);
-    const { error } = await supabase!.auth.signInWithOtp({
-      email: addr,
-      options: { shouldCreateUser: true },
-    });
-    setBusy(false);
-    if (error) {
-      console.error('login: envio do código', error);
-      return setError(
-        error.status === 429
-          ? 'Muitas tentativas. Espere alguns minutos e tente de novo.'
-          : 'Não foi possível enviar o código. Tente de novo.',
-      );
+    const err = await signInWithGoogle(volta ?? undefined);
+    // Sem erro, o navegador já está saindo para o Google
+    if (err) {
+      setError(err);
+      setBusy(false);
     }
-    setEmail(addr);
-    setStep('code');
-  }
-
-  async function verify(e: React.FormEvent) {
-    e.preventDefault();
-    const token = code.replace(/\D/g, '');
-    if (token.length < 6) return setError('O código tem 6 dígitos.');
-    setBusy(true);
-    setError(null);
-    const { error } = await supabase!.auth.verifyOtp({ email, token, type: 'email' });
-    setBusy(false);
-    if (error) {
-      console.error('login: verificação', error);
-      return setError('Código inválido ou vencido. Confira ou peça outro.');
-    }
-    navigate(back, { replace: true });
   }
 
   return (
-    <Shell onBack={() => (step === 'code' ? setStep('email') : navigate(-1))}>
-      {step === 'email' ? (
-        <form onSubmit={sendCode}>
-          <p className="text-sm leading-relaxed text-ink-400">
-            Para organizadores e técnicos. Com a conta você convida o grupo pelo
-            WhatsApp e acompanha quem confirmou.
-          </p>
-          <label className="mt-6 block text-xs font-medium text-ink-400">E-mail</label>
-          <input
-            type="email"
-            inputMode="email"
-            autoComplete="email"
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="voce@email.com"
-            className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3.5 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
-          />
-          {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
-          <Button type="submit" size="lg" className="mt-5 w-full" disabled={busy}>
-            <Mail size={18} />
-            {busy ? 'Enviando…' : 'Receber código'}
-          </Button>
-          <p className="mt-4 text-center text-xs leading-relaxed text-ink-500">
-            Sem senha. A cada login chega um código novo no e-mail.
-          </p>
-        </form>
-      ) : (
-        <form onSubmit={verify}>
-          <p className="text-sm leading-relaxed text-ink-400">
-            Enviamos um código para <span className="text-ink-100">{email}</span>.
-            Se não chegar em um minuto, olhe o spam.
-          </p>
-          <label className="mt-6 block text-xs font-medium text-ink-400">Código</label>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            autoFocus
-            maxLength={10}
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            placeholder="000000"
-            className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3.5 text-center text-2xl font-semibold tracking-[0.4em] text-ink-50 placeholder:text-ink-600 outline-none"
-          />
-          {error && <p className="mt-3 text-sm text-red-300">{error}</p>}
-          <Button type="submit" size="lg" className="mt-5 w-full" disabled={busy}>
-            {busy ? 'Conferindo…' : 'Entrar'}
-          </Button>
-          <button
-            type="button"
-            onClick={() => {
-              setCode('');
-              setStep('email');
-            }}
-            className="mt-3 w-full py-2 text-sm text-ink-400"
-          >
-            Usar outro e-mail ou pedir outro código
-          </button>
-        </form>
-      )}
+    <Shell onBack={() => navigate(-1)}>
+      <p className="text-sm leading-relaxed text-ink-400">
+        Para administradores de pelada e técnicos. Com a conta você convida pelo
+        WhatsApp e acompanha quem confirmou.
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-ink-400">
+        Jogadores e atletas não precisam de conta — eles entram pelo link que você
+        manda.
+      </p>
+
+      {error && <p className="mt-5 text-sm text-red-300">{error}</p>}
+
+      <button
+        onClick={google}
+        disabled={busy}
+        className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 text-base font-semibold text-[#1f1f1f] active:scale-[0.98] disabled:opacity-60"
+      >
+        <GoogleLogo />
+        {busy ? 'Abrindo o Google…' : 'Entrar com Google'}
+      </button>
     </Shell>
+  );
+}
+
+/** Logo oficial do Google — as cores fazem parte da marca, não do tema */
+function GoogleLogo() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
   );
 }
 

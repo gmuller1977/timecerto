@@ -15,9 +15,10 @@ export const supabase = isSupabaseConfigured
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        // O login é por código digitado, não por link. E o app usa HashRouter:
-        // deixar o cliente ler tokens do # da URL brigaria com as rotas.
-        detectSessionInUrl: false,
+        // Login pelo Google volta com ?code= na URL (PKCE). O PKCE usa a query,
+        // não o #, então não briga com o HashRouter — o # continua sendo a rota.
+        flowType: 'pkce',
+        detectSessionInUrl: true,
       },
     })
   : null;
