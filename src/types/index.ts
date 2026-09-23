@@ -200,6 +200,36 @@ export interface RotationConfig {
 /** Modo de uso do app — decide o fluxo inteiro */
 export type AppMode = 'amador' | 'profissional';
 
+/** Faixa etária das federações; `sub17` = quem faz no máximo 16 no ano */
+export type AgeGroup =
+  | 'sub13'
+  | 'sub15'
+  | 'sub17'
+  | 'sub19'
+  | 'sub21'
+  | 'adulto'
+  | 'master';
+
+export type Naipe = 'masculino' | 'feminino' | 'misto';
+
+/**
+ * Atleta do modo profissional. Cadastro à parte do amador: são públicos
+ * diferentes e os dados que importam também — ninguém pesa o amigo da pelada.
+ */
+export interface ProPlayer {
+  id: string;
+  name: string;
+  /** AAAA-MM-DD. A idade é sempre calculada, nunca guardada */
+  birthDate?: string;
+  ageGroup: AgeGroup;
+  naipe: Naipe;
+  heightCm?: number;
+  weightKg?: number;
+  /** Id de posição do vôlei (`lib/sports.ts`) */
+  position?: string;
+  createdAt: string;
+}
+
 /**
  * Posição na quadra de vôlei, numeração oficial.
  * 4 3 2 na rede · 5 6 1 no fundo · saque sai da 1.
@@ -259,6 +289,8 @@ export interface Match {
   attendance: string[];
   drawId?: string;
   notes?: string;
+  /** Ausente = amador (partidas de antes da separação dos modos) */
+  mode?: AppMode;
 }
 
 export interface PlayerStats {

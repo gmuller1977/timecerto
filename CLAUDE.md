@@ -40,9 +40,13 @@ src/
     volleyStats.ts  Estatísticas derivadas dos rallies + paleta dos gráficos
     stats.ts        Estatísticas genéricas (V/E/D, presença, sequência)
     share.ts        Texto formatado para WhatsApp
+    court.ts        Quadra, rodízio, validação da escalação
+    pro.ts          Categorias, naipe, idade, atleta → Player
   store/
-    useAppStore.ts    Jogadores, esporte, settings, elencos
+    useAppStore.ts    Jogadores amadores, esporte, settings, elencos
+    useProStore.ts    Elenco profissional, filtro, última escalação
     useMatchStore.ts  Partida ao vivo + partidas encerradas
+    useRoster.ts      Os dois cadastros juntos, para achar nome por id
     useHydrated.ts    Espera a leitura do localStorage — ver Armadilhas
   pages/            Uma página por rota
   components/
@@ -57,12 +61,34 @@ guarda a escolha.
 
 - **Amador** (`/amador`) — pelada: cadastro, presença, sorteio, placar.
   Os três esportes.
-- **Profissional** (`/profissional`) — treinador: escalação manual com
-  posicionamento na quadra, titulares, reservas, líbero, rodízio, placar e
+- **Profissional** (`/profissional`) — treinador: elenco com categoria,
+  naipe, nascimento, altura, peso e posição; escalação manual
+  (`/profissional/escalacao`) com quadra, reservas, líbero, rodízio, placar e
   scout já em modo atleta. **Só vôlei** — entrar nesse modo força
   `sport = 'volei'`.
 
-Os jogadores são os mesmos nos dois modos, o cadastro é um só.
+**Os cadastros são separados — são praticamente dois apps.** O amador vive em
+`useAppStore.players` (e no futuro será confirmado por link no WhatsApp); o
+profissional em `useProStore` (`timecerto:pro:v1`), com dados que ninguém
+pede numa pelada. Um não aparece no outro.
+
+O que ainda é compartilhado é o motor da partida: placar, scout, resumo e
+estatística falam `Player`. O atleta profissional entra neles por
+`proToPlayer`, e essas telas acham nomes por `useRoster()`, que junta os dois
+cadastros. Não leia `useAppStore.players` numa tela de partida — o nome do
+atleta profissional some.
+
+A partida encerrada guarda `Match.mode`; o histórico de cada modo mostra só as
+suas. Partida sem `mode` é de antes da separação e conta como amador.
+
+**Idade nunca é guardada**: guarda-se `birthDate` e `ageOn` calcula. A
+categoria é sugerida pelo **ano** de nascimento (`suggestAgeGroup`), como as
+federações contam — Sub-17 é quem completa no máximo 16 no ano. Master nunca
+é sugerido, é escolha. Depois que alguém escolhe a categoria à mão, a data não
+a sobrescreve; o formulário só mostra a sugestão ao lado.
+
+O filtro de categoria e naipe do elenco é o mesmo recorte que a escalação usa
+como "disponíveis".
 
 ## Regras do domínio — não invente, confira aqui
 

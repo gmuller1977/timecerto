@@ -10,8 +10,9 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useAppStore } from '@/store/useAppStore';
+import { useProStore, matchesFilter } from '@/store/useProStore';
 import { useMatchStore } from '@/store/useMatchStore';
+import { AGE_GROUP_LABEL, NAIPE_LABEL, proToPlayer } from '@/lib/pro';
 import { useHydrated } from '@/store/useHydrated';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ROTATIONS, ROTATION_LIST } from '@/lib/rotation';
@@ -43,19 +44,30 @@ export function LineupPage() {
 
 function LineupEditor() {
   const navigate = useNavigate();
-  const players = useAppStore((s) => s.players);
-  const squads = useAppStore((s) => s.squads);
-  const setPosition = useAppStore((s) => s.setPosition);
-  const saved = useAppStore((s) => s.lastLineup);
-  const saveLineup = useAppStore((s) => s.saveLineup);
+  const proPlayers = useProStore((s) => s.players);
+  const filter = useProStore((s) => s.filter);
+  const updatePlayer = useProStore((s) => s.updatePlayer);
+  const saved = useProStore((s) => s.lastLineup);
+  const saveLineup = useProStore((s) => s.saveLineup);
   const live = useMatchStore((s) => s.live);
   const startMatch = useMatchStore((s) => s.startMatch);
 
-  const volleyPlayers = useMemo(
-    () => players.filter((p) => p.present),
-    [players],
-  );
-  const mySquads = squads.filter((q) => q.sport === 'volei');
+  // A quadra, a validação e o sugerir falam `Player`
+  const players = useMemo(() => proPlayers.map(proToPlayer), [proPlayers]);
+  // Disponíveis = o recorte de categoria e naipe escolhido no elenco
+  const volleyPlayers = useMemo(() => {
+    const ids = new Set(
+      proPlayers.filter((p) => matchesFilter(p, filter)).map((p) => p.id),
+    );
+    return players.filter((p) => ids.has(p.id));
+  }, [proPlayers, players, filter]);
+  const scope =
+    [
+      filter.ageGroup && AGE_GROUP_LABEL[filter.ageGroup],
+      filter.naipe && NAIPE_LABEL[filter.naipe],
+    ]
+      .filter(Boolean)
+      .join(' ') || 'Todo o elenco';
 
   // Da escalação salva, só volta quem ainda está disponível hoje
   const [initial] = useState(() => {
@@ -72,12 +84,8 @@ function LineupEditor() {
   });
 
   const [system, setSystem] = useState<RotationSystem>(saved?.system ?? '5x1');
-  const [teamName, setTeamName] = useState(
-    saved?.teamName ?? mySquads[0]?.name ?? 'Meu time',
-  );
-  const [color, setColor] = useState<TeamColor>(
-    saved?.color ?? mySquads[0]?.color ?? 'verde',
-  );
+  const [teamName, setTeamName] = useState(saved?.teamName ?? 'Meu time');
+  const [color, setColor] = useState<TeamColor>(saved?.color ?? 'verde');
   const [awayName, setAwayName] = useState('Adversário');
   const [awayColor, setAwayColor] = useState<TeamColor>(
     saved?.color === 'azul' ? 'vermelho' : 'azul',
@@ -180,13 +188,14 @@ function LineupEditor() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
       <header className="safe-top flex items-center gap-3 pt-6 pb-4">
-        <button onClick={() => navigate('/')} className="p-1 text-ink-400">
+        <button onClick={() => navigate('/profissional')} className="p-1 text-ink-400">
           <ArrowLeft size={22} />
         </button>
         <div className="min-w-0 flex-1">
           <h1 className="text-xl font-bold">Escalação</h1>
-          <p className="text-xs text-ink-400">
-            🏐 Vôlei · {volleyPlayers.length} jogadores disponíveis
+          <p className="truncate text-xs text-ink-400">
+            🏐 {scope} · {volleyPlayers.length}{' '}
+            {volleyPlayers.length === 1 ? 'atleta' : 'atletas'}
           </p>
         </div>
         <button
@@ -201,9 +210,8 @@ function LineupEditor() {
 
       {volleyPlayers.length < 6 && (
         <p className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200">
-          São necessários pelo menos 6 jogadores marcados como presentes.
-          Cadastre o elenco no modo amador — os jogadores são os mesmos nos dois
-          modos.
+          São necessários pelo menos 6 atletas em {scope}. Cadastre mais no
+          elenco ou troque o filtro de categoria lá.
         </p>
       )}
 
@@ -479,7 +487,9 @@ function LineupEditor() {
                     </button>
                     <select
                       value={p.positions.volei ?? ''}
-                      onChange={(e) => setPosition(p.id, e.target.value)}
+                      onChange={(e) =>
+                        updatePlayer(p.id, { position: e.target.value || undefined })
+                      }
                       className="shrink-0 rounded-lg bg-ink-700 px-2 py-1.5 text-xs text-ink-200 outline-none"
                     >
                       <option value="">Função</option>

@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { useMatchStore } from '@/store/useMatchStore';
+import { useProStore } from '@/store/useProStore';
+
+const STORES = [useAppStore, useMatchStore, useProStore];
+const allHydrated = () => STORES.every((s) => s.persist.hasHydrated());
 
 /**
  * Os dados moram no localStorage e a leitura não é instantânea.
@@ -9,22 +13,13 @@ import { useMatchStore } from '@/store/useMatchStore';
  * antes de olhar e manda o usuário de volta para a home.
  */
 export function useHydrated(): boolean {
-  const [hydrated, setHydrated] = useState(
-    () => useAppStore.persist.hasHydrated() && useMatchStore.persist.hasHydrated(),
-  );
+  const [hydrated, setHydrated] = useState(allHydrated);
 
   useEffect(() => {
-    const check = () =>
-      setHydrated(
-        useAppStore.persist.hasHydrated() && useMatchStore.persist.hasHydrated(),
-      );
-    const off1 = useAppStore.persist.onFinishHydration(check);
-    const off2 = useMatchStore.persist.onFinishHydration(check);
+    const check = () => setHydrated(allHydrated());
+    const offs = STORES.map((s) => s.persist.onFinishHydration(check));
     check();
-    return () => {
-      off1();
-      off2();
-    };
+    return () => offs.forEach((off) => off());
   }, []);
 
   return hydrated;

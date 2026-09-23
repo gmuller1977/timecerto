@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, Flag, Minus, Plus, Settings2, Undo2, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
-import { useAppStore } from '@/store/useAppStore';
+import { useRoster } from '@/store/useRoster';
 import { useHydrated } from '@/store/useHydrated';
 import { PointSheet, type PointDraft } from '@/components/scout/PointSheet';
 import { CourtPanel } from '@/components/scout/CourtPanel';
@@ -23,7 +23,7 @@ export function ScoreboardPage() {
   const navigate = useNavigate();
   const live = useMatchStore((s) => s.live);
   const hydrated = useHydrated();
-  const players = useAppStore((s) => s.players);
+  const players = useRoster();
   const addRally = useMatchStore((s) => s.addRally);
   const undoRally = useMatchStore((s) => s.undoRally);
   const removePoint = useMatchStore((s) => s.removePoint);

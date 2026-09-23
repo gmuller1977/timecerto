@@ -321,6 +321,7 @@ export const useMatchStore = create<MatchState>()(
           games: playedSets,
           scorers,
           attendance: live.teams.flatMap((t) => t.playerIds),
+          mode: live.pro ? 'profissional' : 'amador',
         };
 
         set((s) => ({

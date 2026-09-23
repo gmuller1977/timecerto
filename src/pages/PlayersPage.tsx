@@ -17,7 +17,9 @@ export function PlayersPage() {
   const addPlayer = useAppStore((s) => s.addPlayer);
   const setAllPresence = useAppStore((s) => s.setAllPresence);
   const live = useMatchStore((s) => s.live);
-  const matches = useMatchStore((s) => s.matches);
+  const matchCount = useMatchStore(
+    (s) => s.matches.filter((m) => m.mode !== 'profissional').length,
+  );
 
   const [name, setName] = useState('');
   const [skill, setSkill] = useState<SkillLevel>(3);
@@ -66,8 +68,8 @@ export function PlayersPage() {
         >
           <History size={14} />
           Partidas
-          {matches.length > 0 && (
-            <span className="text-ink-500">{matches.length}</span>
+          {matchCount > 0 && (
+            <span className="text-ink-500">{matchCount}</span>
           )}
         </button>
       </header>

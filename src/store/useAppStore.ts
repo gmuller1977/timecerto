@@ -4,7 +4,6 @@ import type {
   AppMode,
   DrawResult,
   DrawSettings,
-  Lineup,
   Player,
   RotationSystem,
   SkillLevel,
@@ -24,11 +23,8 @@ interface AppState {
   lastResult: DrawResult | null;
   history: DrawResult[];
   squads: Squad[];
-  /** Última escalação do modo profissional — o time costuma repetir */
-  lastLineup: Lineup | null;
 
   setMode: (mode: AppMode) => void;
-  saveLineup: (lineup: Lineup) => void;
   setSport: (sport: SportId) => void;
   addSquad: (input: {
     name: string;
@@ -72,9 +68,6 @@ export const useAppStore = create<AppState>()(
       lastResult: null,
       history: [],
       squads: [],
-      lastLineup: null,
-
-      saveLineup: (lineup) => set({ lastLineup: lineup }),
 
       addSquad: ({ name, playerIds, color, isMine, system }) => {
         const squad: Squad = {
@@ -188,7 +181,6 @@ export const useAppStore = create<AppState>()(
         lastResult: s.lastResult,
         history: s.history,
         squads: s.squads,
-        lastLineup: s.lastLineup,
       }),
     },
   ),

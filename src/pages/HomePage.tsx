@@ -30,7 +30,7 @@ const MODES: {
     title: 'Profissional',
     tagline: 'Treinador, time fixo, competição',
     detail:
-      'Escale o time você mesmo: posicionamento inicial na quadra, titulares e reservas, rodízio, placar e scout completo.',
+      'Elenco com categoria, altura e peso. Escale o time na quadra, acompanhe rodízio e substituições, com placar e scout completo.',
     to: '/profissional',
     icon: ClipboardList,
     sports: '🏐',
@@ -110,7 +110,7 @@ export function HomePage() {
       <p className="mt-6 text-center text-xs leading-relaxed text-ink-600">
         Dá para trocar de modo a qualquer momento.
         <br />
-        Os jogadores cadastrados são os mesmos nos dois.
+        Cada modo tem o seu próprio cadastro de jogadores.
       </p>
     </div>
   );

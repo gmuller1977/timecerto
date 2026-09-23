@@ -2,7 +2,7 @@ import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Share2, Trophy } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useHydrated } from '@/store/useHydrated';
-import { useAppStore } from '@/store/useAppStore';
+import { useRoster } from '@/store/useRoster';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ACTION_LABEL } from '@/lib/volley';
 import {
@@ -26,7 +26,7 @@ export function MatchSummaryPage() {
   const { id } = useParams();
   const matches = useMatchStore((s) => s.matches);
   const hydrated = useHydrated();
-  const players = useAppStore((s) => s.players);
+  const players = useRoster();
 
   const match = matches.find((m) => m.id === id) ?? matches[0];
   if (!hydrated) return null;

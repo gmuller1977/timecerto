@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
+import { useAppStore } from '@/store/useAppStore';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS } from '@/lib/sports';
 import { hasDetail, setsWonBy } from '@/lib/volleyStats';
@@ -9,13 +10,19 @@ import { cn } from '@/lib/utils';
 
 export function HistoryPage() {
   const navigate = useNavigate();
-  const matches = useMatchStore((s) => s.matches);
+  const all = useMatchStore((s) => s.matches);
+  // Cada modo vê só as próprias partidas; sem modo gravado é amador
+  const pro = useAppStore((s) => s.mode) === 'profissional';
+  const matches = all.filter((m) => (m.mode === 'profissional') === pro);
   const removeMatch = useMatchStore((s) => s.removeMatch);
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
       <header className="safe-top flex items-center gap-3 pt-6 pb-4">
-        <button onClick={() => navigate('/')} className="p-1 text-ink-400">
+        <button
+          onClick={() => navigate(pro ? '/profissional' : '/amador')}
+          className="p-1 text-ink-400"
+        >
           <ArrowLeft size={22} />
         </button>
         <div>
