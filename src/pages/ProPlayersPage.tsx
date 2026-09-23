@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, ClipboardList, History, Radio, UserPlus } from 'lucide-react';
+import { ArrowLeft, ChevronRight, ClipboardList, History, Radio, Send, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ProPlayerSheet } from '@/components/pro/ProPlayerSheet';
 import { useProStore, matchesFilter } from '@/store/useProStore';
@@ -59,14 +59,23 @@ export function ProPlayersPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => navigate('/historico')}
-          className="flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2 text-xs font-medium text-ink-300"
-        >
-          <History size={14} />
-          Partidas
-          {proMatches > 0 && <span className="text-ink-500">{proMatches}</span>}
-        </button>
+        <div className="flex shrink-0 gap-1.5">
+          <button
+            onClick={() => navigate('/convites')}
+            className="flex items-center gap-1.5 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-xs font-medium text-brand-300"
+          >
+            <Send size={14} />
+            Convidar
+          </button>
+          <button
+            onClick={() => navigate('/historico')}
+            className="flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2 text-xs font-medium text-ink-300"
+            aria-label="Partidas"
+          >
+            <History size={14} />
+            {proMatches > 0 && <span className="text-ink-500">{proMatches}</span>}
+          </button>
+        </div>
       </header>
 
       {live && (

@@ -1,0 +1,279 @@
+import { supabase } from '@/lib/supabase';
+import { useAppStore } from '@/store/useAppStore';
+import { useProStore } from '@/store/useProStore';
+import type { AppMode } from '@/types';
+
+/**
+ * Tudo o que fala com o banco em nome do ORGANIZADOR (logado, sob RLS).
+ * O convidado sem conta usa só as funções guest_* do fim do arquivo.
+ *
+ * O aparelho continua sendo a fonte de verdade do elenco: a nuvem recebe uma
+ * cópia para que o link do WhatsApp tenha o que mostrar. Nada local é apagado
+ * por causa da nuvem.
+ */
+
+export interface CloudGroup {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface CloudEvent {
+  id: string;
+  title: string | null;
+  startsAt: string;
+}
+
+export type Attendance = Record<string, 'vou' | 'nao_vou'>;
+
+function db() {
+  if (!supabase) throw new Error('Supabase não configurado');
+  return supabase;
+}
+
+async function uid(): Promise<string> {
+  const { data } = await db().auth.getUser();
+  if (!data.user) throw new Error('Sem sessão');
+  return data.user.id;
+}
+
+/** O grupo deste modo, se o organizador já criou — em qualquer aparelho */
+export async function findMyGroup(mode: AppMode): Promise<CloudGroup | null> {
+  const { data, error } = await db()
+    .from('groups')
+    .select('id, name, invite_code')
+    .eq('owner_id', await uid())
+    .eq('mode', mode)
+    .order('created_at')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data && { id: data.id, name: data.name, code: data.invite_code };
+}
+
+export async function createGroup(mode: AppMode, name: string): Promise<CloudGroup> {
+  const sport = mode === 'profissional' ? 'volei' : useAppStore.getState().sport;
+  const { data, error } = await db()
+    .from('groups')
+    .insert({ name: name.trim(), sport, mode, owner_id: await uid() })
+    .select('id, name, invite_code')
+    .single();
+  if (error) throw error;
+  return { id: data.id, name: data.name, code: data.invite_code };
+}
+
+/**
+ * Sobe o cadastro amador. O id da nuvem nasce no aparelho (randomUUID), então
+ * um único upsert resolve novos e existentes sem ambiguidade de ordem.
+ * Quem sumiu do aparelho fica inativo na nuvem — some do link, não do
+ * histórico.
+ */
+export async function syncAmador(groupId: string): Promise<void> {
+  const { players, updatePlayer } = useAppStore.getState();
+  const rows = players.map((p) => {
+    const id = p.remoteId ?? crypto.randomUUID();
+    if (!p.remoteId) updatePlayer(p.id, { remoteId: id });
+    return {
+      id,
+      group_id: groupId,
+      name: p.name,
+      skills: p.skills,
+      positions: p.positions,
+      is_keeper: Boolean(p.isKeeper),
+      active: true,
+    };
+  });
+  await upsertAndRetire(groupId, rows);
+}
+
+/**
+ * Sobe o elenco profissional e traz o que o atleta preencheu pelo link.
+ * Nascimento, altura e peso: a nuvem vence quando tem valor — quem sabe a
+ * própria altura é o atleta. O resto (nome, categoria, naipe, posição) é
+ * decisão do técnico e vai do aparelho para a nuvem.
+ */
+export async function syncPro(groupId: string): Promise<void> {
+  const { data: remote, error } = await db()
+    .from('players')
+    .select('id, birth_date, height_cm, weight_kg')
+    .eq('group_id', groupId);
+  if (error) throw error;
+  const byId = new Map(remote.map((r) => [r.id, r]));
+
+  const { players, updatePlayer } = useProStore.getState();
+  const rows = players.map((p) => {
+    const id = p.remoteId ?? crypto.randomUUID();
+    const r = byId.get(id);
+    const merged = {
+      birthDate: r?.birth_date ?? p.birthDate,
+      heightCm: r?.height_cm ?? p.heightCm,
+      weightKg: r?.weight_kg != null ? Number(r.weight_kg) : p.weightKg,
+    };
+    updatePlayer(p.id, { remoteId: id, ...merged });
+    return {
+      id,
+      group_id: groupId,
+      name: p.name,
+      positions: p.position ? { volei: p.position } : {},
+      age_group: p.ageGroup,
+      naipe: p.naipe,
+      birth_date: merged.birthDate ?? null,
+      height_cm: merged.heightCm ?? null,
+      weight_kg: merged.weightKg ?? null,
+      active: true,
+    };
+  });
+  await upsertAndRetire(groupId, rows);
+
+  // O token do link pessoal nasce no banco; traz para o aparelho
+  const { data: tokens, error: e2 } = await db()
+    .from('players')
+    .select('id, invite_token')
+    .eq('group_id', groupId);
+  if (e2) throw e2;
+  const tokenOf = new Map(tokens.map((t) => [t.id, t.invite_token as string]));
+  for (const p of useProStore.getState().players) {
+    const t = p.remoteId && tokenOf.get(p.remoteId);
+    if (t && t !== p.inviteToken) updatePlayer(p.id, { inviteToken: t });
+  }
+}
+
+async function upsertAndRetire(groupId: string, rows: { id: string }[]) {
+  if (rows.length > 0) {
+    const { error } = await db().from('players').upsert(rows);
+    if (error) throw error;
+  }
+  const keep = rows.map((r) => r.id);
+  let q = db().from('players').update({ active: false }).eq('group_id', groupId);
+  if (keep.length > 0) q = q.not('id', 'in', `(${keep.join(',')})`);
+  const { error } = await q;
+  if (error) throw error;
+}
+
+// ── Jogo marcado e presença ─────────────────────────────────
+
+export async function openEvent(groupId: string): Promise<CloudEvent | null> {
+  const { data, error } = await db()
+    .from('events')
+    .select('id, title, starts_at')
+    .eq('group_id', groupId)
+    .eq('closed', false)
+    .order('starts_at')
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data && { id: data.id, title: data.title, startsAt: data.starts_at };
+}
+
+/** Marca o próximo jogo. O link mostra um jogo por vez: os abertos fecham. */
+export async function createEvent(
+  groupId: string,
+  startsAt: Date,
+  title: string,
+): Promise<CloudEvent> {
+  const { error: e1 } = await db()
+    .from('events')
+    .update({ closed: true })
+    .eq('group_id', groupId)
+    .eq('closed', false);
+  if (e1) throw e1;
+  const { data, error } = await db()
+    .from('events')
+    .insert({ group_id: groupId, starts_at: startsAt.toISOString(), title: title.trim() || null })
+    .select('id, title, starts_at')
+    .single();
+  if (error) throw error;
+  return { id: data.id, title: data.title, startsAt: data.starts_at };
+}
+
+export async function closeEvent(id: string): Promise<void> {
+  const { error } = await db().from('events').update({ closed: true }).eq('id', id);
+  if (error) throw error;
+}
+
+/** Respostas do jogo, por id da NUVEM do jogador */
+export async function fetchAttendance(eventId: string): Promise<Attendance> {
+  const { data, error } = await db()
+    .from('attendance')
+    .select('player_id, status')
+    .eq('event_id', eventId);
+  if (error) throw error;
+  return Object.fromEntries(data.map((a) => [a.player_id, a.status]));
+}
+
+// ── Links ───────────────────────────────────────────────────
+
+function base(): string {
+  return `${location.origin}${location.pathname}`;
+}
+export const groupLink = (code: string) => `${base()}#/c/${code}`;
+export const athleteLink = (token: string) => `${base()}#/a/${token}`;
+
+/** Abre o WhatsApp com a mensagem pronta; a pessoa escolhe o contato ou grupo */
+export function shareOnWhatsApp(text: string) {
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+}
+
+// ── Convidado sem conta ─────────────────────────────────────
+
+export interface GuestGroup {
+  group: { name: string; sport: string; mode: AppMode };
+  event: CloudEvent | null;
+  players: { id: string; name: string; position: string | null; status: 'vou' | 'nao_vou' | null }[];
+}
+
+export async function guestGroup(code: string): Promise<GuestGroup> {
+  const { data, error } = await db().rpc('guest_group', { code });
+  if (error) throw error;
+  return data as GuestGroup;
+}
+
+export async function guestSetAttendance(
+  code: string,
+  eventId: string,
+  playerId: string,
+  status: 'vou' | 'nao_vou',
+): Promise<void> {
+  const { error } = await db().rpc('guest_set_attendance', {
+    code,
+    p_event: eventId,
+    p_player: playerId,
+    p_status: status,
+  });
+  if (error) throw error;
+}
+
+export interface GuestAthlete {
+  group: { name: string };
+  athlete: {
+    id: string;
+    name: string;
+    birthDate: string | null;
+    ageGroup: string | null;
+    naipe: string | null;
+    heightCm: number | null;
+    weightKg: number | null;
+    position: string | null;
+  };
+}
+
+export async function guestAthlete(token: string): Promise<GuestAthlete> {
+  const { data, error } = await db().rpc('guest_athlete', { token });
+  if (error) throw error;
+  return data as GuestAthlete;
+}
+
+export async function guestUpdateAthlete(
+  token: string,
+  birth: string | null,
+  heightCm: number | null,
+  weightKg: number | null,
+): Promise<void> {
+  const { error } = await db().rpc('guest_update_athlete', {
+    token,
+    p_birth: birth,
+    p_height: heightCm,
+    p_weight: weightKg,
+  });
+  if (error) throw error;
+}

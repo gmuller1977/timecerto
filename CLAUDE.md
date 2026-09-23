@@ -24,9 +24,42 @@ Alias `@/` aponta para `src/`.
 
 ## Estado atual
 
-Tudo roda offline, em `localStorage`. Não existe backend, conta de usuário nem
-sincronização. Dois aparelhos do mesmo dono são bases separadas. O esquema do
-banco existe em `supabase/schema.sql` mas o app não fala com ele.
+O app roda offline, em `localStorage`, e continua funcionando sem login.
+O Supabase (projeto `whhvojozemwmnhnpyqpz`) entra só para **login do
+organizador e convites** — ver "Convites" abaixo. Partidas e estatísticas ainda
+não sobem: dois aparelhos do mesmo dono são bases separadas.
+
+`.env` local tem `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (a publishable
+key). Na Vercel, as mesmas duas em Settings → Environment Variables. A secret
+key nunca vai para o app.
+
+## Convites
+
+Só organizador e técnico têm conta — login por **código de 6 dígitos no
+e-mail** (`/entrar`). Código e não link mágico: o link abriria no navegador e
+o app instalado ficaria de fora. O template "Magic Link" do Supabase foi
+trocado para mostrar `{{ .Token }}`.
+
+Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
+
+- `/#/c/CÓDIGO` — link do grupo (amador): escolhe o próprio nome (o aparelho
+  lembra) e marca vou / não vou no jogo aberto. Qualquer um com o link marca
+  por qualquer um; aceito, o organizador vê a lista.
+- `/#/a/TOKEN` — link pessoal do atleta: completa nascimento, altura e peso.
+  Menor de idade exige o aceite do responsável (LGPD).
+
+Todo acesso do convidado passa pelas funções `guest_*` do esquema, que
+conferem código ou token. **Nenhuma tabela é aberta para `anon`** — não
+crie política para `anon`; crie uma função `guest_*` nova.
+
+O aparelho continua a fonte de verdade do elenco; a nuvem recebe uma cópia
+(`lib/cloud.ts`, `syncAmador`/`syncPro`). O id da nuvem nasce no aparelho
+(`crypto.randomUUID`, guardado em `remoteId`) para um upsert só resolver novos
+e existentes. Na sincronização do atleta, nascimento/altura/peso da nuvem
+vencem (quem preencheu foi o atleta); o resto vai do aparelho para a nuvem.
+
+As telas que falam com o banco são carregadas sob demanda (`lazy` em
+`App.tsx`): o cliente do Supabase não entra no pacote do placar.
 
 ## Mapa
 
@@ -233,9 +266,11 @@ Produção: https://timecerto-theta.vercel.app
 
 ## Fase 2 — o que falta
 
-Login, grupos compartilhados, sincronização, financeiro do grupo, ranking.
+Feito: login do organizador, grupo na nuvem, convites e presença.
+Falta: subir partidas (sem isso `guest_matches` devolve vazio e o convidado
+não vê resultados), login por WhatsApp, financeiro do grupo, ranking.
 O esquema está em `supabase/schema.sql` com RLS por grupo e papéis
-(dono/organizador/jogador) e função `join_group` por código de convite.
+(dono/organizador/jogador).
 
 O ponto mais delicado dessa fase: **o scout não pode parar por falta de
 internet.** Ginásio tem sinal ruim. Qualquer sincronização precisa ser

@@ -43,6 +43,8 @@ export interface Player {
   isKeeper?: boolean;
   createdAt: string;
   notes?: string;
+  /** Id na nuvem (players.id), depois que o grupo foi criado no banco */
+  remoteId?: string;
 }
 
 export interface Team {
@@ -228,6 +230,10 @@ export interface ProPlayer {
   /** Id de posição do vôlei (`lib/sports.ts`) */
   position?: string;
   createdAt: string;
+  /** Id na nuvem (players.id), depois que o grupo foi criado no banco */
+  remoteId?: string;
+  /** Token do link pessoal — vem do banco, nunca é gerado no aparelho */
+  inviteToken?: string;
 }
 
 /**

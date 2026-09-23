@@ -37,8 +37,12 @@ create table if not exists public.groups (
   name        text not null,
   sport       text not null check (sport in ('futebol', 'volei', 'basquete')),
   owner_id    uuid not null references public.profiles on delete cascade,
-  -- Código curto para entrar no grupo por link do WhatsApp
-  invite_code text not null unique default upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6)),
+  -- Pelada (amador) ou time com técnico (profissional). São quase dois apps:
+  -- o convite, o cadastro e o que o convidado vê mudam com isso.
+  mode        text not null default 'amador' check (mode in ('amador', 'profissional')),
+  -- Código do link do grupo no WhatsApp. Quem tem o link lê a lista e marca
+  -- presença SEM conta — por isso 10 caracteres e não 6: é a única barreira.
+  invite_code text not null unique default upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 10)),
   created_at  timestamptz not null default now()
 );
 
@@ -64,10 +68,43 @@ create table if not exists public.players (
   positions  jsonb not null default '{}'::jsonb,
   is_keeper  boolean not null default false,
   active     boolean not null default true,
+  -- ── Só no modo profissional ──
+  -- Idade nunca é guardada: sai de birth_date.
+  birth_date date,
+  age_group  text check (age_group in ('sub13', 'sub15', 'sub17', 'sub19', 'sub21', 'adulto', 'master')),
+  naipe      text check (naipe in ('masculino', 'feminino', 'misto')),
+  height_cm  int check (height_cm between 80 and 250),
+  weight_kg  numeric(4, 1) check (weight_kg between 20 and 250),
+  -- Link pessoal do atleta: completa o próprio cadastro sem conta.
+  -- 32 caracteres aleatórios — quem tem o link edita os dados dele.
+  invite_token text not null unique default replace(gen_random_uuid()::text, '-', ''),
   created_at timestamptz not null default now()
 );
 
 create index if not exists players_group_idx on public.players (group_id);
+
+-- ── Jogos marcados e presença ────────────────────────────────
+-- A pelada de quinta, o treino de sábado. O convidado responde "vou" ou
+-- "não vou" aqui; a partida (matches) só existe depois que o jogo acontece.
+create table if not exists public.events (
+  id         uuid primary key default gen_random_uuid(),
+  group_id   uuid not null references public.groups on delete cascade,
+  title      text,
+  starts_at  timestamptz not null,
+  -- Fechado = não aceita mais resposta pelo link
+  closed     boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists events_group_idx on public.events (group_id, starts_at desc);
+
+create table if not exists public.attendance (
+  event_id    uuid not null references public.events on delete cascade,
+  player_id   uuid not null references public.players on delete cascade,
+  status      text not null check (status in ('vou', 'nao_vou')),
+  answered_at timestamptz not null default now(),
+  primary key (event_id, player_id)
+);
 
 -- ── Elencos fixos ────────────────────────────────────────────
 create table if not exists public.squads (
@@ -209,6 +246,8 @@ alter table public.games          enable row level security;
 alter table public.rallies        enable row level security;
 alter table public.expenses       enable row level security;
 alter table public.payments       enable row level security;
+alter table public.events         enable row level security;
+alter table public.attendance     enable row level security;
 
 -- Perfis: cada um vê e edita o seu
 drop policy if exists profiles_self_read on public.profiles;
@@ -241,9 +280,9 @@ drop policy if exists members_read on public.group_members;
 create policy members_read on public.group_members
   for select using (public.is_group_member(group_id));
 
+-- Sem política de auto-inserção: ela deixava qualquer usuário logado entrar
+-- em qualquer grupo sabendo o id, sem código. Entrar é só por join_group.
 drop policy if exists members_self_join on public.group_members;
-create policy members_self_join on public.group_members
-  for insert with check (user_id = auth.uid());
 
 drop policy if exists members_manage on public.group_members;
 create policy members_manage on public.group_members
@@ -253,7 +292,7 @@ create policy members_manage on public.group_members
 do $$
 declare t text;
 begin
-  foreach t in array array['players', 'squads', 'matches', 'expenses', 'payments']
+  foreach t in array array['players', 'squads', 'matches', 'expenses', 'payments', 'events']
   loop
     execute format('drop policy if exists %I_read on public.%I', t, t);
     execute format(
@@ -282,6 +321,24 @@ drop policy if exists rallies_write on public.rallies;
 create policy rallies_write on public.rallies
   for all using (public.can_manage_group(public.game_group(game_id)))
   with check (public.can_manage_group(public.game_group(game_id)));
+
+drop policy if exists attendance_read on public.attendance;
+create policy attendance_read on public.attendance
+  for select using (
+    exists (select 1 from public.events e
+            where e.id = event_id and public.is_group_member(e.group_id))
+  );
+
+drop policy if exists attendance_write on public.attendance;
+create policy attendance_write on public.attendance
+  for all using (
+    exists (select 1 from public.events e
+            where e.id = event_id and public.can_manage_group(e.group_id))
+  )
+  with check (
+    exists (select 1 from public.events e
+            where e.id = event_id and public.can_manage_group(e.group_id))
+  );
 
 drop policy if exists squad_players_read on public.squad_players;
 create policy squad_players_read on public.squad_players
@@ -329,3 +386,189 @@ begin
   return gid;
 end;
 $$;
+
+-- ─────────────────────────────────────────────────────────────
+-- Convidado sem conta
+--
+-- Jogador e atleta não fazem login: entram pelo link do WhatsApp. Eles não
+-- passam pela RLS (não têm auth.uid()), então TODO acesso deles é por estas
+-- funções security definer, e cada uma confere o código ou o token antes de
+-- tocar em qualquer linha. Nenhuma tabela é aberta para `anon`.
+--
+-- O que o convidado NUNCA recebe: dados de outro atleta além de nome e
+-- posição, tokens pessoais, e-mail de ninguém, financeiro.
+-- ─────────────────────────────────────────────────────────────
+
+-- Link do grupo (amador): o grupo, o próximo jogo aberto e a lista de
+-- jogadores com a resposta de cada um.
+create or replace function public.guest_group(code text)
+returns jsonb language plpgsql security definer stable set search_path = public as $$
+declare g public.groups; ev public.events;
+begin
+  select * into g from public.groups where invite_code = upper(code);
+  if g.id is null then
+    raise exception 'Convite inválido';
+  end if;
+
+  select * into ev from public.events
+   where group_id = g.id and not closed
+   order by starts_at asc limit 1;
+
+  return jsonb_build_object(
+    'group', jsonb_build_object('name', g.name, 'sport', g.sport, 'mode', g.mode),
+    'event', case when ev.id is null then null else jsonb_build_object(
+      'id', ev.id, 'title', ev.title, 'startsAt', ev.starts_at) end,
+    'players', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'id', p.id,
+               'name', p.name,
+               'position', p.positions ->> g.sport,
+               'status', a.status)
+             order by p.name)
+        from public.players p
+        left join public.attendance a on a.player_id = p.id and a.event_id = ev.id
+       where p.group_id = g.id and p.active
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+-- "Vou" / "não vou" pelo link do grupo. Confere que o jogador e o jogo são
+-- DAQUELE grupo e que o jogo ainda aceita resposta.
+create or replace function public.guest_set_attendance(
+  code text, p_event uuid, p_player uuid, p_status text)
+returns void language plpgsql security definer set search_path = public as $$
+declare gid uuid;
+begin
+  if p_status not in ('vou', 'nao_vou') then
+    raise exception 'Resposta inválida';
+  end if;
+  select id into gid from public.groups where invite_code = upper(code);
+  if gid is null then
+    raise exception 'Convite inválido';
+  end if;
+  if not exists (select 1 from public.events
+                  where id = p_event and group_id = gid and not closed) then
+    raise exception 'Este jogo não aceita mais respostas';
+  end if;
+  if not exists (select 1 from public.players
+                  where id = p_player and group_id = gid and active) then
+    raise exception 'Jogador não encontrado neste grupo';
+  end if;
+
+  insert into public.attendance (event_id, player_id, status)
+  values (p_event, p_player, p_status)
+  on conflict (event_id, player_id)
+  do update set status = excluded.status, answered_at = now();
+end;
+$$;
+
+-- Link pessoal do atleta: o cadastro DELE e o nome do time.
+create or replace function public.guest_athlete(token text)
+returns jsonb language plpgsql security definer stable set search_path = public as $$
+declare p public.players; g public.groups;
+begin
+  select * into p from public.players where invite_token = token and active;
+  if p.id is null then
+    raise exception 'Link inválido';
+  end if;
+  select * into g from public.groups where id = p.group_id;
+
+  return jsonb_build_object(
+    'group', jsonb_build_object('name', g.name, 'sport', g.sport, 'mode', g.mode),
+    'athlete', jsonb_build_object(
+      'id', p.id,
+      'name', p.name,
+      'birthDate', p.birth_date,
+      'ageGroup', p.age_group,
+      'naipe', p.naipe,
+      'heightCm', p.height_cm,
+      'weightKg', p.weight_kg,
+      'position', p.positions ->> 'volei')
+  );
+end;
+$$;
+
+-- O atleta completa o próprio cadastro. Só estes campos: nome, categoria e
+-- naipe são decisão do técnico, não do atleta.
+create or replace function public.guest_update_athlete(
+  token text, p_birth date, p_height int, p_weight numeric)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  update public.players
+     set birth_date = p_birth,
+         height_cm  = p_height,
+         weight_kg  = p_weight
+   where invite_token = token and active;
+  if not found then
+    raise exception 'Link inválido';
+  end if;
+end;
+$$;
+
+-- Partidas do grupo para consulta, por qualquer um dos dois links.
+-- As 30 mais recentes com sets e rallies, no formato que o app já usa para
+-- calcular estatística — a conta é feita no aparelho, não aqui.
+create or replace function public.guest_matches(code text default null, token text default null)
+returns jsonb language plpgsql security definer stable set search_path = public as $$
+declare gid uuid;
+begin
+  if code is not null then
+    select id into gid from public.groups where invite_code = upper(code);
+  elsif token is not null then
+    select group_id into gid from public.players where invite_token = token and active;
+  end if;
+  if gid is null then
+    raise exception 'Convite inválido';
+  end if;
+
+  return coalesce((
+    select jsonb_agg(x.m_json order by x.played_at desc)
+      from (
+        select m.played_at, jsonb_build_object(
+          'id', m.id,
+          'date', m.played_at,
+          'sport', m.sport,
+          'teams', m.teams,
+          'games', coalesce((
+            select jsonb_agg(jsonb_build_object(
+                     'id', ga.id,
+                     'teamAId', ga.team_a, 'teamBId', ga.team_b,
+                     'scoreA', ga.score_a, 'scoreB', ga.score_b,
+                     'finished', ga.finished, 'played', true,
+                     'rallies', coalesce((
+                       select jsonb_agg(jsonb_build_object(
+                                'id', r.id, 'teamId', r.team_id, 'kind', r.kind,
+                                'action', r.action, 'playerId', r.player_id,
+                                'scoreA', r.score_a, 'scoreB', r.score_b, 'at', r.at)
+                              order by r.idx)
+                         from public.rallies r where r.game_id = ga.id
+                     ), '[]'::jsonb))
+                   order by ga.idx)
+              from public.games ga where ga.match_id = m.id
+          ), '[]'::jsonb)
+        ) as m_json
+          from public.matches m
+         where m.group_id = gid
+         order by m.played_at desc
+         limit 30
+      ) x
+  ), '[]'::jsonb);
+end;
+$$;
+
+-- Funções nascem executáveis por todos. Restringe ao que cada papel precisa:
+-- o convidado executa só as guest_*.
+revoke execute on function public.guest_group(text)                              from public;
+revoke execute on function public.guest_set_attendance(text, uuid, uuid, text)   from public;
+revoke execute on function public.guest_athlete(text)                            from public;
+revoke execute on function public.guest_update_athlete(text, date, int, numeric) from public;
+revoke execute on function public.guest_matches(text, text)                      from public;
+grant  execute on function public.guest_group(text)                              to anon, authenticated;
+grant  execute on function public.guest_set_attendance(text, uuid, uuid, text)   to anon, authenticated;
+grant  execute on function public.guest_athlete(text)                            to anon, authenticated;
+grant  execute on function public.guest_update_athlete(text, date, int, numeric) to anon, authenticated;
+grant  execute on function public.guest_matches(text, text)                      to anon, authenticated;
+
+revoke execute on function public.join_group(text) from public, anon;
+grant  execute on function public.join_group(text) to authenticated;

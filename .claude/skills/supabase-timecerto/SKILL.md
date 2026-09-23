@@ -5,7 +5,9 @@ description: Convenções do banco e da sincronização do TimeCerto no Supabase
 
 # Supabase no TimeCerto
 
-Estado: esquema pronto em `supabase/schema.sql`, **app ainda não conectado**.
+Estado: esquema rodado no projeto `whhvojozemwmnhnpyqpz`. O app usa o banco
+para login do organizador e convites (ver "Convites" no CLAUDE.md); partidas
+ainda não sobem.
 `lib/supabase.ts` exporta `null` quando as variáveis não existem, e
 `isSupabaseConfigured` diz se dá para usar. Todo código novo deve funcionar com
 `supabase === null` — o modo offline não é fallback, é o padrão atual.
