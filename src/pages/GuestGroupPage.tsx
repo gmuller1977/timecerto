@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, UserPlus, X } from 'lucide-react';
+import { Check, MapPin, UserPlus, X } from 'lucide-react';
 import {
   guestAddPlayer,
   guestGroup,
@@ -201,6 +201,12 @@ export function GuestGroupPage() {
             {event.title ? `${event.title} · ` : ''}
             {fmtEvent(event.startsAt)}
           </p>
+          {event.location && (
+            <p className="flex items-center gap-1 text-sm text-ink-300">
+              <MapPin size={14} className="shrink-0 text-ink-500" />
+              {event.location}
+            </p>
+          )}
           <p className="mt-1 text-sm text-ink-400">
             {event.slots
               ? `${dist.mensalistasConfirmados + dist.convidadosComVaga} de ${event.slots} vagas preenchidas${dist.naFila ? ` · ${dist.naFila} na fila` : ''}`
@@ -278,9 +284,27 @@ export function GuestGroupPage() {
         </section>
       ) : (
         event && (
-          <p className="mt-6 text-xs text-ink-500">
-            {dist.mensalistasConfirmados} mensalistas confirmados
-          </p>
+          <section className="mt-6">
+            <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
+              Mensalistas confirmados ({dist.mensalistasConfirmados})
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {mensalistas
+                .filter((p) => sit(p.id)?.tipo === 'confirmado')
+                .map((p) => (
+                  <span
+                    key={p.id}
+                    className="flex items-center gap-1 rounded-lg bg-brand-500/15 px-2 py-1 text-xs text-brand-200"
+                  >
+                    <Check size={12} />
+                    {p.name}
+                  </span>
+                ))}
+              {dist.mensalistasConfirmados === 0 && (
+                <span className="text-xs text-ink-500">Ninguém confirmou ainda.</span>
+              )}
+            </div>
+          </section>
         )
       )}
 

@@ -1,13 +1,14 @@
+import { useState } from 'react';
 import { Check, Trash2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import type { Player, SkillLevel } from '@/types';
+import { PlayerSheet } from '@/components/players/PlayerSheet';
 import { StarRating } from '@/components/ui/StarRating';
 import { useAppStore } from '@/store/useAppStore';
 import { cn, initials } from '@/lib/utils';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 
 export function PlayerRow({ player }: { player: Player }) {
-  const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
   const sport = useAppStore((s) => s.sport);
   const togglePresence = useAppStore((s) => s.togglePresence);
   const setSkill = useAppStore((s) => s.setSkill);
@@ -45,7 +46,7 @@ export function PlayerRow({ player }: { player: Player }) {
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <button
-            onClick={() => navigate(`/jogador/${player.id}`)}
+            onClick={() => setEditing(true)}
             className="min-w-0 truncate text-left text-[15px] font-medium text-ink-50"
           >
             {player.name}
@@ -89,12 +90,16 @@ export function PlayerRow({ player }: { player: Player }) {
       </div>
 
       <button
-        onClick={() => removePlayer(player.id)}
+        onClick={() => {
+          if (window.confirm(`Excluir ${player.name}?`)) removePlayer(player.id);
+        }}
         className="shrink-0 p-2 text-ink-600 transition-colors hover:text-red-400"
         aria-label="Remover jogador"
       >
         <Trash2 size={17} />
       </button>
+
+      {editing && <PlayerSheet player={player} onClose={() => setEditing(false)} />}
     </div>
   );
 }

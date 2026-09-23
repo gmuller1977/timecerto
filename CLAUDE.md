@@ -57,8 +57,29 @@ Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
 - `/#/v/CÓDIGO` — link de **convidados** (amador, `groups.guest_code`): põe o
   nome e entra na fila. Nome de convidado que já existe = a mesma pessoa
   voltando; nome de mensalista é recusado.
+- `/#/r/CÓDIGO` — link de **cadastro de mensalistas** (`groups.register_code`):
+  nome, nascimento, telefone, posição e nível. Fica **pendente**
+  (`players.pending`) até o administrador aprovar na tela Convidar; pendente
+  não aparece em link nenhum nem entra no sorteio. O nível é sugestão — o
+  sorteio usa o que o administrador deixar.
 - `/#/a/TOKEN` — link pessoal do atleta: completa nascimento, altura e peso.
   Menor de idade exige o aceite do responsável (LGPD).
+
+**Telefone e nascimento nunca saem pelas funções `guest_*`.** Só o
+administrador vê, na ficha do jogador (`PlayerSheet`).
+
+### Fluxo do administrador (amador)
+
+Definido pelo Guilherme em 23/09/2026, e é a ordem da tela Convidar:
+
+1. manda o link de cadastro; aprova ou recusa os pedidos;
+2. vê e edita o cadastro na lista do Amador (tocar no nome abre a ficha);
+3. abre o jogo: data, horário, **local** (`events.location`) e quantidade de atletas;
+4. dois botões: **Convidar mensalistas** e **Convidar convidados**, cada um com seu link;
+5. as confirmações aparecem na tela e atualizam sozinhas a cada 20 s;
+6. **Sortear com os confirmados** leva ao sorteio só quem tem vaga.
+
+No link, reabrir mostra a resposta atual, deixa mudar e mostra quem confirmou.
 
 ### Mensalistas e convidados (amador)
 

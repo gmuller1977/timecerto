@@ -6,8 +6,11 @@ import {
   Check,
   Copy,
   LogOut,
+  MapPin,
   MessageCircle,
   RefreshCw,
+  Shuffle,
+  UserPlus,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -26,6 +29,8 @@ import {
   groupLink,
   guestLink,
   openEvent,
+  pullLinkAdded,
+  registerLink,
   shareOnWhatsApp,
   syncAmador,
   syncPro,
@@ -33,7 +38,11 @@ import {
   type CloudEvent,
   type CloudGroup,
 } from '@/lib/cloud';
-import type { AppMode } from '@/types';
+import type { AppMode, SkillLevel, SportId } from '@/types';
+import { StarRating } from '@/components/ui/StarRating';
+import { ageOn } from '@/lib/pro';
+import { getPositionLabel } from '@/lib/sports';
+import { formatPhone } from '@/lib/phone';
 import { cn } from '@/lib/utils';
 import { distribuirVagas, joga } from '@/lib/vagas';
 
@@ -226,21 +235,23 @@ function Connected({ mode, email }: { mode: AppMode; email: string }) {
   );
 }
 
-// ── Amador: mensalistas e convidados ────────────────────────
+// ── Amador: cadastro, jogo, convites e sorteio ──────────────
 
 function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: string) => void }) {
+  const navigate = useNavigate();
   const players = useAppStore((s) => s.players);
   const updatePlayer = useAppStore((s) => s.updatePlayer);
+  const removePlayer = useAppStore((s) => s.removePlayer);
   const [event, setEvent] = useState<CloudEvent | null | undefined>(undefined);
   const [answers, setAnswers] = useState<Attendance>({});
   const [when, setWhen] = useState(defaultWhen);
   const [title, setTitle] = useState('');
+  const [location, setLocation] = useState('');
   const [slots, setSlots] = useState('');
   const [busy, setBusy] = useState(false);
-  const [applied, setApplied] = useState(false);
 
-  // Sincroniza antes de ler: quem acabou de se inscrever pelo link de
-  // convidados só tem nome no aparelho depois de trazido
+  // Sincroniza antes de ler: quem acabou de se inscrever pelos links só tem
+  // nome no aparelho depois de trazido
   const load = useCallback(async () => {
     try {
       await syncAmador(group.id);
@@ -257,15 +268,32 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
     load();
   }, [load]);
 
+  // Com a tela aberta, as confirmações chegam sozinhas. Leve: só traz quem é
+  // novo e as respostas — a sincronização completa fica para abrir e para o ↻.
+  const eventId = event?.id;
+  useEffect(() => {
+    if (!eventId) return;
+    const timer = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        await pullLinkAdded(group.id);
+        setAnswers(await fetchAttendance(eventId));
+      } catch {
+        /* rede oscilou: tenta de novo no próximo ciclo */
+      }
+    }, 20_000);
+    return () => clearInterval(timer);
+  }, [eventId, group.id]);
+
   async function handleCreateEvent() {
     const n = slots.trim() ? Number(slots) : null;
     if (n !== null && (!Number.isInteger(n) || n < 2 || n > 200)) {
-      onError('Vagas: use um número inteiro entre 2 e 200, ou deixe em branco para não ter limite.');
+      onError('Quantidade de atletas: use um número entre 2 e 200, ou deixe em branco para não ter limite.');
       return;
     }
     setBusy(true);
     try {
-      await createEvent(group.id, new Date(when), title, n);
+      await createEvent(group.id, new Date(when), title, n, location);
       await load();
     } catch (e) {
       onError(explain(e));
@@ -273,7 +301,27 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
     setBusy(false);
   }
 
-  const cloudPlayers = players.filter((p) => p.remoteId);
+  // Aprovar = deixa de ser pendente e sobe já, para aparecer no link agora
+  async function approve(id: string) {
+    updatePlayer(id, { pending: false, present: false });
+    try {
+      await syncAmador(group.id);
+    } catch (e) {
+      onError(explain(e));
+    }
+  }
+  async function reject(id: string, name: string) {
+    if (!window.confirm(`Recusar o cadastro de ${name}?`)) return;
+    removePlayer(id);
+    try {
+      await syncAmador(group.id);
+    } catch (e) {
+      onError(explain(e));
+    }
+  }
+
+  const pending = players.filter((p) => p.pending);
+  const cloudPlayers = players.filter((p) => p.remoteId && !p.pending);
   const dist = distribuirVagas(
     event?.slots ?? null,
     cloudPlayers.map((p) => ({
@@ -283,35 +331,119 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
       answeredAt: answers[p.remoteId!]?.answeredAt ?? null,
     })),
   );
-  const sit = (p: (typeof players)[number]) => dist.situacao.get(p.remoteId!);
+  const sit = (p: (typeof players)[number]) =>
+    p.remoteId ? dist.situacao.get(p.remoteId) : undefined;
 
   const mensalistas = cloudPlayers.filter((p) => p.kind !== 'convidado');
   const convidados = cloudPlayers.filter((p) => p.kind === 'convidado');
   const byTipo = (list: typeof players, tipo: string) => list.filter((p) => sit(p)?.tipo === tipo);
+  const semResposta = (list: typeof players) =>
+    list.filter((p) => !sit(p) || sit(p)?.tipo === 'sem_resposta');
   const fila = convidados
     .filter((p) => sit(p)?.tipo === 'fila')
     .sort((a, b) => {
-      const pa = sit(a), pb = sit(b);
+      const pa = sit(a);
+      const pb = sit(b);
       return (pa?.tipo === 'fila' ? pa.posicao : 0) - (pb?.tipo === 'fila' ? pb.posicao : 0);
     });
 
-  // Quem tem vaga entra na lista do sorteio; quem ficou na fila ou disse que
-  // não vai sai. Quem não respondeu fica como está.
-  function applyToPresence() {
-    for (const p of cloudPlayers) {
-      const s = sit(p);
-      if (!s || s.tipo === 'sem_resposta') continue;
-      updatePlayer(p.id, { present: joga(s) });
+  // O sorteio é de quem tem vaga neste jogo, e só deles: quem ficou na fila,
+  // não vai ou não respondeu fica de fora.
+  const jogam = dist.mensalistasConfirmados + dist.convidadosComVaga;
+  function drawWithConfirmed() {
+    for (const p of players) {
+      if (p.pending) continue;
+      const present = joga(sit(p));
+      if (p.present !== present) updatePlayer(p.id, { present });
     }
-    setApplied(true);
-    setTimeout(() => setApplied(false), 2500);
+    navigate('/sortear');
   }
 
-  const quando = event ? `📅 ${fmtEvent(event.startsAt)}` : '';
   const nome = event?.title || group.name;
+  const detalhes = [
+    event ? `📅 ${fmtEvent(event.startsAt)}` : '',
+    event?.location ? `📍 ${event.location}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Cadastro de mensalistas */}
+      <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+        <p className="text-[15px] font-semibold text-ink-50">Cadastro de mensalistas</p>
+        <p className="mt-1 text-xs leading-relaxed text-ink-400">
+          Cada um preenche nome, nascimento, telefone, posição e nível. O cadastro
+          fica aguardando a sua aprovação.
+        </p>
+        {group.registerCode ? (
+          <ShareRow
+            label="Enviar link de cadastro"
+            link={registerLink(group.registerCode)}
+            onShare={() =>
+              shareOnWhatsApp(
+                `📋 Cadastro de mensalistas — ${group.name}\n\nPreencha uma vez: nome, nascimento, telefone, posição e nível.\n${registerLink(group.registerCode!)}`,
+              )
+            }
+          />
+        ) : (
+          <p className="mt-3 text-xs text-ink-500">
+            O link de cadastro aparece depois da atualização do banco (migração 006).
+          </p>
+        )}
+
+        {pending.length > 0 && (
+          <div className="mt-4">
+            <p className="mb-2 text-[11px] font-semibold tracking-wide text-brand-400 uppercase">
+              Aguardando aprovação ({pending.length})
+            </p>
+            <div className="flex flex-col gap-2">
+              {pending.map((p) => {
+                const age = p.birthDate ? ageOn(p.birthDate) : null;
+                const sport = Object.keys(p.skills)[0] as SportId | undefined;
+                const info = [
+                  sport && p.positions[sport] && getPositionLabel(sport, p.positions[sport]),
+                  age !== null && `${age} anos`,
+                  p.phone && formatPhone(p.phone),
+                ].filter(Boolean);
+                const level = (sport && p.skills[sport]) || 3;
+                return (
+                  <div key={p.id} className="rounded-xl border border-ink-800 bg-ink-950 p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink-50">
+                        {p.name}
+                      </span>
+                      <StarRating value={level as SkillLevel} size={13} readOnly />
+                    </div>
+                    {info.length > 0 && (
+                      <p className="mt-0.5 truncate text-xs text-ink-400">{info.join(' · ')}</p>
+                    )}
+                    <div className="mt-2.5 flex gap-2">
+                      <button
+                        onClick={() => reject(p.id, p.name)}
+                        className="h-10 rounded-lg border border-ink-700 px-3 text-sm text-ink-300"
+                      >
+                        Recusar
+                      </button>
+                      <button
+                        onClick={() => approve(p.id)}
+                        className="h-10 flex-1 rounded-lg bg-brand-500 text-sm font-semibold text-ink-950"
+                      >
+                        Aprovar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+              O nível é o que a pessoa sugeriu. Depois de aprovar, ajuste na lista de
+              jogadores — o sorteio usa o seu.
+            </p>
+          </div>
+        )}
+      </section>
+
       {/* Jogo */}
       <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
         <p className="text-xs font-semibold tracking-wide text-brand-400 uppercase">
@@ -323,64 +455,68 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
           <>
             <p className="mt-1 text-[17px] font-semibold text-ink-50">{nome}</p>
             <p className="text-sm capitalize text-ink-300">{fmtEvent(event.startsAt)}</p>
+            {event.location && (
+              <p className="flex items-center gap-1 text-sm text-ink-300">
+                <MapPin size={14} className="shrink-0 text-ink-500" />
+                {event.location}
+              </p>
+            )}
             <p className="mt-2 text-sm text-ink-300">
-              {event.slots ? (
-                <>
-                  <strong className="text-ink-50">
-                    {dist.mensalistasConfirmados + dist.convidadosComVaga}
-                  </strong>{' '}
-                  de {event.slots} vagas preenchidas
-                  {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
-                </>
-              ) : (
-                <>
-                  <strong className="text-ink-50">
-                    {dist.mensalistasConfirmados + dist.convidadosComVaga}
-                  </strong>{' '}
-                  confirmados · sem limite de vagas
-                </>
-              )}
+              <strong className="text-ink-50">{jogam}</strong>
+              {event.slots ? ` de ${event.slots} atletas confirmados` : ' confirmados · sem limite'}
+              {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
             </p>
           </>
         ) : (
           <p className="mt-2 text-sm leading-relaxed text-ink-400">
-            Marque o jogo para mensalistas e convidados responderem. Os links são
-            sempre os mesmos — eles mostram o jogo que estiver aberto.
+            Abra o jogo com data, horário, local e quantidade de atletas. Depois é só
+            convidar.
           </p>
         )}
 
         <details className="mt-4" open={event === null}>
           <summary className="cursor-pointer list-none text-sm font-medium text-brand-400">
             <CalendarPlus size={15} className="mr-1.5 inline" />
-            {event ? 'Marcar outro jogo' : 'Marcar jogo'}
+            {event ? 'Abrir outro jogo' : 'Abrir jogo'}
           </summary>
           <div className="mt-3 flex flex-col gap-2">
+            <label className="text-xs font-medium text-ink-400">Data e horário</label>
             <input
               type="datetime-local"
               value={when}
               onChange={(e) => setWhen(e.target.value)}
               className="w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 outline-none [color-scheme:dark]"
             />
+            <label className="mt-1 text-xs font-medium text-ink-400">Local</label>
             <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Título (opcional) — ex.: Pelada de quinta"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              maxLength={120}
+              placeholder="Ex.: Quadra do Clube, Rua das Flores 100"
               className="w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
             />
+            <label className="mt-1 text-xs font-medium text-ink-400">Quantidade de atletas</label>
             <input
               value={slots}
               onChange={(e) => setSlots(e.target.value.replace(/\D/g, ''))}
               inputMode="numeric"
-              placeholder="Vagas (ex.: 20) — em branco, sem limite"
+              placeholder="Ex.: 20 — em branco, sem limite"
               className="w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
             />
-            <Button variant="secondary" disabled={busy || !when} onClick={handleCreateEvent}>
-              {busy ? 'Salvando…' : event ? 'Trocar pelo novo jogo' : 'Marcar'}
+            <label className="mt-1 text-xs font-medium text-ink-400">Nome do jogo (opcional)</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex.: Pelada de quinta"
+              className="w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
+            />
+            <Button disabled={busy || !when} onClick={handleCreateEvent} className="mt-1">
+              {busy ? 'Salvando…' : event ? 'Trocar pelo novo jogo' : 'Abrir jogo'}
             </Button>
             <p className="text-[11px] leading-relaxed text-ink-500">
               Mensalista que confirma sempre joga. Convidado entra numa fila e joga
               se sobrar vaga, por ordem de chegada.
-              {event && ' Marcar outro jogo fecha o atual; as respostas dele ficam guardadas.'}
+              {event && ' Abrir outro jogo fecha o atual; as respostas dele ficam guardadas.'}
             </p>
           </div>
         </details>
@@ -388,60 +524,59 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
 
       {event && (
         <>
-          {/* Mensalistas */}
+          {/* Os dois convites */}
+          <section className="grid grid-cols-2 gap-2">
+            <Button
+              size="lg"
+              className="h-auto flex-col gap-1 py-3"
+              onClick={() =>
+                shareOnWhatsApp(
+                  `⚡ ${nome}\n${detalhes}\n\nMensalistas, confirmem: toque no link, escolha seu nome e marque se vai.\n${groupLink(group.code)}`,
+                )
+              }
+            >
+              <MessageCircle size={20} />
+              <span className="text-sm leading-tight">Convidar mensalistas</span>
+            </Button>
+            <Button
+              size="lg"
+              variant="secondary"
+              className="h-auto flex-col gap-1 py-3"
+              disabled={!group.guestCode}
+              onClick={() =>
+                shareOnWhatsApp(
+                  `⚡ ${nome}\n${detalhes}\n\nQuer jogar? Coloque seu nome na lista de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.\n${guestLink(group.guestCode!)}`,
+                )
+              }
+            >
+              <UserPlus size={20} />
+              <span className="text-sm leading-tight">Convidar convidados</span>
+            </Button>
+          </section>
+
+          {/* Quem vai */}
           <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
             <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-[15px] font-semibold text-ink-50">Mensalistas</p>
-                <p className="text-xs text-ink-400">
-                  {dist.mensalistasConfirmados} vão · {byTipo(mensalistas, 'nao_vou').length}{' '}
-                  não vão · {byTipo(mensalistas, 'sem_resposta').length +
-                    mensalistas.filter((p) => !sit(p)).length}{' '}
-                  sem resposta
-                </p>
-              </div>
+              <p className="text-[15px] font-semibold text-ink-50">Mensalistas</p>
               <button onClick={load} className="p-1 text-ink-500" aria-label="Atualizar respostas">
                 <RefreshCw size={16} />
               </button>
             </div>
-            <ShareRow
-              link={groupLink(group.code)}
-              onShare={() =>
-                shareOnWhatsApp(
-                  `⚡ ${nome}\n${quando}\n\nMensalistas, confirmem: toque no link, escolha seu nome e marque se vai.\n${groupLink(group.code)}`,
-                )
-              }
-            />
+            <p className="text-xs text-ink-400">
+              {dist.mensalistasConfirmados} vão · {byTipo(mensalistas, 'nao_vou').length} não vão ·{' '}
+              {semResposta(mensalistas).length} sem resposta
+            </p>
             <NameList label="Vão" tone="ok" names={byTipo(mensalistas, 'confirmado').map((p) => p.name)} />
             <NameList label="Não vão" tone="no" names={byTipo(mensalistas, 'nao_vou').map((p) => p.name)} />
-            <NameList
-              label="Sem resposta"
-              tone="none"
-              names={mensalistas.filter((p) => !sit(p) || sit(p)?.tipo === 'sem_resposta').map((p) => p.name)}
-            />
+            <NameList label="Sem resposta" tone="none" names={semResposta(mensalistas).map((p) => p.name)} />
           </section>
 
-          {/* Convidados */}
           <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
             <p className="text-[15px] font-semibold text-ink-50">Convidados</p>
             <p className="text-xs text-ink-400">
               {dist.convidadosComVaga} com vaga · {dist.naFila} na fila
               {event.slots != null && ` · ${dist.livres} vagas livres`}
             </p>
-            {group.guestCode ? (
-              <ShareRow
-                link={guestLink(group.guestCode)}
-                onShare={() =>
-                  shareOnWhatsApp(
-                    `⚡ ${nome}\n${quando}\n\nQuer jogar? Coloque seu nome na lista de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.\n${guestLink(group.guestCode!)}`,
-                  )
-                }
-              />
-            ) : (
-              <p className="mt-3 text-xs text-ink-500">
-                O link de convidados aparece depois da atualização do banco (migração 005).
-              </p>
-            )}
             <NameList label="Com vaga" tone="ok" names={byTipo(convidados, 'vaga').map((p) => p.name)} />
             {fila.length > 0 && (
               <div className="mt-3">
@@ -464,25 +599,26 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
               </div>
             )}
             <NameList label="Não vão" tone="no" names={byTipo(convidados, 'nao_vou').map((p) => p.name)} />
+            {convidados.length === 0 && (
+              <p className="mt-2 text-xs text-ink-500">Nenhum convidado inscrito ainda.</p>
+            )}
           </section>
 
+          {/* Sorteio */}
           <section>
-            <Button
-              variant="secondary"
-              className="w-full"
-              disabled={dist.mensalistasConfirmados + dist.convidadosComVaga === 0}
-              onClick={applyToPresence}
-            >
-              {applied ? <Check size={17} /> : null}
-              {applied ? 'Lista de presença atualizada' : 'Usar respostas na lista de presença'}
+            <Button size="lg" className="w-full" disabled={jogam < 4} onClick={drawWithConfirmed}>
+              <Shuffle size={19} strokeWidth={2.5} />
+              {jogam < 4 ? 'Mínimo de 4 confirmados para sortear' : `Sortear com os ${jogam} confirmados`}
             </Button>
             <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-              Entra no sorteio quem tem vaga. Quem ficou na fila ou não vai sai da lista;
-              quem não respondeu fica como está.
+              {event.slots && jogam < event.slots
+                ? `Ainda faltam ${event.slots - jogam} para completar. Dá para sortear assim mesmo.`
+                : 'Entram no sorteio só os confirmados com vaga.'}{' '}
+              As confirmações atualizam sozinhas enquanto esta tela está aberta.
             </p>
             <button
               onClick={async () => {
-                if (!window.confirm('Fechar as respostas? Os links deixam de aceitar confirmações.')) return;
+                if (!window.confirm('Fechar as confirmações? Os links deixam de aceitar respostas.')) return;
                 try {
                   await closeEvent(event.id);
                   await load();
@@ -492,7 +628,7 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
               }}
               className="mt-3 text-xs text-ink-500 underline"
             >
-              Fechar respostas deste jogo
+              Fechar confirmações deste jogo
             </button>
           </section>
         </>
@@ -502,7 +638,7 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
 }
 
 /** Enviar no WhatsApp + copiar o link */
-function ShareRow({ link, onShare }: { link: string; onShare: () => void }) {
+function ShareRow({ label, link, onShare }: { label: string; link: string; onShare: () => void }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -517,7 +653,7 @@ function ShareRow({ link, onShare }: { link: string; onShare: () => void }) {
     <div className="mt-3 flex gap-2">
       <Button className="flex-1" onClick={onShare}>
         <MessageCircle size={18} />
-        Enviar no WhatsApp
+        {label}
       </Button>
       <Button variant="secondary" onClick={copy} aria-label="Copiar link">
         {copied ? <Check size={18} /> : <Copy size={18} />}

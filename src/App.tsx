@@ -19,6 +19,9 @@ const InvitePage = lazy(() => import('@/pages/InvitePage').then((m) => ({ defaul
 const GuestGroupPage = lazy(() =>
   import('@/pages/GuestGroupPage').then((m) => ({ default: m.GuestGroupPage })),
 );
+const GuestRegisterPage = lazy(() =>
+  import('@/pages/GuestRegisterPage').then((m) => ({ default: m.GuestRegisterPage })),
+);
 const GuestAthletePage = lazy(() =>
   import('@/pages/GuestAthletePage').then((m) => ({ default: m.GuestAthletePage })),
 );
@@ -44,6 +47,7 @@ export default function App() {
           {/* Links do WhatsApp — abertos por quem não tem conta */}
           <Route path="/c/:code" element={<GuestGroupPage />} />
           <Route path="/v/:code" element={<GuestGroupPage />} />
+          <Route path="/r/:code" element={<GuestRegisterPage />} />
           <Route path="/a/:token" element={<GuestAthletePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

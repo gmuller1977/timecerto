@@ -49,6 +49,12 @@ export interface Player {
   addedViaLink?: boolean;
   /** Ausente = mensalista (todo cadastro de antes desta distinção) */
   kind?: PlayerKind;
+  /** Pedido de cadastro pelo link, ainda não aprovado: fora de sorteio e links */
+  pending?: boolean;
+  /** AAAA-MM-DD. Só o administrador vê */
+  birthDate?: string;
+  /** Só dígitos, com DDD. Só o administrador vê */
+  phone?: string;
 }
 
 /**

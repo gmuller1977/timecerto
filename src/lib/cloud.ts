@@ -19,6 +19,8 @@ export interface CloudGroup {
   code: string;
   /** Link de convidados (só amador) */
   guestCode: string | null;
+  /** Link de cadastro de mensalistas (só amador) */
+  registerCode: string | null;
 }
 
 export interface CloudEvent {
@@ -27,24 +29,39 @@ export interface CloudEvent {
   startsAt: string;
   /** Vagas do jogo; null = sem limite */
   slots: number | null;
+  location: string | null;
 }
 
 /** Resposta de cada jogador, pelo id da NUVEM */
 export type Attendance = Record<string, { status: 'vou' | 'nao_vou'; answeredAt: string }>;
 
-const GROUP_COLS = 'id, name, invite_code, guest_code';
-const toGroup = (d: { id: string; name: string; invite_code: string; guest_code: string | null }) => ({
+const GROUP_COLS = 'id, name, invite_code, guest_code, register_code';
+const toGroup = (d: {
+  id: string;
+  name: string;
+  invite_code: string;
+  guest_code: string | null;
+  register_code: string | null;
+}): CloudGroup => ({
   id: d.id,
   name: d.name,
   code: d.invite_code,
   guestCode: d.guest_code,
+  registerCode: d.register_code,
 });
-const EVENT_COLS = 'id, title, starts_at, slots';
-const toEvent = (d: { id: string; title: string | null; starts_at: string; slots: number | null }) => ({
+const EVENT_COLS = 'id, title, starts_at, slots, location';
+const toEvent = (d: {
+  id: string;
+  title: string | null;
+  starts_at: string;
+  slots: number | null;
+  location: string | null;
+}): CloudEvent => ({
   id: d.id,
   title: d.title,
   startsAt: d.starts_at,
   slots: d.slots,
+  location: d.location,
 });
 
 function db() {
@@ -106,6 +123,9 @@ export async function syncAmador(groupId: string): Promise<number> {
       positions: p.positions,
       is_keeper: Boolean(p.isKeeper),
       kind: p.kind ?? 'mensalista',
+      pending: Boolean(p.pending),
+      birth_date: p.birthDate ?? null,
+      phone: p.phone ?? null,
       active: true,
     };
   });
@@ -119,10 +139,10 @@ export async function syncAmador(groupId: string): Promise<number> {
  * aposentado pelo upsertAndRetire, e essas pessoas só existem na nuvem.
  * Devolve quantas chegaram agora.
  */
-async function pullLinkAdded(groupId: string): Promise<number> {
+export async function pullLinkAdded(groupId: string): Promise<number> {
   const { data, error } = await db()
     .from('players')
-    .select('id, name, skills, positions, kind, created_at')
+    .select('id, name, skills, positions, kind, pending, birth_date, phone, created_at')
     .eq('group_id', groupId)
     .eq('active', true)
     .eq('added_via_link', true);
@@ -148,6 +168,9 @@ async function pullLinkAdded(groupId: string): Promise<number> {
         remoteId: r.id,
         addedViaLink: true,
         kind: r.kind === 'mensalista' ? ('mensalista' as const) : ('convidado' as const),
+        pending: Boolean(r.pending),
+        birthDate: r.birth_date ?? undefined,
+        phone: r.phone ?? undefined,
       })),
     ],
   }));
@@ -244,6 +267,7 @@ export async function createEvent(
   startsAt: Date,
   title: string,
   slots: number | null,
+  location: string,
 ): Promise<CloudEvent> {
   const { error: e1 } = await db()
     .from('events')
@@ -258,6 +282,7 @@ export async function createEvent(
       starts_at: startsAt.toISOString(),
       title: title.trim() || null,
       slots,
+      location: location.trim() || null,
     })
     .select(EVENT_COLS)
     .single();
@@ -291,6 +316,8 @@ function base(): string {
 export const groupLink = (code: string) => `${base()}#/c/${code}`;
 /** Link de convidados — se inscrevem na fila */
 export const guestLink = (code: string) => `${base()}#/v/${code}`;
+/** Link de cadastro de mensalistas — o pedido fica pendente até aprovar */
+export const registerLink = (code: string) => `${base()}#/r/${code}`;
 export const athleteLink = (token: string) => `${base()}#/a/${token}`;
 
 /** Abre o WhatsApp com a mensagem pronta; a pessoa escolhe o contato ou grupo */
@@ -315,6 +342,28 @@ export interface GuestGroup {
     /** Nome de quem levou, quando a pessoa entrou como convidado */
     invitedBy: string | null;
   }[];
+}
+
+export async function guestRegisterInfo(code: string): Promise<{ name: string; sport: string }> {
+  const { data, error } = await db().rpc('guest_register_info', { code });
+  if (error) throw error;
+  return data as { name: string; sport: string };
+}
+
+/** Pedido de cadastro do mensalista. Fica pendente até o administrador aprovar. */
+export async function guestRegister(
+  code: string,
+  input: { name: string; birthDate: string; phone: string; position: string; level: number },
+): Promise<void> {
+  const { error } = await db().rpc('guest_register', {
+    code,
+    p_name: input.name,
+    p_birth: input.birthDate,
+    p_phone: input.phone,
+    p_position: input.position,
+    p_level: input.level,
+  });
+  if (error) throw error;
 }
 
 /** O convidado se inscreve pelo link de convidados e entra na fila */

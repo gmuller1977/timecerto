@@ -148,8 +148,11 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
+      // Pedido de cadastro não aprovado nunca entra no sorteio
       setAllPresence: (present) =>
-        set((s) => ({ players: s.players.map((p) => ({ ...p, present })) })),
+        set((s) => ({
+          players: s.players.map((p) => ({ ...p, present: present && !p.pending })),
+        })),
 
       setSkill: (id, skill) =>
         set((s) => ({

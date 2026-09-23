@@ -14,7 +14,10 @@ import { cn } from '@/lib/utils';
 export function PlayersPage() {
   const navigate = useNavigate();
   const sport = useAppStore((s) => s.sport);
-  const players = useAppStore((s) => s.players);
+  const allPlayers = useAppStore((s) => s.players);
+  // Pedidos de cadastro pendentes ficam na tela Convidar até serem aprovados
+  const players = useMemo(() => allPlayers.filter((p) => !p.pending), [allPlayers]);
+  const pendentes = allPlayers.length - players.length;
   const addPlayer = useAppStore((s) => s.addPlayer);
   const setAllPresence = useAppStore((s) => s.setAllPresence);
   const live = useMatchStore((s) => s.live);
@@ -104,6 +107,20 @@ export function PlayersPage() {
               {live.sets[live.sets.length - 1].scoreB} {live.teams[1].name} ·{' '}
               {live.sets.length}º set
             </span>
+          </span>
+          <ChevronRight size={18} className="shrink-0 text-brand-400" />
+        </button>
+      )}
+
+      {pendentes > 0 && (
+        <button
+          onClick={() => navigate('/convites')}
+          className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-brand-500/40 bg-brand-500/10 px-4 py-3 text-left"
+        >
+          <span className="min-w-0 flex-1 text-[15px] font-semibold text-brand-200">
+            {pendentes === 1
+              ? '1 cadastro aguardando aprovação'
+              : `${pendentes} cadastros aguardando aprovação`}
           </span>
           <ChevronRight size={18} className="shrink-0 text-brand-400" />
         </button>
