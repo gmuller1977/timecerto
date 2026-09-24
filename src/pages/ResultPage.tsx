@@ -6,6 +6,7 @@ import { useMatchStore } from '@/store/useMatchStore';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
 import { usePresentes } from '@/store/useJogoStore';
+import { useHydrated } from '@/store/useHydrated';
 import { SPORTS } from '@/lib/sports';
 import { TEAM_COLOR_CLASSES, drawTeams, skillOf } from '@/lib/draw';
 import { copyToClipboard, formatResultText, shareOnWhatsApp } from '@/lib/share';
@@ -13,6 +14,7 @@ import { cn } from '@/lib/utils';
 
 export function ResultPage() {
   const navigate = useNavigate();
+  const hydrated = useHydrated();
   const result = useAppStore((s) => s.lastResult);
   const presentes = usePresentes();
   const settings = useAppStore((s) => s.settings);
@@ -25,7 +27,10 @@ export function ResultPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishMsg, setPublishMsg] = useState<string | null>(null);
 
-  if (!result) return <Navigate to="/" replace />;
+  // Espera o armazenamento: decidir "não há resultado" antes da leitura
+  // expulsava o usuário de um sorteio que existia (ver Armadilhas, CLAUDE.md)
+  if (!hydrated) return null;
+  if (!result) return <Navigate to="/amador" replace />;
 
   const cfg = SPORTS[result.sport];
   const text = formatResultText(result, { showStars });
@@ -73,7 +78,7 @@ export function ResultPage() {
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-36">
       <header className="safe-top flex items-center justify-between gap-3 pt-6 pb-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="p-1 text-ink-400">
+          <button onClick={() => navigate('/amador')} className="p-1 text-ink-400" aria-label="Voltar ao Jogo">
             <ArrowLeft size={22} />
           </button>
           <div>

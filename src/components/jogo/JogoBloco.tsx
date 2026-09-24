@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarPlus, ChevronRight, MapPin, MessageCircle } from 'lucide-react';
+import { CalendarPlus, ChevronRight, MapPin, MessageCircle, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogoStore } from '@/store/useJogoStore';
@@ -30,6 +30,10 @@ export function JogoBloco({ jogo, dist }: { jogo: Jogo | null; dist: Distribuica
   const navigate = useNavigate();
   const [comSessao] = useState(hasSavedSession);
   const [formOpen, setFormOpen] = useState(false);
+  const lastResult = useAppStore((s) => s.lastResult);
+  // O sorteio fica gravado no aparelho, mas a tela do resultado só abria logo
+  // depois de sortear: ao sair, não havia caminho de volta e parecia perdido
+  const sorteioDoJogo = jogo && lastResult && lastResult.createdAt >= jogo.createdAt ? lastResult : null;
 
   const nuvem = comSessao ? (
     <Suspense fallback={null}>
@@ -85,6 +89,26 @@ export function JogoBloco({ jogo, dist }: { jogo: Jogo | null; dist: Distribuica
           : ' · sem limite de vagas'}
         {dist && dist.naFila > 0 && ` · ${dist.naFila} na fila`}
       </p>
+
+      {sorteioDoJogo && (
+        <button
+          onClick={() => navigate('/resultado')}
+          className="mt-3 flex w-full items-center gap-3 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-2.5 text-left"
+        >
+          <Shuffle size={17} className="shrink-0 text-brand-400" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold text-brand-200">
+              Times sorteados às{' '}
+              {new Date(sorteioDoJogo.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            <span className="block truncate text-xs text-brand-300/80">
+              {sorteioDoJogo.teams.map((t) => t.name).join(' · ')}
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-medium text-brand-300">Ver times</span>
+          <ChevronRight size={17} className="shrink-0 text-brand-400" />
+        </button>
+      )}
 
       {nuvem}
 
