@@ -1,15 +1,18 @@
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
-import type { AppMode, ConfirmacaoStatus, DrawResult, Jogo, PlayerKind, TeamColor } from '@/types';
+import type { AppMode, ConfirmacaoStatus, DrawResult, Jogo, Player, PlayerKind, TeamColor } from '@/types';
 
 /**
  * Tudo o que fala com o banco em nome do ORGANIZADOR (logado, sob RLS).
  * O convidado sem conta usa só as funções guest_* do fim do arquivo.
  *
- * O aparelho continua sendo a fonte de verdade do elenco: a nuvem recebe uma
- * cópia para que o link do WhatsApp tenha o que mostrar. Nada local é apagado
- * por causa da nuvem.
+ * Elenco AMADOR: a nuvem é a base comum de todos os aparelhos da conta (base
+ * única, fase 1 — `syncAmador`). Cada aparelho envia o que editou e traz o que
+ * os outros editaram; vale a edição mais recente.
+ *
+ * Elenco PROFISSIONAL: ainda no modelo antigo — o aparelho é a fonte e a nuvem
+ * recebe uma cópia (`syncPro`).
  */
 
 export interface CloudGroup {
@@ -119,92 +122,243 @@ export async function createGroup(mode: AppMode, name: string): Promise<CloudGro
 }
 
 /**
- * Sobe o cadastro amador. O id da nuvem nasce no aparelho (randomUUID), então
- * um único upsert resolve novos e existentes sem ambiguidade de ordem.
- * Quem sumiu do aparelho fica inativo na nuvem — some do link, não do
- * histórico.
+ * Base única do elenco amador (fase 1): envia o que ESTE aparelho editou e
+ * traz o que os outros editaram. Vale a edição mais recente (`updatedAt`), e
+ * quem decide é o servidor (`salvar_jogadores`, migração 010) — um aparelho
+ * desatualizado não atropela o que outro gravou depois.
+ *
+ * Nada é desativado por ausência. O mecanismo antigo desativava na nuvem quem
+ * não estava no aparelho, e um segundo aparelho com elenco diferente apagava
+ * os links. Exclusão agora é marca (`deleted_at`), que viaja.
+ *
+ * Seguro de rodar a qualquer hora, inclusive ao abrir uma tela. Uma rodada
+ * por vez: quem chama durante outra recebe a mesma.
+ *
+ * Devolve quantas pessoas novas chegaram (links e outros aparelhos).
  */
-export async function syncAmador(groupId: string): Promise<number> {
-  // Quem se inscrever pelo link DEPOIS deste instante ainda não está no
-  // aparelho, e não pode ser aposentado por isso
-  const startedAt = new Date().toISOString();
-  const added = await pullLinkAdded(groupId);
-  const { players, updatePlayer } = useAppStore.getState();
-  const rows = players.map((p) => {
-    const id = p.remoteId ?? crypto.randomUUID();
-    if (!p.remoteId) updatePlayer(p.id, { remoteId: id });
-    return {
-      id,
-      group_id: groupId,
-      name: p.name,
-      skills: p.skills,
-      positions: p.positions,
-      is_keeper: Boolean(p.isKeeper),
-      kind: p.kind ?? 'mensalista',
-      pending: Boolean(p.pending),
-      birth_date: p.birthDate ?? null,
-      phone: p.phone ?? null,
-      nickname: p.nickname ?? null,
-      active: true,
-    };
-  });
-  await upsertAndRetire(groupId, rows, startedAt);
-  return added;
+let rodada: Promise<number> | null = null;
+export function syncAmador(groupId: string): Promise<number> {
+  if (!rodada) {
+    rodada = sincronizarAtletas(groupId).finally(() => {
+      rodada = null;
+    });
+  }
+  return rodada;
+}
+
+/** Hora das edições anteriores à base única: perdem para qualquer outra */
+const LEGADO = new Date(0).toISOString();
+
+async function sincronizarAtletas(groupId: string): Promise<number> {
+  prepararLegado();
+  await enviarAtletas(groupId);
+  return receberAtletas(groupId);
 }
 
 /**
- * Traz para o aparelho quem se incluiu pelo link (ou foi levado por alguém).
- * Precisa rodar ANTES do upsert: quem está na nuvem e não no aparelho é
- * aposentado pelo upsertAndRetire, e essas pessoas só existem na nuvem.
- * Devolve quantas chegaram agora.
+ * Jogadores de antes da base única não têm hora de edição. Os que já estão na
+ * nuvem seguem a versão de lá — é a última que algum aparelho enviou —, e os
+ * que nunca subiram são somados. Antes disso, uma cópia do elenco fica
+ * guardada neste aparelho, para recuperação manual se algo sair errado.
+ */
+function prepararLegado() {
+  const { players } = useAppStore.getState();
+  if (!players.some((p) => !p.updatedAt)) return;
+  try {
+    if (!localStorage.getItem('timecerto:elenco-antes-da-nuvem')) {
+      localStorage.setItem('timecerto:elenco-antes-da-nuvem', JSON.stringify(players));
+    }
+  } catch {
+    /* sem espaço: segue sem a cópia */
+  }
+  const agora = new Date().toISOString();
+  useAppStore.setState((s) => ({
+    players: s.players.map((p) =>
+      p.updatedAt
+        ? p
+        : p.remoteId
+          ? { ...p, updatedAt: LEGADO, enviadoEm: LEGADO }
+          : { ...p, updatedAt: agora },
+    ),
+  }));
+}
+
+const naoEnviado = (p: Player) => !p.remoteId || p.enviadoEm !== p.updatedAt;
+
+async function enviarAtletas(groupId: string) {
+  // O id da nuvem nasce aqui: um único upsert resolve novos e existentes
+  useAppStore.setState((s) => ({
+    players: s.players.map((p) => (p.remoteId ? p : { ...p, remoteId: crypto.randomUUID() })),
+  }));
+  const { players, excluidos } = useAppStore.getState();
+  const vivos = players.filter(naoEnviado);
+  if (vivos.length === 0 && excluidos.length === 0) return;
+
+  const linha = (p: Player) => ({
+    id: p.remoteId!,
+    name: p.name,
+    nickname: p.nickname ?? null,
+    skills: p.skills,
+    positions: p.positions,
+    is_keeper: Boolean(p.isKeeper),
+    kind: p.kind ?? 'mensalista',
+    pending: Boolean(p.pending),
+    birth_date: p.birthDate ?? null,
+    phone: p.phone ?? null,
+    deleted_at: null,
+    updated_at: p.updatedAt,
+  });
+  const rows = [
+    ...vivos.map(linha),
+    ...excluidos.map((e) => ({ id: e.remoteId, name: e.name, deleted_at: e.at, updated_at: e.at })),
+  ];
+  const { error } = await db().rpc('salvar_jogadores', { p_group: groupId, p_rows: rows });
+  if (error) throw error;
+
+  // Só marca como enviado o que não mudou enquanto ia
+  const enviado = new Map(vivos.map((p) => [p.id, p.updatedAt]));
+  const exclusoesEnviadas = new Set(excluidos.map((e) => e.remoteId + e.at));
+  useAppStore.setState((s) => ({
+    players: s.players.map((p) =>
+      enviado.get(p.id) === p.updatedAt ? { ...p, enviadoEm: p.updatedAt } : p,
+    ),
+    excluidos: s.excluidos.filter((e) => !exclusoesEnviadas.has(e.remoteId + e.at)),
+  }));
+
+  // Relê o que acabou de mandar. O servidor recusa em silêncio a edição mais
+  // velha que a da nuvem, e a linha recusada não muda de hora de chegada — a
+  // leitura por synced_at nunca a traria de volta, e este aparelho ficaria com
+  // a versão velha, reenviando para sempre.
+  const ids = vivos.map((p) => p.remoteId!);
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error: e2 } = await db()
+      .from('players')
+      .select(PLAYER_SYNC_COLS)
+      .in('id', ids.slice(i, i + 100));
+    if (e2) throw e2;
+    mesclar((data ?? []) as unknown as LinhaJogador[]);
+  }
+}
+
+const PLAYER_SYNC_COLS =
+  'id, name, nickname, skills, positions, is_keeper, kind, pending, birth_date, phone, ' +
+  'added_via_link, active, deleted_at, updated_at, synced_at, created_at';
+
+interface LinhaJogador {
+  id: string;
+  name: string;
+  nickname: string | null;
+  skills: Player['skills'] | null;
+  positions: Player['positions'] | null;
+  is_keeper: boolean | null;
+  kind: string | null;
+  pending: boolean | null;
+  birth_date: string | null;
+  phone: string | null;
+  added_via_link: boolean | null;
+  active: boolean;
+  deleted_at: string | null;
+  updated_at: string;
+  synced_at: string;
+  created_at: string;
+}
+
+/** A linha da nuvem nos campos do jogador local (sem id local) */
+const doJogador = (r: LinhaJogador) => ({
+  name: r.name,
+  nickname: r.nickname ?? undefined,
+  skills: r.skills ?? {},
+  positions: r.positions ?? {},
+  isKeeper: Boolean(r.is_keeper) || undefined,
+  kind: r.kind === 'convidado' ? ('convidado' as const) : ('mensalista' as const),
+  pending: Boolean(r.pending),
+  birthDate: r.birth_date ?? undefined,
+  phone: r.phone ?? undefined,
+  remoteId: r.id,
+  updatedAt: r.updated_at,
+  enviadoEm: r.updated_at,
+});
+
+/**
+ * Traz o que mudou na nuvem desde a última leitura, pela hora de CHEGADA
+ * (synced_at, carimbada pelo servidor). Regras da mescla:
+ *
+ * - marca de exclusão: tira daqui, a menos que haja edição local mais nova;
+ * - inativo SEM marca de exclusão: foi o mecanismo antigo, que desativava por
+ *   ausência — às vezes por engano. Não apaga nada aqui; se este aparelho tem
+ *   a pessoa, ela é reenviada e volta aos links;
+ * - quem não existe aqui: entra;
+ * - quem existe: vale o mais recente. Edição local não enviada e mais nova fica.
+ */
+async function receberAtletas(groupId: string): Promise<number> {
+  let novos = 0;
+  for (;;) {
+    const desde = useAppStore.getState().leituraNuvem ?? LEGADO;
+    const { data, error } = await db()
+      .from('players')
+      .select(PLAYER_SYNC_COLS)
+      .eq('group_id', groupId)
+      .gt('synced_at', desde)
+      .order('synced_at')
+      .limit(500);
+    if (error) throw error;
+    const linhas = (data ?? []) as unknown as LinhaJogador[];
+    if (linhas.length === 0) return novos;
+    novos += mesclar(linhas);
+    useAppStore.setState({ leituraNuvem: linhas[linhas.length - 1].synced_at });
+    if (linhas.length < 500) return novos;
+  }
+}
+
+/**
+ * Aplica linhas da nuvem ao elenco deste aparelho — regras em receberAtletas.
+ * Devolve quantas pessoas entraram.
+ */
+function mesclar(linhas: LinhaJogador[]): number {
+  let novos = 0;
+  if (linhas.length === 0) return novos;
+  useAppStore.setState((s) => {
+    const players = [...s.players];
+    const esperandoExclusao = new Set(s.excluidos.map((e) => e.remoteId));
+    for (const r of linhas) {
+      if (esperandoExclusao.has(r.id)) continue;
+      const i = players.findIndex((p) => p.remoteId === r.id);
+      const local = i >= 0 ? players[i] : undefined;
+      const localMaisNovo =
+        local !== undefined && naoEnviado(local) && (local.updatedAt ?? LEGADO) >= r.updated_at;
+
+      if (r.deleted_at) {
+        if (local && !localMaisNovo) players.splice(i, 1);
+        continue;
+      }
+      if (!r.active) {
+        if (local) players[i] = { ...local, updatedAt: new Date().toISOString() };
+        continue;
+      }
+      if (!local) {
+        players.push({
+          id: crypto.randomUUID(),
+          createdAt: r.created_at,
+          addedViaLink: Boolean(r.added_via_link),
+          ...doJogador(r),
+        });
+        novos++;
+      } else if (!localMaisNovo && local.updatedAt !== r.updated_at) {
+        players[i] = { ...local, ...doJogador(r) };
+      }
+    }
+    return { players };
+  });
+  return novos;
+}
+
+/**
+ * Traz para o aparelho o que chegou pelos links e pelos outros aparelhos. É a
+ * leitura da sincronização, sem o envio — para quem só quer ler.
  */
 export async function pullLinkAdded(groupId: string): Promise<number> {
-  const { data, error } = await db()
-    .from('players')
-    .select('id, name, nickname, skills, positions, kind, pending, birth_date, phone, created_at')
-    .eq('group_id', groupId)
-    .eq('active', true)
-    .eq('added_via_link', true);
-  if (error) throw error;
-
-  const known = new Set(
-    useAppStore.getState().players.map((p) => p.remoteId).filter(Boolean),
-  );
-  const novos = data.filter((r) => !known.has(r.id));
-  if (novos.length === 0) return 0;
-
-  useAppStore.setState((s) => ({
-    players: [
-      ...s.players,
-      ...novos.map((r) => ({
-        id: crypto.randomUUID(),
-        name: r.name,
-        skills: r.skills ?? {},
-        positions: r.positions ?? {},
-        createdAt: r.created_at,
-        remoteId: r.id,
-        addedViaLink: true,
-        kind: r.kind === 'mensalista' ? ('mensalista' as const) : ('convidado' as const),
-        pending: Boolean(r.pending),
-        birthDate: r.birth_date ?? undefined,
-        phone: r.phone ?? undefined,
-        nickname: r.nickname ?? undefined,
-      })),
-    ],
-  }));
-  return novos.length;
-}
-
-/**
- * Desativa UM jogador na nuvem — o pedido recusado, ou o pedido já juntado a
- * um cadastro existente. Precisa rodar antes da próxima subida: `syncAmador`
- * começa trazendo da nuvem quem entrou pelo link e não está no aparelho, e
- * sem isto o pedido que acabou de ser tirado daqui voltava na mesma hora.
- * Desativa, não apaga: some dos links, não do histórico.
- */
-export async function aposentarJogador(remoteId: string): Promise<void> {
-  const { error } = await db().from('players').update({ active: false }).eq('id', remoteId);
-  if (error) throw error;
+  prepararLegado();
+  return receberAtletas(groupId);
 }
 
 /**

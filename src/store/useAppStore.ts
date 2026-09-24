@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type {
   AppMode,
   DrawResult,
+  Exclusao,
   DrawSettings,
   Player,
   PlayerKind,
@@ -24,6 +25,10 @@ interface AppState {
   lastResult: DrawResult | null;
   history: DrawResult[];
   squads: Squad[];
+  /** Excluídos aqui que a nuvem ainda não sabe — ver `Exclusao` */
+  excluidos: Exclusao[];
+  /** Até onde este aparelho já leu a nuvem (synced_at do servidor) */
+  leituraNuvem?: string;
 
   setMode: (mode: AppMode) => void;
   setSport: (sport: SportId) => void;
@@ -51,6 +56,13 @@ interface AppState {
   clearPlayers: () => void;
 }
 
+const agora = () => new Date().toISOString();
+
+const marcasDeExclusao = (players: Player[]): Exclusao[] =>
+  players
+    .filter((p) => p.remoteId)
+    .map((p) => ({ remoteId: p.remoteId!, name: p.name, at: agora() }));
+
 const defaultSettings = (sport: SportId): DrawSettings => ({
   sport,
   teamSize: SPORTS[sport].defaultTeamSize,
@@ -72,6 +84,7 @@ export const useAppStore = create<AppState>()(
       lastResult: null,
       history: [],
       squads: [],
+      excluidos: [],
 
       addSquad: ({ name, playerIds, color, isMine, system }) => {
         const squad: Squad = {
@@ -126,6 +139,7 @@ export const useAppStore = create<AppState>()(
           positions: position ? { [sport]: position } : {},
           createdAt: new Date().toISOString(),
           kind: kind ?? 'mensalista',
+          updatedAt: new Date().toISOString(),
         };
         set((s) => ({ players: [...s.players, player] }));
         return player;
@@ -133,16 +147,21 @@ export const useAppStore = create<AppState>()(
 
       updatePlayer: (id, patch) =>
         set((s) => ({
-          players: s.players.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+          players: s.players.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: agora() } : p)),
         })),
 
+      // Quem já está na nuvem deixa a marca de exclusão, que viaja para os
+      // outros aparelhos. Sem ela, o próximo aparelho a ler traria a pessoa de volta.
       removePlayer: (id) =>
-        set((s) => ({ players: s.players.filter((p) => p.id !== id) })),
+        set((s) => ({
+          players: s.players.filter((p) => p.id !== id),
+          excluidos: [...s.excluidos, ...marcasDeExclusao(s.players.filter((p) => p.id === id))],
+        })),
 
       setSkill: (id, skill) =>
         set((s) => ({
           players: s.players.map((p) =>
-            p.id === id ? { ...p, skills: { ...p.skills, [s.sport]: skill } } : p,
+            p.id === id ? { ...p, skills: { ...p.skills, [s.sport]: skill }, updatedAt: agora() } : p,
           ),
         })),
 
@@ -150,7 +169,7 @@ export const useAppStore = create<AppState>()(
         set((s) => ({
           players: s.players.map((p) =>
             p.id === id
-              ? { ...p, positions: { ...p.positions, [s.sport]: position } }
+              ? { ...p, positions: { ...p.positions, [s.sport]: position }, updatedAt: agora() }
               : p,
           ),
         })),
@@ -164,7 +183,8 @@ export const useAppStore = create<AppState>()(
           history: [result, ...s.history].slice(0, 20),
         })),
 
-      clearPlayers: () => set({ players: [] }),
+      clearPlayers: () =>
+        set((s) => ({ players: [], excluidos: [...s.excluidos, ...marcasDeExclusao(s.players)] })),
     }),
     {
       name: 'timecerto:v1',
@@ -176,6 +196,8 @@ export const useAppStore = create<AppState>()(
         lastResult: s.lastResult,
         history: s.history,
         squads: s.squads,
+        excluidos: s.excluidos,
+        leituraNuvem: s.leituraNuvem,
       }),
     },
   ),

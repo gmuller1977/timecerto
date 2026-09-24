@@ -25,9 +25,14 @@ Alias `@/` aponta para `src/`.
 ## Estado atual
 
 O app roda offline, em `localStorage`, e continua funcionando sem login.
-O Supabase (projeto `whhvojozemwmnhnpyqpz`) entra só para **login do
-organizador e convites** — ver "Convites" abaixo. Partidas e estatísticas ainda
-não sobem: dois aparelhos do mesmo dono são bases separadas.
+O Supabase (projeto `whhvojozemwmnhnpyqpz`) entra para **login do
+organizador, convites e a base única** — ver "Convites" e "Base única" abaixo.
+
+**Base única, em fases** (aprovada pelo Guilherme em 24/09/2026 — "uma base de
+dados única, em qualquer plataforma"): 1. atletas — **feito**; 2. jogo da
+semana; 3. partidas e estatísticas; 4. configurações. Até a fase de cada coisa,
+ela continua só no aparelho: partidas e configurações de um aparelho não
+aparecem no outro.
 
 `.env` local tem `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (a publishable
 key). Na Vercel, as mesmas duas em Settings → Environment Variables. A secret
@@ -110,13 +115,8 @@ em dois lugares:
 `/convites` ficou só para o profissional; no amador leva ao Jogo. Conta (sair)
 fica em Ajustes › Conta.
 
-**Ao abrir, o Jogo e o Elenco só LEEM da nuvem.** `syncAmador` sobe o elenco e
-**aposenta na nuvem quem não está no aparelho**. Enquanto ele rodava ao abrir a
-tela Convites, um segundo aparelho com elenco vazio apagava os links ao abrir
-aquela tela; com o cartão no Jogo, isso seria toda abertura do app. Ele roda só
-em gestos explícitos: criar grupo, abrir jogo, convidar, aprovar, recusar e o ↻.
-O convite abre o WhatsApp ANTES de subir — depois de um `await` o navegador
-pode barrar a janela.
+O convite abre o WhatsApp ANTES de sincronizar — depois de um `await` o
+navegador pode barrar a janela.
 
 O Supabase só carrega para quem tem sessão salva (`lib/sessao.ts`): quem nunca
 entrou vê no Jogo uma linha leve de "Entrar", sem os 200 kB.
@@ -241,11 +241,45 @@ Todo acesso do convidado passa pelas funções `guest_*` do esquema, que
 conferem código ou token. **Nenhuma tabela é aberta para `anon`** — não
 crie política para `anon`; crie uma função `guest_*` nova.
 
-O aparelho continua a fonte de verdade do elenco; a nuvem recebe uma cópia
-(`lib/cloud.ts`, `syncAmador`/`syncPro`). O id da nuvem nasce no aparelho
-(`crypto.randomUUID`, guardado em `remoteId`) para um upsert só resolver novos
-e existentes. Na sincronização do atleta, nascimento/altura/peso da nuvem
-vencem (quem preencheu foi o atleta); o resto vai do aparelho para a nuvem.
+### Base única — fase 1: atletas (amador)
+
+Feita em 24/09/2026, migração 010. **A nuvem é a base comum do elenco amador
+em todos os aparelhos da conta**; cada aparelho é uma cópia que funciona sem
+sinal. `syncAmador` (`lib/cloud.ts`) envia o que ESTE aparelho editou e traz o
+que os outros editaram. Quem dispara é `SincronizacaoAtletas` (em `App.tsx`,
+carregada só com sessão salva): ao abrir, ao voltar ao app, quando a internet
+volta, a cada 30 s e 1,5 s depois de qualquer edição.
+
+- **Duas horas por jogador.** `updated_at` é a hora da EDIÇÃO e decide quem
+  vence; `synced_at` é a hora de CHEGADA, carimbada pelo gatilho do banco, e é
+  por ela que cada aparelho lê "o que mudou desde a última vez"
+  (`leituraNuvem`). Separar as duas impede um relógio atrasado de perder
+  mudanças.
+- **Vale a edição mais recente, decidido no servidor** (`salvar_jogadores`):
+  só sobrescreve se o `updated_at` que chega for maior. Depois de enviar, o
+  aparelho **relê as linhas que mandou** — a recusa é silenciosa e não muda
+  `synced_at`, e sem a releitura o aparelho ficava com a versão velha,
+  reenviando para sempre. Aconteceu no teste; está coberto.
+- **Nada é desativado por ausência.** O `upsertAndRetire` do amador saiu: ele
+  deixava um segundo aparelho de elenco diferente apagar os links. Excluir vira
+  marca (`deleted_at`) guardada em `excluidos` até subir; por isso recusar e
+  juntar pedido funcionam sem sinal e o pedido não volta.
+- **Inativo sem marca de exclusão** é resto do mecanismo antigo, às vezes
+  errado: não apaga nada no aparelho, e quem ainda tem a pessoa a reenvia —
+  ela volta aos links.
+- **Primeira sincronização depois da atualização:** jogador sem hora de edição
+  e já na nuvem segue a versão de lá (`LEGADO` = início dos tempos); o que
+  nunca subiu é somado. Antes, o elenco inteiro é copiado para
+  `timecerto:elenco-antes-da-nuvem`, para recuperação manual.
+- Toda edição de jogador passa por `useAppStore` e carimba `updatedAt`. A
+  mescla da nuvem usa `setState` direto, para não carimbar de novo.
+
+O id da nuvem nasce no aparelho (`crypto.randomUUID`, em `remoteId`), então um
+envio só resolve novos e existentes.
+
+O **profissional** continua no modelo antigo (`syncPro`): o aparelho é a fonte
+e a nuvem recebe uma cópia. Nascimento/altura/peso da nuvem vencem (quem
+preencheu foi o atleta).
 
 As telas que falam com o banco são carregadas sob demanda (`lazy` em
 `App.tsx`): o cliente do Supabase não entra no pacote do placar.

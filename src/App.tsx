@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { hasSavedSession } from '@/lib/sessao';
 import { useHydrated } from '@/store/useHydrated';
 import { useJogoStore } from '@/store/useJogoStore';
 import { HashRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
@@ -45,10 +46,33 @@ function MigracaoPresent() {
   return null;
 }
 
+// Base única: mantém os atletas iguais em todos os aparelhos da conta
+const SincronizacaoAtletas = lazy(() =>
+  import('@/components/cloud/SincronizacaoAtletas').then((m) => ({
+    default: m.SincronizacaoAtletas,
+  })),
+);
+
+/**
+ * Só para quem tem sessão salva, e só depois de ler o localStorage: sincronizar
+ * antes compararia a nuvem com um elenco vazio.
+ */
+function Nuvem() {
+  const hydrated = useHydrated();
+  const [comSessao] = useState(hasSavedSession);
+  if (!hydrated || !comSessao) return null;
+  return (
+    <Suspense fallback={null}>
+      <SincronizacaoAtletas />
+    </Suspense>
+  );
+}
+
 export default function App() {
   return (
     <HashRouter>
       <MigracaoPresent />
+      <Nuvem />
       <Suspense fallback={null}>
         <Routes>
           <Route path="/" element={<HomePage />} />

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { ChevronRight, Plus, Search, Send, X } from 'lucide-react';
 import { PlayerSheet } from '@/components/players/PlayerSheet';
 import { StarRating } from '@/components/ui/StarRating';
@@ -8,7 +8,6 @@ import { nomeDeExibicao } from '@/lib/nome';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 import { ageOn } from '@/lib/pro';
 import { formatPhone } from '@/lib/phone';
-import { hasSavedSession } from '@/lib/sessao';
 import { candidatosParaJuntar, dadosDaJuncao, type Candidato } from '@/lib/juntar';
 import { cn, initials } from '@/lib/utils';
 import type { Player, PlayerKind, SkillLevel, SportId } from '@/types';
@@ -42,89 +41,27 @@ export function RosterPage() {
   const updatePlayer = useAppStore((s) => s.updatePlayer);
   const removePlayer = useAppStore((s) => s.removePlayer);
   const [convidando, setConvidando] = useState(false);
-  const [linkAdded, setLinkAdded] = useState(0);
-  const [syncError, setSyncError] = useState<string | null>(null);
-
-  // Traz quem se cadastrou ou se inscreveu pelos links. Só LÊ da nuvem: subir
-  // o elenco aposenta lá quem não está aqui, e abrir Atletas num segundo
-  // aparelho vazio não pode apagar os links. Sem sessão salva, nem carrega o
-  // Supabase — ver lib/sessao.ts.
-  useEffect(() => {
-    if (!hasSavedSession()) return;
-    let alive = true;
-    (async () => {
-      const cloud = await import('@/lib/cloud');
-      const g = await cloud.findMyGroup('amador');
-      if (!g) return;
-      const n = await cloud.pullLinkAdded(g.id);
-      if (alive && n > 0) setLinkAdded(n);
-    })().catch((e) => console.error('trazer do link', e));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Aprovar, recusar e juntar sobem já: o link precisa refletir a decisão agora
-  async function subir() {
-    setSyncError(null);
-    try {
-      const cloud = await import('@/lib/cloud');
-      const g = await cloud.findMyGroup('amador');
-      if (g) await cloud.syncAmador(g.id);
-    } catch (e) {
-      console.error('sincronizar elenco', e);
-      setSyncError(
-        navigator.onLine
-          ? 'Não deu para atualizar os links. A decisão ficou salva aqui; tente de novo pelo ↻ do Jogo.'
-          : 'Sem internet. A decisão ficou salva aqui e sobe quando você atualizar o Jogo com sinal.',
-      );
-    }
-  }
-
-  /**
-   * Tira o pedido da nuvem ANTES de tirar daqui. A subida começa trazendo da
-   * nuvem quem entrou pelo link e não está no aparelho: sem desativar lá
-   * primeiro, o pedido recusado ou juntado voltava na mesma hora. Sem sinal,
-   * nada muda e o pedido continua esperando.
+  /*
+   * Aprovar, recusar e juntar são só locais: a sincronização (SincronizacaoAtletas,
+   * em App.tsx) leva a decisão para a nuvem logo depois. Recusar e juntar deixam
+   * a marca de exclusão do pedido (removePlayer), que viaja — por isso não
+   * precisam mais de internet na hora, e o pedido não volta.
    */
-  async function tirarPedidoDaNuvem(p: Player): Promise<boolean> {
-    if (!p.remoteId) return true;
-    setSyncError(null);
-    try {
-      const { aposentarJogador } = await import('@/lib/cloud');
-      await aposentarJogador(p.remoteId);
-      return true;
-    } catch (e) {
-      console.error('tirar pedido da nuvem', e);
-      setSyncError(
-        navigator.onLine
-          ? 'Não deu para falar com o servidor. O pedido continua aguardando; tente de novo.'
-          : 'Sem internet. Recusar e juntar precisam de conexão — o pedido continua aguardando.',
-      );
-      return false;
-    }
-  }
-
   function approve(p: Player) {
     updatePlayer(p.id, { pending: false });
-    subir();
   }
-  async function reject(p: Player) {
+  function reject(p: Player) {
     if (!window.confirm(`Recusar o cadastro de ${p.name}?`)) return;
-    if (!(await tirarPedidoDaNuvem(p))) return;
     removePlayer(p.id);
-    subir();
   }
-  async function juntar(pedido: Player, alvo: Player) {
+  function juntar(pedido: Player, alvo: Player) {
     const ok = window.confirm(
       `Juntar o pedido de ${pedido.name} ao cadastro de ${nomeDeExibicao(alvo)}?\n\n` +
         'Nascimento, telefone e apelido do pedido passam para o cadastro. Nível, posição e tipo continuam os seus.',
     );
     if (!ok) return;
-    if (!(await tirarPedidoDaNuvem(pedido))) return;
     updatePlayer(alvo.id, dadosDaJuncao(alvo, pedido, sport));
     removePlayer(pedido.id);
-    subir();
   }
 
   const [name, setName] = useState('');
@@ -195,20 +132,6 @@ export function RosterPage() {
           Convidar
         </button>
       </header>
-
-      {linkAdded > 0 && (
-        <p className="mb-4 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm leading-relaxed text-brand-200">
-          {linkAdded === 1
-            ? '1 pessoa chegou pelos links'
-            : `${linkAdded} pessoas chegaram pelos links`}
-          . Quem entrou como convidado vem com nível 3 — ajuste antes de sortear.
-        </p>
-      )}
-      {syncError && (
-        <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
-          {syncError}
-        </p>
-      )}
 
       <Pendentes
         players={pendentes}

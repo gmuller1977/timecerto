@@ -60,6 +60,22 @@ export interface Player {
   nickname?: string;
   /** Só dígitos, com DDD. Só o administrador vê */
   phone?: string;
+  /**
+   * ISO — quando o cadastro foi editado pela última vez, NESTE aparelho ou no
+   * que a nuvem trouxe. Decide quem vence entre aparelhos (lib/cloud.ts,
+   * `sincronizarAtletas`).
+   */
+  updatedAt?: string;
+  /** O `updatedAt` que já está na nuvem. Diferente = edição ainda não enviada */
+  enviadoEm?: string;
+}
+
+/** Jogador excluído aqui, esperando a marca de exclusão chegar à nuvem */
+export interface Exclusao {
+  remoteId: string;
+  /** A linha na nuvem exige nome, mesmo na marca de exclusão */
+  name: string;
+  at: string;
 }
 
 /**
