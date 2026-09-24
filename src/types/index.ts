@@ -111,6 +111,11 @@ export interface DrawResult {
   settings: DrawSettings;
   /** Diferença entre o time mais forte e o mais fraco */
   balanceScore: number;
+  /**
+   * Jogo da nuvem cuja lista gerou este sorteio. Só existe quando o sorteio
+   * saiu dos Convites — é o que permite publicar os times no link dele.
+   */
+  eventId?: string;
 }
 
 export interface Group {

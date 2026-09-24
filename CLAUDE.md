@@ -83,7 +83,8 @@ Definido pelo Guilherme em 23/09/2026, e é a ordem da tela Convidar:
 3. abre o jogo: data, horário, **local** (`events.location`) e quantidade de atletas;
 4. dois botões: **Convidar mensalistas** e **Convidar convidados**, cada um com seu link;
 5. as confirmações aparecem na tela e atualizam sozinhas a cada 20 s;
-6. **Sortear com os confirmados** leva ao sorteio só quem tem vaga.
+6. **Fechar a lista e sortear** leva ao sorteio só quem tem vaga;
+7. no resultado, **Publicar os times no link** — todo mundo vê pelos dois links.
 
 No link, reabrir mostra a resposta atual, deixa mudar e mostra quem confirmou.
 
@@ -108,12 +109,37 @@ muda: apertar "vou" de novo não pode jogar o convidado para o fim da fila.
 
 Pagamento (mensalidade, avulso) fica para a etapa do financeiro.
 
+### Lista fechada e times no link (amador)
+
+Feito em 23/09/2026, migração 008. **Fechar a lista não é encerrar o jogo.**
+`events.closed` tira o jogo do link — é o que "Abrir outro jogo" faz com o
+anterior. `events.list_closed` só para de aceitar resposta: o jogo continua no
+link, com quem confirmou e depois com os times. Antes existia só o `closed`, e
+o botão "Fechar confirmações" fazia o jogo sumir das duas telas — não havia
+onde mostrar time nenhum. O botão saiu.
+
+A lista **fecha antes do sorteio**, no mesmo botão. Aberta, uma resposta que
+chegasse depois mudaria quem tem vaga, e os times no link deixariam de bater
+com a lista que o próprio link mostra. Sem sinal, o app avisa e deixa sortear
+assim mesmo — sorteio é local. **Reabrir a lista tira os times do link**: time
+velho no link é pior que nenhum.
+
+`events.teams` guarda **só ids da nuvem** (`PublishedTeams` em `lib/cloud.ts`).
+O nome sai da lista que `guest_group` já devolve, com apelido; o nível nunca
+sai do aparelho. Publicar é explícito, no resultado: publicar sozinho
+mostraria cada "Refazer" no link. O sorteio só sabe de qual jogo é quando sai
+dos Convites (`DrawResult.eventId`, que chega pelo estado da navegação) — um
+sorteio feito pela lista de jogadores não tem botão de publicar.
+
+Com a lista fechada e sem times, o link se atualiza a cada 20 s até eles
+chegarem.
+
 ### Roteiro do Amador
 
 O foco atual é o **modo amador**; o profissional espera. Ordem combinada:
 
 1. Mensalistas e convidados — **feito**
-2. Do convite ao sorteio: fechar a lista, sortear só quem tem vaga, times no link
+2. Do convite ao sorteio: fechar a lista, sortear só quem tem vaga, times no link — **feito**
 3. Partidas na nuvem: resultados e estatística no link, histórico em outro aparelho
 4. Financeiro: mensalidade, avulso, Pix, quem pagou
 5. Acabamento: co-organizador, offline no ginásio (service worker), avisos

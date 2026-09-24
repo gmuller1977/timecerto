@@ -5,6 +5,7 @@ import {
   CalendarPlus,
   Check,
   Copy,
+  Lock,
   LogOut,
   MapPin,
   MessageCircle,
@@ -21,7 +22,6 @@ import { useHydrated } from '@/store/useHydrated';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import {
   athleteLink,
-  closeEvent,
   createEvent,
   createGroup,
   fetchAttendance,
@@ -31,6 +31,7 @@ import {
   openEvent,
   pullLinkAdded,
   registerLink,
+  setListClosed,
   shareOnWhatsApp,
   syncAmador,
   syncPro,
@@ -350,14 +351,50 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
 
   // O sorteio é de quem tem vaga neste jogo, e só deles: quem ficou na fila,
   // não vai ou não respondeu fica de fora.
+  //
+  // A lista fecha ANTES de sortear. Aberta, uma resposta que chegasse depois
+  // mudaria quem tem vaga, e os times publicados no link deixariam de bater
+  // com a lista que o mesmo link mostra logo abaixo.
   const jogam = dist.mensalistasConfirmados + dist.convidadosComVaga;
-  function drawWithConfirmed() {
+  async function drawWithConfirmed() {
+    if (!event) return;
+    if (!event.listClosed) {
+      setBusy(true);
+      try {
+        await setListClosed(event.id, true);
+        await load();
+      } catch (e) {
+        setBusy(false);
+        // Sortear é local e não pode depender de sinal: avisa e deixa seguir
+        if (!window.confirm(`${explain(e)}\n\nA lista continua aberta. Sortear assim mesmo?`)) return;
+      }
+      setBusy(false);
+    }
     for (const p of players) {
       if (p.pending) continue;
       const present = joga(sit(p));
       if (p.present !== present) updatePlayer(p.id, { present });
     }
-    navigate('/sortear');
+    navigate('/sortear', { state: { eventId: event.id } });
+  }
+
+  async function toggleList() {
+    if (!event) return;
+    const fechar = !event.listClosed;
+    const pergunta = fechar
+      ? 'Fechar a lista? Os links param de aceitar respostas e a fila congela.'
+      : event.teams
+        ? 'Reabrir a lista? Os links voltam a aceitar respostas e os times publicados saem do link.'
+        : 'Reabrir a lista? Os links voltam a aceitar respostas.';
+    if (!window.confirm(pergunta)) return;
+    setBusy(true);
+    try {
+      await setListClosed(event.id, fechar);
+      await load();
+    } catch (e) {
+      onError(explain(e));
+    }
+    setBusy(false);
   }
 
   const nome = event?.title || group.name;
@@ -467,6 +504,13 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
               {event.slots ? ` de ${event.slots} atletas confirmados` : ' confirmados · sem limite'}
               {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
             </p>
+            {event.listClosed && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-ink-300">
+                <Lock size={13} className="shrink-0 text-ink-500" />
+                Lista fechada
+                {event.teams ? ' · times publicados no link' : ' · os links não aceitam mais respostas'}
+              </p>
+            )}
           </>
         ) : (
           <p className="mt-2 text-sm leading-relaxed text-ink-400">
@@ -607,29 +651,28 @@ function AmadorInvites({ group, onError }: { group: CloudGroup; onError: (m: str
 
           {/* Sorteio */}
           <section>
-            <Button size="lg" className="w-full" disabled={jogam < 4} onClick={drawWithConfirmed}>
+            <Button size="lg" className="w-full" disabled={jogam < 4 || busy} onClick={drawWithConfirmed}>
               <Shuffle size={19} strokeWidth={2.5} />
-              {jogam < 4 ? 'Mínimo de 4 confirmados para sortear' : `Sortear com os ${jogam} confirmados`}
+              {jogam < 4
+                ? 'Mínimo de 4 confirmados para sortear'
+                : event.listClosed
+                  ? `Sortear com os ${jogam} confirmados`
+                  : `Fechar a lista e sortear com ${jogam}`}
             </Button>
             <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
               {event.slots && jogam < event.slots
                 ? `Ainda faltam ${event.slots - jogam} para completar. Dá para sortear assim mesmo.`
                 : 'Entram no sorteio só os confirmados com vaga.'}{' '}
-              As confirmações atualizam sozinhas enquanto esta tela está aberta.
+              {event.listClosed
+                ? 'Depois de sortear, publique os times no link.'
+                : 'As confirmações atualizam sozinhas enquanto esta tela está aberta.'}
             </p>
             <button
-              onClick={async () => {
-                if (!window.confirm('Fechar as confirmações? Os links deixam de aceitar respostas.')) return;
-                try {
-                  await closeEvent(event.id);
-                  await load();
-                } catch (e) {
-                  onError(explain(e));
-                }
-              }}
+              onClick={toggleList}
+              disabled={busy}
               className="mt-3 text-xs text-ink-500 underline"
             >
-              Fechar confirmações deste jogo
+              {event.listClosed ? 'Reabrir a lista' : 'Só fechar a lista, sem sortear'}
             </button>
           </section>
         </>

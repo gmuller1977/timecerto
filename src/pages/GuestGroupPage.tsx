@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Check, MapPin, UserPlus, X } from 'lucide-react';
+import { Check, Lock, MapPin, UserPlus, X } from 'lucide-react';
 import {
   guestAddPlayer,
   guestGroup,
   guestJoin,
   guestSetAttendance,
   type GuestGroup,
+  type PublishedTeams,
 } from '@/lib/cloud';
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
+import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
 import { cn } from '@/lib/utils';
@@ -84,11 +86,23 @@ export function GuestGroupPage() {
     load();
   }, [load]);
 
+  // Lista fechada e times ainda não publicados: o sorteio está para sair, e
+  // quem está olhando o link vê os times chegarem sem recarregar
+  const esperandoTimes = Boolean(data?.event?.listClosed && !data.event.teams);
+  useEffect(() => {
+    if (!esperandoTimes) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) load();
+    }, 20_000);
+    return () => clearInterval(timer);
+  }, [esperandoTimes, load]);
+
   if (error) return <Frame><p className="mt-10 text-center text-sm leading-relaxed text-ink-400">{error}</p></Frame>;
   if (!data) return <Frame><p className="mt-10 text-center text-sm text-ink-500">Carregando…</p></Frame>;
 
   const viaConvidados = data.via === 'convidados';
   const event = data.event;
+  const fechada = Boolean(event?.listClosed);
   const dist = distribuirVagas(event?.slots ?? null, data.players);
   const sit = (id: string) => dist.situacao.get(id);
 
@@ -212,6 +226,18 @@ export function GuestGroupPage() {
               ? `${dist.mensalistasConfirmados + dist.convidadosComVaga} de ${event.slots} vagas preenchidas${dist.naFila ? ` · ${dist.naFila} na fila` : ''}`
               : `${dist.mensalistasConfirmados + dist.convidadosComVaga} confirmados`}
           </p>
+          {fechada && (
+            <p className="mt-3 flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2.5 text-sm text-ink-300">
+              <Lock size={15} className="shrink-0 text-ink-500" />
+              {event.teams
+                ? 'Lista fechada. Os times estão abaixo.'
+                : 'Lista fechada. Os times aparecem aqui assim que o organizador sortear.'}
+            </p>
+          )}
+
+          {event.teams && (
+            <Times published={event.teams} players={data.players} me={me} />
+          )}
 
           {/* Eu */}
           <section className="mt-6">
@@ -220,6 +246,7 @@ export function GuestGroupPage() {
                 name={mine.name}
                 situacao={sit(mine.id)}
                 convidado={viaConvidados}
+                fechada={fechada}
                 saving={saving}
                 onAnswer={answer}
                 onNotMe={() => {
@@ -228,7 +255,14 @@ export function GuestGroupPage() {
                 }}
               />
             ) : viaConvidados ? (
-              nameForm
+              fechada ? (
+                <p className="text-sm leading-relaxed text-ink-400">
+                  A lista deste jogo já fechou. Quer jogar mesmo assim? Fale com o
+                  organizador.
+                </p>
+              ) : (
+                nameForm
+              )
             ) : (
               <>
                 <p className="text-[15px] font-semibold text-ink-50">Quem é você?</p>
@@ -275,7 +309,7 @@ export function GuestGroupPage() {
           {mensalistas.length === 0 && (
             <p className="text-sm text-ink-500">O organizador ainda não cadastrou os mensalistas.</p>
           )}
-          {!mine && event && (
+          {!mine && event && !fechada && (
             <p className="mt-3 text-xs leading-relaxed text-ink-500">
               Não achou seu nome? Você entra como convidado — peça ao organizador o
               link de convidados.
@@ -330,7 +364,7 @@ export function GuestGroupPage() {
       )}
 
       {/* Mensalista leva alguém de fora */}
-      {!viaConvidados && event && mine && (
+      {!viaConvidados && event && mine && !fechada && (
         <section className="mt-4">
           {formOpen ? (
             nameForm
@@ -357,6 +391,7 @@ function MyCard({
   name,
   situacao,
   convidado,
+  fechada,
   saving,
   onAnswer,
   onNotMe,
@@ -364,6 +399,8 @@ function MyCard({
   name: string;
   situacao: Situacao | undefined;
   convidado: boolean;
+  /** Lista fechada: mostra a situação, sem os botões */
+  fechada: boolean;
   saving: boolean;
   onAnswer: (s: 'vou' | 'nao_vou') => void;
   onNotMe: () => void;
@@ -374,12 +411,19 @@ function MyCard({
       ? { text: 'Você tem vaga neste jogo', tone: 'ok' as const }
       : situacao?.tipo === 'fila'
         ? {
-            text: `Você é o ${situacao.posicao}º da fila. Se abrir vaga, você entra sozinho.`,
+            text: fechada
+              ? `A lista fechou com você em ${situacao.posicao}º na fila, sem vaga neste jogo.`
+              : `Você é o ${situacao.posicao}º da fila. Se abrir vaga, você entra sozinho.`,
             tone: 'wait' as const,
           }
         : situacao?.tipo === 'confirmado'
           ? { text: 'Presença confirmada', tone: 'ok' as const }
-          : null;
+          : fechada
+            ? {
+                text: situacao?.tipo === 'nao_vou' ? 'Você marcou que não vai' : 'Você não respondeu a tempo',
+                tone: 'wait' as const,
+              }
+            : null;
 
   return (
     <div className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
@@ -399,39 +443,121 @@ function MyCard({
           {status.text}
         </p>
       )}
-      <p className="mt-3 text-[15px] font-semibold text-ink-50">
-        {convidado ? (vai ? 'Mudou de ideia?' : 'Vai jogar?') : 'Você vai?'}
-      </p>
-      <div className="mt-2 flex gap-2">
-        <button
-          disabled={saving}
-          onClick={() => onAnswer('vou')}
-          className={cn(
-            'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
-            vai ? 'border-brand-500 bg-brand-500 text-ink-950' : 'border-ink-700 bg-ink-800 text-ink-100',
-          )}
-        >
-          <Check size={20} /> Vou
-        </button>
-        <button
-          disabled={saving}
-          onClick={() => onAnswer('nao_vou')}
-          className={cn(
-            'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
-            situacao?.tipo === 'nao_vou'
-              ? 'border-ink-400 bg-ink-600 text-ink-50'
-              : 'border-ink-700 bg-ink-800 text-ink-100',
-          )}
-        >
-          <X size={20} /> Não vou
-        </button>
-      </div>
-      {convidado && vai && (
-        <p className="mt-2 text-xs leading-relaxed text-ink-500">
-          Se desistir e depois voltar, você vai para o fim da fila.
+      {fechada ? (
+        <p className="mt-3 text-xs leading-relaxed text-ink-500">
+          A lista fechou. Para mudar a sua resposta, fale com o organizador.
         </p>
+      ) : (
+        <>
+          <p className="mt-3 text-[15px] font-semibold text-ink-50">
+            {convidado ? (vai ? 'Mudou de ideia?' : 'Vai jogar?') : 'Você vai?'}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              disabled={saving}
+              onClick={() => onAnswer('vou')}
+              className={cn(
+                'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
+                vai ? 'border-brand-500 bg-brand-500 text-ink-950' : 'border-ink-700 bg-ink-800 text-ink-100',
+              )}
+            >
+              <Check size={20} /> Vou
+            </button>
+            <button
+              disabled={saving}
+              onClick={() => onAnswer('nao_vou')}
+              className={cn(
+                'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
+                situacao?.tipo === 'nao_vou'
+                  ? 'border-ink-400 bg-ink-600 text-ink-50'
+                  : 'border-ink-700 bg-ink-800 text-ink-100',
+              )}
+            >
+              <X size={20} /> Não vou
+            </button>
+          </div>
+          {convidado && vai && (
+            <p className="mt-2 text-xs leading-relaxed text-ink-500">
+              Se desistir e depois voltar, você vai para o fim da fila.
+            </p>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * Os times publicados pelo organizador. O banco manda só ids; o nome sai da
+ * lista do próprio link, que já vem com apelido. Id que não está mais na lista
+ * (a pessoa saiu do grupo depois do sorteio) simplesmente não aparece.
+ */
+function Times({
+  published,
+  players,
+  me,
+}: {
+  published: PublishedTeams;
+  players: GuestGroup['players'];
+  me: string | null;
+}) {
+  const nomeDe = new Map(players.map((p) => [p.id, p.name]));
+  const nomes = (ids: string[]) =>
+    ids.flatMap((id) => (nomeDe.has(id) ? [{ id, name: nomeDe.get(id)! }] : []));
+  const bench = nomes(published.bench);
+  const meuTime = published.teams.find((t) => me && t.players.includes(me));
+
+  return (
+    <section className="mt-6">
+      <p className="mb-2 text-xs font-semibold tracking-wide text-brand-400 uppercase">
+        Times sorteados
+      </p>
+      {meuTime && (
+        <p className="mb-2 text-sm text-ink-300">
+          Você está no <span className="font-semibold text-ink-50">{meuTime.name}</span>.
+        </p>
+      )}
+      {!meuTime && me && published.bench.includes(me) && (
+        <p className="mb-2 text-sm text-ink-300">Você começa como reserva.</p>
+      )}
+      <div className="flex flex-col gap-2">
+        {published.teams.map((t) => {
+          const c = TEAM_COLOR_CLASSES[t.color] ?? TEAM_COLOR_CLASSES.verde;
+          const lista = nomes(t.players);
+          return (
+            <div
+              key={t.name}
+              className={cn(
+                'rounded-2xl border bg-ink-900 px-4 py-3',
+                t === meuTime ? 'border-brand-500/60' : 'border-ink-800',
+              )}
+            >
+              <p className="flex items-center gap-2">
+                <span className={cn('size-3 shrink-0 rounded-full', c.bg)} />
+                <span className="min-w-0 flex-1 truncate font-semibold text-ink-50">{t.name}</span>
+                <span className="shrink-0 text-xs text-ink-500">{lista.length} jogadores</span>
+              </p>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink-300">
+                {lista.map((p, i) => (
+                  <span key={p.id}>
+                    {i > 0 && ' · '}
+                    <span className={p.id === me ? 'font-semibold text-brand-200' : undefined}>
+                      {p.name}
+                    </span>
+                  </span>
+                ))}
+              </p>
+            </div>
+          );
+        })}
+        {bench.length > 0 && (
+          <div className="rounded-2xl border border-dashed border-ink-800 px-4 py-3">
+            <p className="text-xs font-medium text-ink-400">Reservas ({bench.length})</p>
+            <p className="mt-1 text-sm text-ink-300">{bench.map((p) => p.name).join(' · ')}</p>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

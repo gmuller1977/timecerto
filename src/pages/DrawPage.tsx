@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
@@ -47,6 +47,8 @@ function Toggle({
 
 export function DrawPage() {
   const navigate = useNavigate();
+  // Vindo dos Convites, o sorteio é de um jogo da nuvem e pode ir para o link
+  const eventId = (useLocation().state as { eventId?: string } | null)?.eventId;
   const sport = useAppStore((s) => s.sport);
   const players = useAppStore((s) => s.players);
   const settings = useAppStore((s) => s.settings);
@@ -75,7 +77,7 @@ export function DrawPage() {
     setDrawing(true);
     setTimeout(() => {
       const result = drawTeams(players, { ...settings, sport });
-      setResult(result);
+      setResult(eventId ? { ...result, eventId } : result);
       setDrawing(false);
       navigate('/resultado');
     }, 450);

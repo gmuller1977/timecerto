@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
-import type { AppMode, PlayerKind } from '@/types';
+import type { AppMode, DrawResult, PlayerKind, TeamColor } from '@/types';
 
 /**
  * Tudo o que fala com o banco em nome do ORGANIZADOR (logado, sob RLS).
@@ -30,6 +30,20 @@ export interface CloudEvent {
   /** Vagas do jogo; null = sem limite */
   slots: number | null;
   location: string | null;
+  /** Lista fechada: o link não aceita mais resposta, mas o jogo continua nele */
+  listClosed: boolean;
+  /** Sorteio publicado no link; null = ainda não publicado */
+  teams: PublishedTeams | null;
+}
+
+/**
+ * O sorteio como vai para o link: só ids da NUVEM. O nome sai da lista que o
+ * link já recebe (com apelido), e o nível nunca sai do aparelho.
+ */
+export interface PublishedTeams {
+  drawnAt: string;
+  teams: { name: string; color: TeamColor; players: string[] }[];
+  bench: string[];
 }
 
 /** Resposta de cada jogador, pelo id da NUVEM */
@@ -49,19 +63,23 @@ const toGroup = (d: {
   guestCode: d.guest_code,
   registerCode: d.register_code,
 });
-const EVENT_COLS = 'id, title, starts_at, slots, location';
+const EVENT_COLS = 'id, title, starts_at, slots, location, list_closed, teams';
 const toEvent = (d: {
   id: string;
   title: string | null;
   starts_at: string;
   slots: number | null;
   location: string | null;
+  list_closed: boolean | null;
+  teams: PublishedTeams | null;
 }): CloudEvent => ({
   id: d.id,
   title: d.title,
   startsAt: d.starts_at,
   slots: d.slots,
   location: d.location,
+  listClosed: Boolean(d.list_closed),
+  teams: d.teams ?? null,
 });
 
 function db() {
@@ -292,9 +310,40 @@ export async function createEvent(
   return toEvent(data);
 }
 
-export async function closeEvent(id: string): Promise<void> {
-  const { error } = await db().from('events').update({ closed: true }).eq('id', id);
+/**
+ * Fecha ou reabre a lista. Fechada, o link para de aceitar resposta e a fila
+ * congela — é o que deixa o sorteio publicado bater com a lista.
+ *
+ * Reabrir tira os times do link: com respostas mudando, eles deixariam de
+ * valer, e time velho no link é pior que nenhum.
+ */
+export async function setListClosed(id: string, closed: boolean): Promise<void> {
+  const patch = closed ? { list_closed: true } : { list_closed: false, teams: null };
+  const { error } = await db().from('events').update(patch).eq('id', id);
   if (error) throw error;
+}
+
+/**
+ * Publica o sorteio no link do jogo. Quem não tem id da nuvem fica de fora —
+ * no fluxo pelos convites isso não acontece, porque só entra no sorteio quem
+ * respondeu pelo link. Devolve quantos ficaram de fora, para a tela avisar.
+ */
+export async function publishTeams(eventId: string, result: DrawResult): Promise<number> {
+  let semNuvem = 0;
+  const ids = (list: { remoteId?: string }[]) =>
+    list.flatMap((p) => {
+      if (p.remoteId) return [p.remoteId];
+      semNuvem++;
+      return [];
+    });
+  const teams: PublishedTeams = {
+    drawnAt: result.createdAt,
+    teams: result.teams.map((t) => ({ name: t.name, color: t.color, players: ids(t.players) })),
+    bench: ids(result.bench),
+  };
+  const { error } = await db().from('events').update({ teams }).eq('id', eventId);
+  if (error) throw error;
+  return semNuvem;
 }
 
 /** Respostas do jogo, por id da NUVEM do jogador */

@@ -1,7 +1,7 @@
 import { nomeDeExibicao } from '@/lib/nome';
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Copy, PlayCircle, RotateCcw, Share2 } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Link2, PlayCircle, RotateCcw, Share2 } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
@@ -19,6 +19,10 @@ export function ResultPage() {
   const startMatch = useMatchStore((s) => s.startMatch);
   const [copied, setCopied] = useState(false);
   const [showStars, setShowStars] = useState(false);
+  // Id do sorteio que está no link agora; outro id = "Refazer" depois de publicar
+  const [publishedId, setPublishedId] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishMsg, setPublishMsg] = useState<string | null>(null);
 
   if (!result) return <Navigate to="/" replace />;
 
@@ -34,8 +38,35 @@ export function ResultPage() {
   }
 
   function handleRedraw() {
-    setResult(drawTeams(players, settings));
+    const next = drawTeams(players, settings);
+    setResult(result?.eventId ? { ...next, eventId: result.eventId } : next);
   }
+
+  // Carregado sob demanda: o cliente do Supabase não entra no pacote do placar
+  async function handlePublish() {
+    if (!result?.eventId) return;
+    setPublishing(true);
+    setPublishMsg(null);
+    try {
+      const { publishTeams } = await import('@/lib/cloud');
+      const fora = await publishTeams(result.eventId, result);
+      setPublishedId(result.id);
+      if (fora > 0) {
+        setPublishMsg(
+          `${fora === 1 ? '1 jogador não está' : `${fora} jogadores não estão`} no grupo da nuvem e ficou de fora do link. Abra Convites para sincronizar.`,
+        );
+      }
+    } catch (e) {
+      console.error('publicar times', e);
+      setPublishMsg(
+        navigator.onLine
+          ? 'Não deu para publicar. Confira se você está conectado em Convites e tente de novo.'
+          : 'Sem internet. Os times continuam aqui; publique quando tiver sinal.',
+      );
+    }
+    setPublishing(false);
+  }
+  const published = publishedId === result.id;
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-36">
@@ -110,6 +141,31 @@ export function ResultPage() {
           </div>
         )}
       </div>
+
+      {result.eventId && (
+        <div className="mt-4">
+          <Button
+            size="lg"
+            className="w-full"
+            variant={published ? 'secondary' : 'primary'}
+            disabled={publishing || published}
+            onClick={handlePublish}
+          >
+            {published ? <Check size={19} /> : <Link2 size={19} />}
+            {publishing
+              ? 'Publicando…'
+              : published
+                ? 'Times publicados no link'
+                : publishedId
+                  ? 'Publicar o novo sorteio no link'
+                  : 'Publicar os times no link do grupo'}
+          </Button>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-500">
+            {publishMsg ??
+              'Quem abrir o link de mensalistas ou de convidados vê os times, sem os níveis.'}
+          </p>
+        </div>
+      )}
 
       <Button
         variant="secondary"
