@@ -62,6 +62,22 @@ Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
   (`players.pending`) até o administrador aprovar no topo de Atletas; pendente
   não aparece em link nenhum nem entra no sorteio. O nível é sugestão — o
   sorteio usa o que o administrador deixar.
+
+  **Nome que já existe passa como pendente** (migração 009, 24/09/2026). Antes
+  o link recusava, e quem batia nisso era quem já é do grupo indo completar o
+  próprio cadastro. Na aprovação, `candidatosParaJuntar` (`lib/juntar.ts`)
+  sugere "Juntar com fulano" — mesmo telefone, mesmo nome sem acento/caixa,
+  mesmo apelido, ou o nome inteiro de um contido no outro; nunca só o
+  primeiro nome. Juntar leva nascimento, telefone e apelido; nível, posição e
+  tipo continuam os do administrador. **A junção nunca é automática**: se o
+  banco juntasse pelo nome, qualquer um com o link escreveria telefone e
+  nascimento no cadastro de outra pessoa. Só o pedido repetido (já há um
+  pendente com o nome) continua barrado.
+
+  **Recusar e juntar desativam o pedido na nuvem ANTES** de tirar do aparelho
+  (`aposentarJogador`). `syncAmador` começa trazendo quem entrou pelo link e
+  não está no aparelho — sem isso o pedido recusado voltava na mesma hora, e
+  foi o que acontecia até 24/09/2026.
 - `/#/a/TOKEN` — link pessoal do atleta: completa nascimento, altura e peso.
   Menor de idade exige o aceite do responsável (LGPD).
 

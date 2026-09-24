@@ -196,6 +196,18 @@ export async function pullLinkAdded(groupId: string): Promise<number> {
 }
 
 /**
+ * Desativa UM jogador na nuvem — o pedido recusado, ou o pedido já juntado a
+ * um cadastro existente. Precisa rodar antes da próxima subida: `syncAmador`
+ * começa trazendo da nuvem quem entrou pelo link e não está no aparelho, e
+ * sem isto o pedido que acabou de ser tirado daqui voltava na mesma hora.
+ * Desativa, não apaga: some dos links, não do histórico.
+ */
+export async function aposentarJogador(remoteId: string): Promise<void> {
+  const { error } = await db().from('players').update({ active: false }).eq('id', remoteId);
+  if (error) throw error;
+}
+
+/**
  * Sobe o elenco profissional e traz o que o atleta preencheu pelo link.
  * Nascimento, altura e peso: a nuvem vence quando tem valor — quem sabe a
  * própria altura é o atleta. O resto (nome, categoria, naipe, posição) é

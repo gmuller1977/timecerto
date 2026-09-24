@@ -9,6 +9,7 @@ import { SPORTS, getPositionLabel } from '@/lib/sports';
 import { ageOn } from '@/lib/pro';
 import { formatPhone } from '@/lib/phone';
 import { hasSavedSession } from '@/lib/sessao';
+import { candidatosParaJuntar, dadosDaJuncao, type Candidato } from '@/lib/juntar';
 import { cn, initials } from '@/lib/utils';
 import type { Player, PlayerKind, SkillLevel, SportId } from '@/types';
 
@@ -63,7 +64,7 @@ export function RosterPage() {
     };
   }, []);
 
-  // Aprovar e recusar sobem já: o link precisa refletir a decisão agora
+  // Aprovar, recusar e juntar sobem já: o link precisa refletir a decisão agora
   async function subir() {
     setSyncError(null);
     try {
@@ -79,13 +80,50 @@ export function RosterPage() {
       );
     }
   }
+
+  /**
+   * Tira o pedido da nuvem ANTES de tirar daqui. A subida começa trazendo da
+   * nuvem quem entrou pelo link e não está no aparelho: sem desativar lá
+   * primeiro, o pedido recusado ou juntado voltava na mesma hora. Sem sinal,
+   * nada muda e o pedido continua esperando.
+   */
+  async function tirarPedidoDaNuvem(p: Player): Promise<boolean> {
+    if (!p.remoteId) return true;
+    setSyncError(null);
+    try {
+      const { aposentarJogador } = await import('@/lib/cloud');
+      await aposentarJogador(p.remoteId);
+      return true;
+    } catch (e) {
+      console.error('tirar pedido da nuvem', e);
+      setSyncError(
+        navigator.onLine
+          ? 'Não deu para falar com o servidor. O pedido continua aguardando; tente de novo.'
+          : 'Sem internet. Recusar e juntar precisam de conexão — o pedido continua aguardando.',
+      );
+      return false;
+    }
+  }
+
   function approve(p: Player) {
     updatePlayer(p.id, { pending: false });
     subir();
   }
-  function reject(p: Player) {
+  async function reject(p: Player) {
     if (!window.confirm(`Recusar o cadastro de ${p.name}?`)) return;
+    if (!(await tirarPedidoDaNuvem(p))) return;
     removePlayer(p.id);
+    subir();
+  }
+  async function juntar(pedido: Player, alvo: Player) {
+    const ok = window.confirm(
+      `Juntar o pedido de ${pedido.name} ao cadastro de ${nomeDeExibicao(alvo)}?\n\n` +
+        'Nascimento, telefone e apelido do pedido passam para o cadastro. Nível, posição e tipo continuam os seus.',
+    );
+    if (!ok) return;
+    if (!(await tirarPedidoDaNuvem(pedido))) return;
+    updatePlayer(alvo.id, dadosDaJuncao(alvo, pedido, sport));
+    removePlayer(pedido.id);
     subir();
   }
 
@@ -172,7 +210,13 @@ export function RosterPage() {
         </p>
       )}
 
-      <Pendentes players={pendentes} onApprove={approve} onReject={reject} />
+      <Pendentes
+        players={pendentes}
+        candidatos={(p) => candidatosParaJuntar(p, players)}
+        onApprove={approve}
+        onReject={reject}
+        onJuntar={juntar}
+      />
 
       <form onSubmit={handleAdd} className="rounded-2xl border border-ink-800 bg-ink-900 p-3">
         <input
@@ -309,15 +353,22 @@ export function RosterPage() {
  * Pedidos do link de cadastro, no topo de Atletas, com aprovar e recusar na
  * própria linha. Em âmbar, como pede docs/telas-amador.md: é o único bloco da
  * tela que espera uma decisão.
+ *
+ * Quando o pedido parece ser de alguém que já está em Atletas, a sugestão de
+ * juntar vem ANTES de aprovar — aprovar ali criaria a mesma pessoa duas vezes.
  */
 function Pendentes({
   players,
+  candidatos,
   onApprove,
   onReject,
+  onJuntar,
 }: {
   players: Player[];
+  candidatos: (p: Player) => Candidato[];
   onApprove: (p: Player) => void;
   onReject: (p: Player) => void;
+  onJuntar: (pedido: Player, alvo: Player) => void;
 }) {
   if (players.length === 0) return null;
   return (
@@ -335,6 +386,7 @@ function Pendentes({
             p.phone && formatPhone(p.phone),
           ].filter(Boolean);
           const level = (sport && p.skills[sport]) || 3;
+          const parecidos = candidatos(p);
           return (
             <div key={p.id} className="rounded-xl border border-ink-800 bg-ink-950 p-3">
               <div className="flex items-center gap-2">
@@ -347,6 +399,30 @@ function Pendentes({
               {info.length > 0 && (
                 <p className="mt-0.5 truncate text-xs text-ink-400">{info.join(' · ')}</p>
               )}
+              {parecidos.length > 0 && (
+                <div className="mt-2.5">
+                  <p className="text-xs leading-relaxed text-amber-200">
+                    Parece ser alguém que já está em Atletas:
+                  </p>
+                  <div className="mt-1.5 flex flex-col gap-1.5">
+                    {parecidos.map(({ player: alvo, motivo }) => (
+                      <button
+                        key={alvo.id}
+                        onClick={() => onJuntar(p, alvo)}
+                        className="flex min-h-10 items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-left"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-amber-100">
+                          Juntar com {nomeDeExibicao(alvo)}
+                          {alvo.nickname?.trim() && (
+                            <span className="font-normal text-amber-200/70"> · {alvo.name}</span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-amber-200/80">{motivo}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="mt-2.5 flex gap-2">
                 <button
                   onClick={() => onReject(p)}
@@ -356,9 +432,14 @@ function Pendentes({
                 </button>
                 <button
                   onClick={() => onApprove(p)}
-                  className="h-10 flex-1 rounded-lg bg-brand-500 text-sm font-semibold text-ink-950"
+                  className={cn(
+                    'h-10 flex-1 rounded-lg text-sm font-semibold',
+                    parecidos.length > 0
+                      ? 'border border-ink-700 text-ink-200'
+                      : 'bg-brand-500 text-ink-950',
+                  )}
                 >
-                  Aprovar
+                  {parecidos.length > 0 ? 'Aprovar como pessoa nova' : 'Aprovar'}
                 </button>
               </div>
             </div>
