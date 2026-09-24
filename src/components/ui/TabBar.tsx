@@ -9,8 +9,8 @@ export type TabId = 'jogo' | 'elenco' | 'financeiro' | 'ajustes';
  * diz quais telas moram dentro dela, para a aba certa ficar acesa em qualquer
  * profundidade.
  *
- * Jogo e Elenco apontam para a mesma PlayersPage por enquanto — a separação em
- * duas telas é a etapa 2 de docs/telas-amador.md.
+ * Jogo (TodayPage) é presença e ação; Elenco (RosterPage) é o cadastro.
+ * Financeiro e Ajustes ainda são lugar reservado — docs/telas-amador.md.
  */
 export const TABS: {
   id: TabId;

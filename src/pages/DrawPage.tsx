@@ -66,8 +66,13 @@ export function DrawPage() {
     }
   }, [maxTeams, settings.numberOfTeams, updateSettings]);
 
-  const allocated = settings.teamSize * settings.numberOfTeams;
-  const bench = Math.max(0, present.length - allocated);
+  // Vagas não são jogadores: com menos presentes que vagas, todo mundo joga e
+  // os times saem incompletos. Contar as vagas anunciava gente que não veio —
+  // 5 presentes em times de 6 viravam "12 jogadores em quadra"
+  const vagas = settings.teamSize * settings.numberOfTeams;
+  const allocated = Math.min(present.length, vagas);
+  const bench = present.length - allocated;
+  const faltam = vagas - allocated;
   const needed = settersNeeded(settings.rotation);
   const setters = present.filter(
     (p) => p.positions.volei === 'levantador' || p.isKeeper,
@@ -141,8 +146,9 @@ export function DrawPage() {
           ))}
         </div>
         <p className="mt-2 text-xs text-ink-500">
-          {allocated} jogadores em quadra
+          {allocated} {allocated === 1 ? 'jogador' : 'jogadores'} em quadra
           {bench > 0 && ` · ${bench} no banco`}
+          {faltam > 0 && ` · faltam ${faltam} para completar os times`}
         </p>
       </section>
 

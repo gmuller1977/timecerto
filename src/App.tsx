@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { HomePage } from '@/pages/HomePage';
-import { PlayersPage } from '@/pages/PlayersPage';
+import { TodayPage } from '@/pages/TodayPage';
+import { RosterPage } from '@/pages/RosterPage';
 import { LineupPage } from '@/pages/LineupPage';
 import { ProPlayersPage } from '@/pages/ProPlayersPage';
 import { DrawPage } from '@/pages/DrawPage';
@@ -43,30 +44,39 @@ export default function App() {
           {/* Modo amador, com a barra de abas (docs/telas-amador.md). A aba de
               cada rota está em components/ui/TabBar.tsx */}
           <Route element={<TabLayout />}>
-            <Route path="/amador" element={<PlayersPage />} />
+            <Route path="/amador" element={<TodayPage />} />
             <Route path="/resultado" element={<ResultPage />} />
             <Route path="/partida" element={<QuickMatchPage />} />
             <Route path="/partida/:id" element={<MatchSummaryPage />} />
             <Route path="/historico" element={<HistoryPage />} />
-            <Route path="/elenco" element={<PlayersPage />} />
+            <Route path="/elenco" element={<RosterPage />} />
             <Route path="/jogador/:id" element={<PlayerProfilePage />} />
             <Route path="/convites" element={<InvitePage />} />
             <Route
               path="/financeiro"
               element={
-                <EmBrevePage title="Financeiro">
-                  Mensalidade dos mensalistas, diária dos convidados, despesas do grupo e
-                  quem ainda deve.
-                </EmBrevePage>
+                <EmBrevePage
+                  title="Financeiro"
+                  text="Mensalidade dos mensalistas, diária dos convidados, despesas do grupo e quem ainda deve."
+                />
               }
             />
             <Route
               path="/ajustes"
               element={
-                <EmBrevePage title="Ajustes">
-                  Esporte, local, horário, vagas, valores e os padrões do sorteio. Por
-                  enquanto, o esporte e a troca de modo continuam na aba Jogo — o modo,
-                  pela seta no topo.
+                <EmBrevePage
+                  title="Ajustes"
+                  text="Esporte, local, horário, vagas, valores e os padrões do sorteio. Por enquanto, o esporte continua na aba Jogo."
+                >
+                  {/* As raízes de aba não têm seta de voltar: este é o caminho
+                      para o menu de modos até a seção Modo existir */}
+                  <Link
+                    to="/"
+                    className="mt-3 flex items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-[15px] font-medium text-ink-100"
+                  >
+                    Trocar de modo
+                    <span className="text-xs text-ink-500">Amador · Profissional</span>
+                  </Link>
                 </EmBrevePage>
               }
             />
