@@ -31,7 +31,7 @@ export const TABS: {
     label: 'Elenco',
     icon: Users,
     root: '/elenco',
-    prefixes: ['/elenco', '/jogador', '/convites'],
+    prefixes: ['/elenco', '/jogador'],
   },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet, root: '/financeiro', prefixes: ['/financeiro'] },
   { id: 'ajustes', label: 'Ajustes', icon: Settings, root: '/ajustes', prefixes: ['/ajustes'] },

@@ -50,7 +50,7 @@ export function TabLayout() {
 
   // A tela continua filha direta de #root — o min-h-full delas depende disso.
   // O espaçador depois dela é o que impede a barra de cobrir o fim da lista.
-  // O Suspense daqui segura só a tela: Convites carrega sob demanda, e o de
+  // O Suspense daqui segura só a tela: há telas carregadas sob demanda, e o de
   // fora apagaria a barra junto enquanto isso
   return (
     <>

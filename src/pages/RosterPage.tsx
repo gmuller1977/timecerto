@@ -1,5 +1,4 @@
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Plus, Search, Send } from 'lucide-react';
 import { PlayerSheet } from '@/components/players/PlayerSheet';
 import { StarRating } from '@/components/ui/StarRating';
@@ -7,8 +6,16 @@ import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
 import { nomeDeExibicao } from '@/lib/nome';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
+import { ageOn } from '@/lib/pro';
+import { formatPhone } from '@/lib/phone';
+import { hasSavedSession } from '@/lib/sessao';
 import { cn, initials } from '@/lib/utils';
-import type { Player, PlayerKind, SkillLevel } from '@/types';
+import type { Player, PlayerKind, SkillLevel, SportId } from '@/types';
+
+// Traz o Supabase junto: só carrega no primeiro toque em Convidar
+const ConvidarSheet = lazy(() =>
+  import('@/components/cloud/ConvidarSheet').then((m) => ({ default: m.ConvidarSheet })),
+);
 
 // A busca sobrevive à troca de aba. Memória da sessão, como a rolagem da barra
 let buscaGuardada = '';
@@ -23,13 +30,62 @@ let buscaGuardada = '';
  * a linha antiga editava — tipo, nível, posição e excluir.
  */
 export function RosterPage() {
-  const navigate = useNavigate();
   const sport = useAppStore((s) => s.sport);
   const allPlayers = useAppStore((s) => s.players);
-  // Pedidos pendentes são aprovados em Convites
+  // Pedidos pendentes ficam no bloco próprio, no topo, até a decisão
   const players = useMemo(() => allPlayers.filter((p) => !p.pending), [allPlayers]);
-  const pendentes = allPlayers.length - players.length;
+  const pendentes = useMemo(() => allPlayers.filter((p) => p.pending), [allPlayers]);
   const addPlayer = useAppStore((s) => s.addPlayer);
+  const updatePlayer = useAppStore((s) => s.updatePlayer);
+  const removePlayer = useAppStore((s) => s.removePlayer);
+  const [convidando, setConvidando] = useState(false);
+  const [linkAdded, setLinkAdded] = useState(0);
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  // Traz quem se cadastrou ou se inscreveu pelos links. Só LÊ da nuvem: subir
+  // o elenco aposenta lá quem não está aqui, e abrir o Elenco num segundo
+  // aparelho vazio não pode apagar os links. Sem sessão salva, nem carrega o
+  // Supabase — ver lib/sessao.ts.
+  useEffect(() => {
+    if (!hasSavedSession()) return;
+    let alive = true;
+    (async () => {
+      const cloud = await import('@/lib/cloud');
+      const g = await cloud.findMyGroup('amador');
+      if (!g) return;
+      const n = await cloud.pullLinkAdded(g.id);
+      if (alive && n > 0) setLinkAdded(n);
+    })().catch((e) => console.error('trazer do link', e));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Aprovar e recusar sobem já: o link precisa refletir a decisão agora
+  async function subir() {
+    setSyncError(null);
+    try {
+      const cloud = await import('@/lib/cloud');
+      const g = await cloud.findMyGroup('amador');
+      if (g) await cloud.syncAmador(g.id);
+    } catch (e) {
+      console.error('sincronizar elenco', e);
+      setSyncError(
+        navigator.onLine
+          ? 'Não deu para atualizar os links. A decisão ficou salva aqui; tente de novo pelo ↻ do Jogo.'
+          : 'Sem internet. A decisão ficou salva aqui e sobe quando você atualizar o Jogo com sinal.',
+      );
+    }
+  }
+  function approve(p: Player) {
+    updatePlayer(p.id, { pending: false, present: false });
+    subir();
+  }
+  function reject(p: Player) {
+    if (!window.confirm(`Recusar o cadastro de ${p.name}?`)) return;
+    removePlayer(p.id);
+    subir();
+  }
 
   const [name, setName] = useState('');
   const [skill, setSkill] = useState<SkillLevel>(3);
@@ -80,7 +136,7 @@ export function RosterPage() {
       <header className="safe-top flex items-center justify-between gap-3 pt-6 pb-4">
         <h1 className="text-2xl font-bold tracking-tight">Elenco</h1>
         <button
-          onClick={() => navigate('/convites')}
+          onClick={() => setConvidando(true)}
           className="flex items-center gap-1.5 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-xs font-medium text-brand-300"
         >
           <Send size={14} />
@@ -88,19 +144,21 @@ export function RosterPage() {
         </button>
       </header>
 
-      {pendentes > 0 && (
-        <button
-          onClick={() => navigate('/convites')}
-          className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-brand-500/40 bg-brand-500/10 px-4 py-3 text-left"
-        >
-          <span className="min-w-0 flex-1 text-[15px] font-semibold text-brand-200">
-            {pendentes === 1
-              ? '1 cadastro aguardando aprovação'
-              : `${pendentes} cadastros aguardando aprovação`}
-          </span>
-          <ChevronRight size={18} className="shrink-0 text-brand-400" />
-        </button>
+      {linkAdded > 0 && (
+        <p className="mb-4 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm leading-relaxed text-brand-200">
+          {linkAdded === 1
+            ? '1 pessoa chegou pelos links'
+            : `${linkAdded} pessoas chegaram pelos links`}
+          . Quem entrou como convidado vem com nível 3 — ajuste antes de sortear.
+        </p>
       )}
+      {syncError && (
+        <p className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
+          {syncError}
+        </p>
+      )}
+
+      <Pendentes players={pendentes} onApprove={approve} onReject={reject} />
 
       <form onSubmit={handleAdd} className="rounded-2xl border border-ink-800 bg-ink-900 p-3">
         <input
@@ -176,7 +234,80 @@ export function RosterPage() {
       )}
 
       {aberto && <PlayerSheet player={aberto} onClose={() => setEditing(null)} />}
+      {convidando && (
+        <Suspense fallback={null}>
+          <ConvidarSheet onClose={() => setConvidando(false)} />
+        </Suspense>
+      )}
     </div>
+  );
+}
+
+/**
+ * Pedidos do link de cadastro, no topo do Elenco, com aprovar e recusar na
+ * própria linha. Em âmbar, como pede docs/telas-amador.md: é o único bloco da
+ * tela que espera uma decisão.
+ */
+function Pendentes({
+  players,
+  onApprove,
+  onReject,
+}: {
+  players: Player[];
+  onApprove: (p: Player) => void;
+  onReject: (p: Player) => void;
+}) {
+  if (players.length === 0) return null;
+  return (
+    <section className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-400/5 p-3">
+      <p className="mb-2 text-[11px] font-semibold tracking-wide text-amber-300 uppercase">
+        Aguardando aprovação ({players.length})
+      </p>
+      <div className="flex flex-col gap-2">
+        {players.map((p) => {
+          const age = p.birthDate ? ageOn(p.birthDate) : null;
+          const sport = Object.keys(p.skills)[0] as SportId | undefined;
+          const info = [
+            sport && p.positions[sport] && getPositionLabel(sport, p.positions[sport]),
+            age !== null && `${age} anos`,
+            p.phone && formatPhone(p.phone),
+          ].filter(Boolean);
+          const level = (sport && p.skills[sport]) || 3;
+          return (
+            <div key={p.id} className="rounded-xl border border-ink-800 bg-ink-950 p-3">
+              <div className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink-50">
+                  {p.name}
+                  {p.nickname && ` · ${p.nickname}`}
+                </span>
+                <StarRating value={level as SkillLevel} size={13} readOnly />
+              </div>
+              {info.length > 0 && (
+                <p className="mt-0.5 truncate text-xs text-ink-400">{info.join(' · ')}</p>
+              )}
+              <div className="mt-2.5 flex gap-2">
+                <button
+                  onClick={() => onReject(p)}
+                  className="h-10 rounded-lg border border-ink-700 px-3 text-sm text-ink-300"
+                >
+                  Recusar
+                </button>
+                <button
+                  onClick={() => onApprove(p)}
+                  className="h-10 flex-1 rounded-lg bg-brand-500 text-sm font-semibold text-ink-950"
+                >
+                  Aprovar
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+        O nível é o que a pessoa sugeriu. Depois de aprovar, ajuste na ficha — o sorteio usa
+        o seu.
+      </p>
+    </section>
   );
 }
 

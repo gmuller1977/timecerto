@@ -59,7 +59,7 @@ Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
   voltando; nome de mensalista é recusado.
 - `/#/r/CÓDIGO` — link de **cadastro de mensalistas** (`groups.register_code`):
   nome, **apelido**, nascimento, telefone, posição e nível. Fica **pendente**
-  (`players.pending`) até o administrador aprovar na tela Convidar; pendente
+  (`players.pending`) até o administrador aprovar no topo do Elenco; pendente
   não aparece em link nenhum nem entra no sorteio. O nível é sugestão — o
   sorteio usa o que o administrador deixar.
 - `/#/a/TOKEN` — link pessoal do atleta: completa nascimento, altura e peso.
@@ -76,15 +76,33 @@ fica na ficha.
 
 ### Fluxo do administrador (amador)
 
-Definido pelo Guilherme em 23/09/2026, e é a ordem da tela Convidar:
+Definido pelo Guilherme em 23/09/2026. A tela Convites deixou de existir no
+amador em 24/09/2026 (etapa 3 de `docs/telas-amador.md`); o fluxo é o mesmo,
+em dois lugares:
 
-1. manda o link de cadastro; aprova ou recusa os pedidos;
-2. vê e edita o cadastro na lista do Amador (tocar no nome abre a ficha);
-3. abre o jogo: data, horário, **local** (`events.location`) e quantidade de atletas;
-4. dois botões: **Convidar mensalistas** e **Convidar convidados**, cada um com seu link;
-5. as confirmações aparecem na tela e atualizam sozinhas a cada 20 s;
-6. **Fechar a lista e sortear** leva ao sorteio só quem tem vaga;
-7. no resultado, **Publicar os times no link** — todo mundo vê pelos dois links.
+- **Elenco:** 1. **Convidar** no cabeçalho manda o link de cadastro
+  (`ConvidarSheet`); 2. os pedidos aparecem no topo, em âmbar, com aprovar e
+  recusar na linha; tocar num jogador abre a ficha.
+- **Jogo, cartão "Próximo jogo"** (`components/cloud/ProximoJogo.tsx`):
+  3. abre o jogo: data, horário, **local** (`events.location`) e quantidade de
+  atletas; 4. **Convidar mensalistas** e **Convidar convidados**; 5. as
+  respostas, que atualizam sozinhas a cada 20 s com a lista aberta;
+  6. **Fechar a lista e sortear** leva ao sorteio só quem tem vaga.
+- 7. no resultado, **Publicar os times no link** — todo mundo vê pelos dois links.
+
+`/convites` ficou só para o profissional; no amador leva ao Jogo. Conta (sair)
+fica em Ajustes › Conta.
+
+**Ao abrir, o Jogo e o Elenco só LEEM da nuvem.** `syncAmador` sobe o elenco e
+**aposenta na nuvem quem não está no aparelho**. Enquanto ele rodava ao abrir a
+tela Convites, um segundo aparelho com elenco vazio apagava os links ao abrir
+aquela tela; com o cartão no Jogo, isso seria toda abertura do app. Ele roda só
+em gestos explícitos: criar grupo, abrir jogo, convidar, aprovar, recusar e o ↻.
+O convite abre o WhatsApp ANTES de subir — depois de um `await` o navegador
+pode barrar a janela.
+
+O Supabase só carrega para quem tem sessão salva (`lib/sessao.ts`): quem nunca
+entrou vê no Jogo uma linha leve de "Entrar", sem os 200 kB.
 
 No link, reabrir mostra a resposta atual, deixa mudar e mostra quem confirmou.
 
@@ -128,7 +146,7 @@ velho no link é pior que nenhum.
 O nome sai da lista que `guest_group` já devolve, com apelido; o nível nunca
 sai do aparelho. Publicar é explícito, no resultado: publicar sozinho
 mostraria cada "Refazer" no link. O sorteio só sabe de qual jogo é quando sai
-dos Convites (`DrawResult.eventId`, que chega pelo estado da navegação) — um
+do cartão Próximo jogo (`DrawResult.eventId`, que chega pelo estado da navegação) — um
 sorteio feito pela lista de jogadores não tem botão de publicar.
 
 Com a lista fechada e sem times, o link se atualiza a cada 20 s até eles

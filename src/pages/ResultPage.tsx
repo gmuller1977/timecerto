@@ -53,14 +53,14 @@ export function ResultPage() {
       setPublishedId(result.id);
       if (fora > 0) {
         setPublishMsg(
-          `${fora === 1 ? '1 jogador não está' : `${fora} jogadores não estão`} no grupo da nuvem e ficou de fora do link. Abra Convites para sincronizar.`,
+          `${fora === 1 ? '1 jogador não está' : `${fora} jogadores não estão`} no grupo da nuvem e ficou de fora do link. Toque no ↻ do Próximo jogo, na aba Jogo, e publique de novo.`,
         );
       }
     } catch (e) {
       console.error('publicar times', e);
       setPublishMsg(
         navigator.onLine
-          ? 'Não deu para publicar. Confira se você está conectado em Convites e tente de novo.'
+          ? 'Não deu para publicar. Confira se você está conectado (Ajustes › Conta) e tente de novo.'
           : 'Sem internet. Os times continuam aqui; publique quando tiver sinal.',
       );
     }

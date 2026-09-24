@@ -41,6 +41,8 @@ export default function App() {
           <Route path="/sortear" element={<DrawPage />} />
           <Route path="/placar" element={<ScoreboardPage />} />
           <Route path="/entrar" element={<LoginPage />} />
+          {/* Só o profissional; no amador leva ao Jogo */}
+          <Route path="/convites" element={<InvitePage />} />
           {/* Modo amador, com a barra de abas (docs/telas-amador.md). A aba de
               cada rota está em components/ui/TabBar.tsx */}
           <Route element={<TabLayout />}>
@@ -51,7 +53,6 @@ export default function App() {
             <Route path="/historico" element={<HistoryPage />} />
             <Route path="/elenco" element={<RosterPage />} />
             <Route path="/jogador/:id" element={<PlayerProfilePage />} />
-            <Route path="/convites" element={<InvitePage />} />
             <Route
               path="/financeiro"
               element={
@@ -68,8 +69,16 @@ export default function App() {
                   title="Ajustes"
                   text="Esporte, local, horário, vagas, valores e os padrões do sorteio. Por enquanto, o esporte continua na aba Jogo."
                 >
-                  {/* As raízes de aba não têm seta de voltar: este é o caminho
-                      para o menu de modos até a seção Modo existir */}
+                  {/* Conta e Modo ainda não têm seção própria (etapa 4). Até lá,
+                      são atalhos: a conta era o "Sair" da antiga tela Convites,
+                      e as raízes de aba não têm seta para voltar ao menu */}
+                  <Link
+                    to="/entrar"
+                    className="mt-3 flex items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-[15px] font-medium text-ink-100"
+                  >
+                    Conta
+                    <span className="text-xs text-ink-500">Entrar · Sair</span>
+                  </Link>
                   <Link
                     to="/"
                     className="mt-3 flex items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-[15px] font-medium text-ink-100"

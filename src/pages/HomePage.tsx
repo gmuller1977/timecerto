@@ -3,6 +3,7 @@ import { ChevronRight, ClipboardList, Radio, Shuffle, UserRound } from 'lucide-r
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
 import { SPORT_LIST } from '@/lib/sports';
+import { hasSavedSession, isCloudAvailable as isSupabaseConfigured } from '@/lib/sessao';
 import type { AppMode } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -37,23 +38,6 @@ const MODES: {
   },
 ];
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const isSupabaseConfigured = Boolean(supabaseUrl);
-
-/**
- * A home abre em todo uso do app, inclusive no ginásio; importar o cliente do
- * Supabase aqui traria 200 kB para o pacote principal só para decidir um
- * rótulo. A chave abaixo é onde o cliente guarda a sessão — basta saber se
- * ela existe. Errar custa só o texto do botão; a tela de login confere de verdade.
- */
-function hasSavedSession(): boolean {
-  try {
-    const ref = new URL(supabaseUrl!).hostname.split('.')[0];
-    return localStorage.getItem(`sb-${ref}-auth-token`) !== null;
-  } catch {
-    return false;
-  }
-}
 
 export function HomePage() {
   const navigate = useNavigate();

@@ -1,6 +1,18 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ChevronRight, History, Plus, Radio, Search, Shuffle, Swords, Users } from 'lucide-react';
+import {
+  Check,
+  ChevronRight,
+  History,
+  MessageCircle,
+  Plus,
+  Radio,
+  Search,
+  Shuffle,
+  Swords,
+  Users,
+} from 'lucide-react';
+import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
 import { useMatchStore } from '@/store/useMatchStore';
 import { SportPicker } from '@/components/sports/SportPicker';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +24,12 @@ import type { Player } from '@/types';
 
 // A busca sobrevive à troca de aba. Memória da sessão, como a rolagem da barra
 let buscaGuardada = '';
+
+// O jogo da semana fala com o banco: traz o Supabase, e só para quem tem
+// sessão salva. Quem nunca entrou vê a linha leve abaixo, sem os 200 kB
+const ProximoJogo = lazy(() =>
+  import('@/components/cloud/ProximoJogo').then((m) => ({ default: m.ProximoJogo })),
+);
 
 /**
  * Aba Jogo: quem vem hoje e o que acontece agora. É a tela da beira da
@@ -37,6 +55,8 @@ export function TodayPage() {
     buscaGuardada = q;
     setQueryState(q);
   };
+  // Lido uma vez: entrar e sair acontecem em outra tela, que remonta esta
+  const [comSessao] = useState(hasSavedSession);
   const [avulsoOpen, setAvulsoOpen] = useState(false);
   const [avulso, setAvulso] = useState('');
 
@@ -103,6 +123,26 @@ export function TodayPage() {
           </span>
           <ChevronRight size={18} className="shrink-0 text-brand-400" />
         </button>
+      )}
+
+      {comSessao ? (
+        <Suspense fallback={null}>
+          <ProximoJogo />
+        </Suspense>
+      ) : (
+        isCloudAvailable && (
+          <button
+            onClick={() => navigate('/entrar?volta=/amador')}
+            className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3 text-left"
+          >
+            <MessageCircle size={18} className="shrink-0 text-brand-400" />
+            <span className="min-w-0 flex-1 text-sm text-ink-300">
+              Confirmação pelo WhatsApp
+              <span className="block text-xs text-ink-500">Entre para convidar o grupo</span>
+            </span>
+            <ChevronRight size={18} className="shrink-0 text-ink-600" />
+          </button>
+        )
       )}
 
       <SportPicker />
