@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Plus, Search, Send } from 'lucide-react';
+import { ChevronRight, Plus, Search, Send, X } from 'lucide-react';
 import { PlayerSheet } from '@/components/players/PlayerSheet';
 import { StarRating } from '@/components/ui/StarRating';
 import { Button } from '@/components/ui/Button';
@@ -17,11 +17,13 @@ const ConvidarSheet = lazy(() =>
   import('@/components/cloud/ConvidarSheet').then((m) => ({ default: m.ConvidarSheet })),
 );
 
-// A busca sobrevive à troca de aba. Memória da sessão, como a rolagem da barra
+// Busca e filtro sobrevivem à troca de aba. Memória da sessão, como a rolagem da barra
 let buscaGuardada = '';
+type Filtro = 'todos' | 'mensalista' | 'convidado';
+let filtroGuardado: Filtro = 'todos';
 
 /**
- * Aba Elenco: quem é do grupo. Tela de manutenção, usada sentado — aqui cabe
+ * Aba Atletas: quem é do grupo. Tela de manutenção, usada sentado — aqui cabe
  * formulário. Mensalistas e convidados em seções separadas, porque são
  * cadastros de natureza diferente: o mensalista tem vaga garantida, o
  * convidado joga quando sobra.
@@ -43,7 +45,7 @@ export function RosterPage() {
   const [syncError, setSyncError] = useState<string | null>(null);
 
   // Traz quem se cadastrou ou se inscreveu pelos links. Só LÊ da nuvem: subir
-  // o elenco aposenta lá quem não está aqui, e abrir o Elenco num segundo
+  // o elenco aposenta lá quem não está aqui, e abrir Atletas num segundo
   // aparelho vazio não pode apagar os links. Sem sessão salva, nem carrega o
   // Supabase — ver lib/sessao.ts.
   useEffect(() => {
@@ -78,7 +80,7 @@ export function RosterPage() {
     }
   }
   function approve(p: Player) {
-    updatePlayer(p.id, { pending: false, present: false });
+    updatePlayer(p.id, { pending: false });
     subir();
   }
   function reject(p: Player) {
@@ -96,7 +98,15 @@ export function RosterPage() {
     buscaGuardada = q;
     setQueryState(q);
   };
+  const [filtro, setFiltroState] = useState<Filtro>(filtroGuardado);
+  const setFiltro = (f: Filtro) => {
+    filtroGuardado = f;
+    setFiltroState(f);
+  };
   const [editing, setEditing] = useState<Player | null>(null);
+  // As contagens dos filtros são do grupo inteiro, não do resultado da busca
+  const totalConvidados = players.filter((p) => p.kind === 'convidado').length;
+  const totalMensalistas = players.length - totalConvidados;
 
   const { mensalistas, convidados } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -128,13 +138,17 @@ export function RosterPage() {
     setSkill(3);
   }
 
+  const visiveis =
+    (filtro !== 'convidado' ? mensalistas.length : 0) +
+    (filtro !== 'mensalista' ? convidados.length : 0);
+
   // O jogador aberto na ficha, sempre na versão atual do store
   const aberto = editing && players.find((p) => p.id === editing.id);
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
       <header className="safe-top flex items-center justify-between gap-3 pt-6 pb-4">
-        <h1 className="text-2xl font-bold tracking-tight">Elenco</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Atletas</h1>
         <button
           onClick={() => setConvidando(true)}
           className="flex items-center gap-1.5 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-xs font-medium text-brand-300"
@@ -207,20 +221,68 @@ export function RosterPage() {
         </div>
       </form>
 
-      {players.length > 6 && (
-        <div className="mt-4 flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2">
-          <Search size={15} className="text-ink-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar jogador"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-ink-500"
-          />
-        </div>
+      {players.length > 0 && (
+        <>
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2.5">
+            <Search size={15} className="shrink-0 text-ink-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por nome ou apelido"
+              aria-label="Buscar atleta"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-ink-500"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                className="shrink-0 p-0.5 text-ink-500"
+                aria-label="Limpar busca"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+          <div className="mt-2 flex gap-1.5" role="group" aria-label="Filtrar por tipo">
+            {(
+              [
+                ['todos', 'Todos', totalMensalistas + totalConvidados],
+                ['mensalista', 'Mensalistas', totalMensalistas],
+                ['convidado', 'Convidados', totalConvidados],
+              ] as const
+            ).map(([id, label, n]) => (
+              <button
+                key={id}
+                onClick={() => setFiltro(id)}
+                aria-pressed={filtro === id}
+                className={cn(
+                  'h-9 flex-1 rounded-lg border text-xs font-semibold',
+                  filtro === id
+                    ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                    : 'border-ink-800 bg-ink-950 text-ink-400',
+                )}
+              >
+                {label} <span className="font-normal opacity-70">{n}</span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
-      <Secao titulo="Mensalistas" players={mensalistas} onOpen={setEditing} />
-      <Secao titulo="Base de convidados" players={convidados} onOpen={setEditing} />
+      {filtro !== 'convidado' && (
+        <Secao titulo="Mensalistas" players={mensalistas} onOpen={setEditing} />
+      )}
+      {filtro !== 'mensalista' && (
+        <Secao titulo="Base de convidados" players={convidados} onOpen={setEditing} />
+      )}
+      {players.length > 0 && visiveis === 0 && (
+        <p className="mt-6 text-center text-sm text-ink-500">
+          {query.trim()
+            ? `Ninguém com "${query.trim()}"${filtro !== 'todos' ? ' neste filtro' : ''}.`
+            : filtro === 'convidado'
+              ? 'Nenhum convidado na base ainda.'
+              : 'Nenhum mensalista cadastrado ainda.'}
+        </p>
+      )}
 
       {players.length === 0 && (
         <div className="mt-10 text-center">
@@ -244,7 +306,7 @@ export function RosterPage() {
 }
 
 /**
- * Pedidos do link de cadastro, no topo do Elenco, com aprovar e recusar na
+ * Pedidos do link de cadastro, no topo de Atletas, com aprovar e recusar na
  * própria linha. Em âmbar, como pede docs/telas-amador.md: é o único bloco da
  * tela que espera uma decisão.
  */

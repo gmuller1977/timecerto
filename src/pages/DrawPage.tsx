@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
+import { usePresentes } from '@/store/useJogoStore';
 import { SPORTS, KEEPER_POSITION } from '@/lib/sports';
 import { ROTATIONS, ROTATION_LIST, rotationFits, settersNeeded } from '@/lib/rotation';
 import { drawTeams, suggestTeamCount } from '@/lib/draw';
@@ -50,13 +51,12 @@ export function DrawPage() {
   // Vindo do Próximo jogo, o sorteio é de um jogo da nuvem e pode ir para o link
   const eventId = (useLocation().state as { eventId?: string } | null)?.eventId;
   const sport = useAppStore((s) => s.sport);
-  const players = useAppStore((s) => s.players);
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const setResult = useAppStore((s) => s.setResult);
   const [drawing, setDrawing] = useState(false);
 
-  const present = players.filter((p) => p.present);
+  const present = usePresentes();
   const cfg = SPORTS[sport];
   const maxTeams = Math.max(2, Math.floor(present.length / settings.teamSize));
 
@@ -81,7 +81,7 @@ export function DrawPage() {
   function handleDraw() {
     setDrawing(true);
     setTimeout(() => {
-      const result = drawTeams(players, { ...settings, sport });
+      const result = drawTeams(present, { ...settings, sport });
       setResult(eventId ? { ...result, eventId } : result);
       setDrawing(false);
       navigate('/resultado');

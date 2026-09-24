@@ -1,40 +1,29 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Check,
-  ChevronRight,
-  History,
-  MessageCircle,
-  Plus,
-  Radio,
-  Search,
-  Shuffle,
-  Swords,
-  Users,
-} from 'lucide-react';
-import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
+import { Check, ChevronRight, History, Plus, Radio, Search, Shuffle, Swords } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { SportPicker } from '@/components/sports/SportPicker';
+import { JogoBloco } from '@/components/jogo/JogoBloco';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
+import { useJogoAberto, useJogoStore } from '@/store/useJogoStore';
 import { nomeDeExibicao } from '@/lib/nome';
 import { SPORTS } from '@/lib/sports';
+import { vagasDoJogo, joga, type Situacao } from '@/lib/vagas';
+import { hasSavedSession } from '@/lib/sessao';
 import { cn, initials } from '@/lib/utils';
 import type { Player } from '@/types';
 
 // A busca sobrevive à troca de aba. Memória da sessão, como a rolagem da barra
 let buscaGuardada = '';
 
-// O jogo da semana fala com o banco: traz o Supabase, e só para quem tem
-// sessão salva. Quem nunca entrou vê a linha leve abaixo, sem os 200 kB
-const ProximoJogo = lazy(() =>
-  import('@/components/cloud/ProximoJogo').then((m) => ({ default: m.ProximoJogo })),
-);
-
 /**
  * Aba Jogo: quem vem hoje e o que acontece agora. É a tela da beira da
  * quadra, com o celular numa mão — por isso a linha do jogador é só nome,
- * selo e um toque. Nível, posição e exclusão ficam no Elenco.
+ * selo e um toque. Nível, posição e exclusão ficam em Atletas.
+ *
+ * Quem vem é lido do Jogo aberto (useJogoStore), não do jogador. A lista se
+ * divide pela mesma regra de vagas dos links (`vagasDoJogo`).
  */
 export function TodayPage() {
   const navigate = useNavigate();
@@ -43,8 +32,12 @@ export function TodayPage() {
   // Pedidos de cadastro pendentes não jogam até serem aprovados
   const players = useMemo(() => allPlayers.filter((p) => !p.pending), [allPlayers]);
   const addPlayer = useAppStore((s) => s.addPlayer);
-  const setAllPresence = useAppStore((s) => s.setAllPresence);
-  const togglePresence = useAppStore((s) => s.togglePresence);
+  const jogo = useJogoAberto();
+  // Antes da migração do antigo `present`, "sem jogo" não quer dizer nada
+  const migrado = useJogoStore((s) => Boolean(s.migracoes.present));
+  const alternar = useJogoStore((s) => s.alternar);
+  const marcarTodos = useJogoStore((s) => s.marcarTodos);
+  const responder = useJogoStore((s) => s.responder);
   const live = useMatchStore((s) => s.live);
   const matchCount = useMatchStore(
     (s) => s.matches.filter((m) => m.mode !== 'profissional').length,
@@ -55,16 +48,20 @@ export function TodayPage() {
     buscaGuardada = q;
     setQueryState(q);
   };
-  // Lido uma vez: entrar e sair acontecem em outra tela, que remonta esta
-  const [comSessao] = useState(hasSavedSession);
   const [avulsoOpen, setAvulsoOpen] = useState(false);
   const [avulso, setAvulso] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const present = players.filter((p) => p.present).length;
-  const convidados = players.filter((p) => p.kind === 'convidado').length;
+  const dist = useMemo(() => (jogo ? vagasDoJogo(jogo, players) : null), [jogo, players]);
+  const sit = (p: Player) => dist?.situacao.get(p.id);
+  const jogam = players.filter((p) => joga(sit(p))).length;
+  const confirmados = players.filter((p) => {
+    const t = sit(p)?.tipo;
+    return t === 'confirmado' || t === 'vaga' || t === 'fila';
+  }).length;
 
-  // Mensalistas antes de convidados em cada bloco
-  const { presentes, ausentes } = useMemo(() => {
+  // Confirmados (com vaga), fila, ausentes. Mensalistas antes de convidados.
+  const grupos = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = (
       q
@@ -74,20 +71,52 @@ export function TodayPage() {
           )
         : players
     ).sort((a, b) => Number(a.kind === 'convidado') - Number(b.kind === 'convidado'));
-    return {
-      presentes: list.filter((p) => p.present),
-      ausentes: list.filter((p) => !p.present),
+    const tipo = (p: Player) => dist?.situacao.get(p.id)?.tipo;
+    const posicao = (p: Player) => {
+      const s = dist?.situacao.get(p.id);
+      return s?.tipo === 'fila' ? s.posicao : 0;
     };
-  }, [players, query]);
+    return {
+      vao: list.filter((p) => tipo(p) === 'confirmado' || tipo(p) === 'vaga'),
+      fila: list.filter((p) => tipo(p) === 'fila').sort((a, b) => posicao(a) - posicao(b)),
+      ausentes: list.filter((p) => !['confirmado', 'vaga', 'fila'].includes(tipo(p) ?? '')),
+    };
+  }, [players, query, dist]);
 
-  // Chegou alguém de última hora: só o nome, já presente e como convidado.
-  // Nível e posição se completam depois, no Elenco.
+  // Chegou alguém de última hora: só o nome, já confirmado e como convidado.
+  // Nível e posição se completam depois, em Atletas.
   function handleAvulso(e: React.FormEvent) {
     e.preventDefault();
     if (!avulso.trim()) return;
-    addPlayer({ name: avulso, skill: 3, kind: 'convidado' });
+    const p = addPlayer({ name: avulso, skill: 3, kind: 'convidado' });
+    responder(p.id, 'confirmado');
     setAvulso('');
     setAvulsoOpen(false);
+  }
+
+  /*
+   * Com o jogo nos links, a lista FECHA antes de sortear: aberta, uma resposta
+   * que chegasse depois mudaria quem tem vaga, e os times publicados deixariam
+   * de bater com a lista do link. Sem sinal, avisa e deixa sortear — o
+   * sorteio é local.
+   */
+  const fechaAntes = Boolean(jogo?.remoteId && !jogo.listaFechada && hasSavedSession());
+  async function sortear() {
+    if (!jogo) return;
+    if (fechaAntes && jogo.remoteId) {
+      setBusy(true);
+      try {
+        const { setListClosed } = await import('@/lib/cloud');
+        await setListClosed(jogo.remoteId, true);
+        useJogoStore.getState().atualizarJogo(jogo.id, { listaFechada: true });
+      } catch (e) {
+        console.error('fechar a lista', e);
+        setBusy(false);
+        if (!window.confirm('Não deu para fechar a lista dos links. Sortear assim mesmo?')) return;
+      }
+      setBusy(false);
+    }
+    navigate('/sortear', { state: jogo.remoteId ? { eventId: jogo.remoteId } : null });
   }
 
   return (
@@ -125,66 +154,49 @@ export function TodayPage() {
         </button>
       )}
 
-      {comSessao ? (
-        <Suspense fallback={null}>
-          <ProximoJogo />
-        </Suspense>
-      ) : (
-        isCloudAvailable && (
-          <button
-            onClick={() => navigate('/entrar?volta=/amador')}
-            className="mb-4 flex w-full items-center gap-3 rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3 text-left"
-          >
-            <MessageCircle size={18} className="shrink-0 text-brand-400" />
-            <span className="min-w-0 flex-1 text-sm text-ink-300">
-              Confirmação pelo WhatsApp
-              <span className="block text-xs text-ink-500">Entre para convidar o grupo</span>
-            </span>
-            <ChevronRight size={18} className="shrink-0 text-ink-600" />
-          </button>
-        )
-      )}
+      {migrado && <JogoBloco jogo={jogo} dist={dist} />}
 
       <SportPicker />
 
-      <div className="mt-5 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-ink-400">
-          <Users size={15} />
-          <span>
-            <strong className="text-ink-100">{present}</strong> de {players.length}{' '}
-            presentes
-            {convidados > 0 && (
-              <span className="text-ink-500">
-                {' '}· {players.length - convidados} mensalistas, {convidados}{' '}
-                {convidados === 1 ? 'convidado' : 'convidados'}
-              </span>
+      {jogo && (
+        <>
+          <div className="mt-5 flex items-center justify-between">
+            <p className="text-sm text-ink-400">
+              <strong className="text-ink-100">{confirmados}</strong> de {players.length}{' '}
+              confirmados
+            </p>
+            {players.length > 0 && (
+              <button
+                onClick={() =>
+                  marcarTodos(
+                    players.map((p) => p.id),
+                    confirmados !== players.length,
+                  )
+                }
+                className="text-xs font-medium text-brand-400"
+              >
+                {confirmados === players.length ? 'Desmarcar todos' : 'Marcar todos'}
+              </button>
             )}
-          </span>
-        </div>
-        {players.length > 0 && (
-          <button
-            onClick={() => setAllPresence(present !== players.length)}
-            className="text-xs font-medium text-brand-400"
-          >
-            {present === players.length ? 'Desmarcar todos' : 'Marcar todos'}
-          </button>
-        )}
-      </div>
+          </div>
 
-      {players.length > 6 && (
-        <div className="mt-3 flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2">
-          <Search size={15} className="text-ink-500" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar jogador"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-ink-500"
-          />
-        </div>
+          {players.length > 6 && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2">
+              <Search size={15} className="text-ink-500" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar jogador"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-ink-500"
+              />
+            </div>
+          )}
+
+          <Grupo titulo="Confirmados" players={grupos.vao} sit={sit} onToggle={alternar} />
+          <Grupo titulo="Fila" players={grupos.fila} sit={sit} onToggle={alternar} />
+          <Grupo titulo="Ausentes" players={grupos.ausentes} sit={sit} onToggle={alternar} />
+        </>
       )}
-
-      <Grupo titulo="Presentes" players={presentes} onToggle={togglePresence} />
-      <Grupo titulo="Ausentes" players={ausentes} onToggle={togglePresence} />
 
       {players.length === 0 ? (
         <div className="mt-10 text-center">
@@ -192,13 +204,13 @@ export function TodayPage() {
           <p className="mt-3 text-sm text-ink-400">
             Cadastre os jogadores da sua pelada
             <br />
-            no Elenco para sortear os times.
+            em Atletas para sortear os times.
           </p>
           <Button variant="secondary" className="mt-4" onClick={() => navigate('/elenco')}>
-            Ir para o Elenco
+            Ir para Atletas
           </Button>
         </div>
-      ) : avulsoOpen ? (
+      ) : !jogo ? null : avulsoOpen ? (
         <form
           onSubmit={handleAvulso}
           className="mt-4 rounded-2xl border border-ink-800 bg-ink-900 p-3"
@@ -212,7 +224,7 @@ export function TodayPage() {
             className="w-full bg-transparent text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
           />
           <p className="mt-1 text-[11px] text-ink-500">
-            Entra presente, como convidado. Nível e posição você completa no Elenco.
+            Entra confirmado, como convidado. Nível e posição você completa em Atletas.
           </p>
           <div className="mt-3 flex gap-2">
             <Button
@@ -247,11 +259,17 @@ export function TodayPage() {
           <Button
             size="lg"
             className="flex-1"
-            disabled={present < 4}
-            onClick={() => navigate('/sortear')}
+            disabled={!jogo || jogam < 4 || busy}
+            onClick={sortear}
           >
             <Shuffle size={19} strokeWidth={2.5} />
-            {present < 4 ? 'Mínimo de 4 presentes' : `Sortear (${present})`}
+            {!jogo
+              ? 'Crie o jogo para sortear'
+              : jogam < 4
+                ? 'Mínimo de 4 confirmados'
+                : fechaAntes
+                  ? `Fechar a lista e sortear (${jogam})`
+                  : `Sortear (${jogam})`}
           </Button>
           <Button
             variant="secondary"
@@ -271,10 +289,12 @@ export function TodayPage() {
 function Grupo({
   titulo,
   players,
+  sit,
   onToggle,
 }: {
   titulo: string;
   players: Player[];
+  sit: (p: Player) => Situacao | undefined;
   onToggle: (id: string) => void;
 }) {
   if (players.length === 0) return null;
@@ -285,41 +305,65 @@ function Grupo({
       </p>
       <div className="flex flex-col gap-2">
         {players.map((p) => (
-          <PresenceRow key={p.id} player={p} onToggle={() => onToggle(p.id)} />
+          <PresenceRow key={p.id} player={p} situacao={sit(p)} onToggle={() => onToggle(p.id)} />
         ))}
       </div>
     </section>
   );
 }
 
-/** A linha inteira é o alvo: um toque alterna presença */
-function PresenceRow({ player, onToggle }: { player: Player; onToggle: () => void }) {
+/** A linha inteira é o alvo: um toque alterna confirmado ↔ sem resposta */
+function PresenceRow({
+  player,
+  situacao,
+  onToggle,
+}: {
+  player: Player;
+  situacao: Situacao | undefined;
+  onToggle: () => void;
+}) {
   const convidado = player.kind === 'convidado';
+  const vai = situacao?.tipo === 'confirmado' || situacao?.tipo === 'vaga';
+  const naFila = situacao?.tipo === 'fila';
+  const confirmou = vai || naFila;
   return (
     <button
       onClick={onToggle}
-      aria-pressed={player.present}
-      aria-label={`${nomeDeExibicao(player)}: ${player.present ? 'presente' : 'ausente'}. Tocar para trocar`}
+      aria-pressed={confirmou}
+      aria-label={`${nomeDeExibicao(player)}: ${confirmou ? 'confirmado' : 'ausente'}. Tocar para trocar`}
       className={cn(
         'flex items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-colors active:scale-[0.99]',
-        player.present ? 'border-ink-800 bg-ink-900' : 'border-ink-900 bg-ink-950',
+        vai ? 'border-ink-800 bg-ink-900' : 'border-ink-900 bg-ink-950',
       )}
     >
       <span
         className={cn(
           'flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors',
-          player.present ? 'bg-brand-500 text-ink-950' : 'bg-ink-800 text-ink-500',
+          vai
+            ? 'bg-brand-500 text-ink-950'
+            : naFila
+              ? 'border border-brand-500/50 text-brand-300'
+              : 'bg-ink-800 text-ink-500',
         )}
       >
-        {player.present ? <Check size={18} strokeWidth={3} /> : initials(player.name)}
+        {vai ? (
+          <Check size={18} strokeWidth={3} />
+        ) : naFila && situacao?.tipo === 'fila' ? (
+          `${situacao.posicao}º`
+        ) : (
+          initials(player.name)
+        )}
       </span>
       <span
         className={cn(
           'min-w-0 flex-1 truncate text-[15px] font-medium',
-          player.present ? 'text-ink-50' : 'text-ink-400',
+          vai ? 'text-ink-50' : 'text-ink-400',
         )}
       >
         {nomeDeExibicao(player)}
+        {situacao?.tipo === 'nao_vou' && (
+          <span className="ml-2 text-xs font-normal text-ink-500">não vai</span>
+        )}
       </span>
       <span
         className={cn(

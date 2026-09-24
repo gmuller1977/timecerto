@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bookmark, Check, PlayCircle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
+import { usePresentes } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ROTATION_LIST, ROTATIONS, settersNeeded } from '@/lib/rotation';
@@ -48,12 +49,11 @@ function ColorRow({
 export function QuickMatchPage() {
   const navigate = useNavigate();
   const sport = useAppStore((s) => s.sport);
-  const players = useAppStore((s) => s.players);
   const squads = useAppStore((s) => s.squads);
   const addSquad = useAppStore((s) => s.addSquad);
   const startMatch = useMatchStore((s) => s.startMatch);
 
-  const present = useMemo(() => players.filter((p) => p.present), [players]);
+  const present = usePresentes();
   const mySquads = squads.filter((q) => q.sport === sport);
 
   const [homeSquadId, setHomeSquadId] = useState<string | null>(

@@ -14,7 +14,7 @@ import {
 import { explain, ShareRow } from '@/components/cloud/partes';
 
 /**
- * O "Convidar" do Elenco: o link de CADASTRO, que traz gente nova para o
+ * O "Convidar" de Atletas: o link de CADASTRO, que traz gente nova para o
  * grupo. É uma ação, não uma tela (docs/telas-amador.md). Os convites do jogo
  * da semana — mensalistas e convidados — ficam no cartão da aba Jogo.
  *
@@ -103,7 +103,7 @@ export function ConvidarSheet({ onClose }: { onClose: () => void }) {
       <>
         <p className="text-sm leading-relaxed text-ink-400">
           Cada um preenche nome, apelido, nascimento, telefone, posição e nível. O
-          cadastro fica aguardando a sua aprovação no topo do Elenco.
+          cadastro fica aguardando a sua aprovação no topo de Atletas.
         </p>
         <ShareRow
           label="Enviar link de cadastro"

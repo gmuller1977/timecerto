@@ -79,7 +79,8 @@ function buildDraw(players: Player[], settings: DrawSettings): { teams: Team[]; 
   const teams = makeTeams(numberOfTeams);
   const capacity = teamSize;
 
-  let pool = players.filter((p) => p.present);
+  // `players` já é quem joga (usePresentes): a presença não mora mais no jogador
+  let pool = [...players];
   const bench: Player[] = [];
 
   // Sobra: quem não cabe vai pro banco (sorteado, não os piores)

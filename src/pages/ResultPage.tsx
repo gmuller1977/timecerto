@@ -5,6 +5,7 @@ import { ArrowLeft, Check, Copy, Link2, PlayCircle, RotateCcw, Share2 } from 'lu
 import { useMatchStore } from '@/store/useMatchStore';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
+import { usePresentes } from '@/store/useJogoStore';
 import { SPORTS } from '@/lib/sports';
 import { TEAM_COLOR_CLASSES, drawTeams, skillOf } from '@/lib/draw';
 import { copyToClipboard, formatResultText, shareOnWhatsApp } from '@/lib/share';
@@ -13,7 +14,7 @@ import { cn } from '@/lib/utils';
 export function ResultPage() {
   const navigate = useNavigate();
   const result = useAppStore((s) => s.lastResult);
-  const players = useAppStore((s) => s.players);
+  const presentes = usePresentes();
   const settings = useAppStore((s) => s.settings);
   const setResult = useAppStore((s) => s.setResult);
   const startMatch = useMatchStore((s) => s.startMatch);
@@ -38,7 +39,7 @@ export function ResultPage() {
   }
 
   function handleRedraw() {
-    const next = drawTeams(players, settings);
+    const next = drawTeams(presentes, settings);
     setResult(result?.eventId ? { ...next, eventId: result.eventId } : next);
   }
 

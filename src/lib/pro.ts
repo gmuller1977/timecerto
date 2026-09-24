@@ -58,7 +58,6 @@ export function proToPlayer(p: ProPlayer): Player {
     name: p.name,
     skills: {},
     positions: p.position ? { volei: p.position } : {},
-    present: true,
     createdAt: p.createdAt,
   };
 }

@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
-import type { AppMode, DrawResult, PlayerKind, TeamColor } from '@/types';
+import type { AppMode, DrawResult, Jogo, PlayerKind, TeamColor } from '@/types';
 
 /**
  * Tudo o que fala com o banco em nome do ORGANIZADOR (logado, sob RLS).
@@ -181,8 +181,6 @@ export async function pullLinkAdded(groupId: string): Promise<number> {
         name: r.name,
         skills: r.skills ?? {},
         positions: r.positions ?? {},
-        // Entra ausente: quem decide a lista do sorteio é "Usar respostas"
-        present: false,
         createdAt: r.created_at,
         remoteId: r.id,
         addedViaLink: true,
@@ -308,6 +306,16 @@ export async function createEvent(
     .single();
   if (error) throw error;
   return toEvent(data);
+}
+
+/**
+ * Põe o Jogo do aparelho nos links: sobe o elenco (o link precisa mostrar os
+ * nomes de hoje) e cria o evento, que fecha o anterior. Quem chama liga o
+ * `Jogo.remoteId` ao id devolvido.
+ */
+export async function publicarJogo(groupId: string, jogo: Jogo): Promise<CloudEvent> {
+  await syncAmador(groupId);
+  return createEvent(groupId, new Date(`${jogo.date}T${jogo.time}`), '', jogo.vagas, jogo.place);
 }
 
 /**

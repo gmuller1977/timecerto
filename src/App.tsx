@@ -1,4 +1,6 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
+import { useHydrated } from '@/store/useHydrated';
+import { useJogoStore } from '@/store/useJogoStore';
 import { HashRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { HomePage } from '@/pages/HomePage';
 import { TodayPage } from '@/pages/TodayPage';
@@ -29,9 +31,24 @@ const GuestAthletePage = lazy(() =>
   import('@/pages/GuestAthletePage').then((m) => ({ default: m.GuestAthletePage })),
 );
 
+/**
+ * Converte o antigo `Player.present` em confirmações do jogo aberto (lib/jogo.ts).
+ * Espera TODOS os stores lerem o localStorage: decidir antes disso veria
+ * "sem jogo e sem presentes" onde havia a lista da semana. A marca da
+ * migração fica no store do jogo e impede a segunda vez.
+ */
+function MigracaoPresent() {
+  const hydrated = useHydrated();
+  useEffect(() => {
+    if (hydrated) useJogoStore.getState().migrar();
+  }, [hydrated]);
+  return null;
+}
+
 export default function App() {
   return (
     <HashRouter>
+      <MigracaoPresent />
       <Suspense fallback={null}>
         <Routes>
           <Route path="/" element={<HomePage />} />

@@ -63,7 +63,7 @@ export function LoginPage() {
         </div>
         <p className="mt-3 text-sm leading-relaxed text-ink-400">
           No Amador, o jogo da semana e os convites ficam na aba Jogo, e o link de
-          cadastro em Elenco › Convidar. No Profissional, toque em Convidar.
+          cadastro em Atletas › Convidar. No Profissional, toque em Convidar.
         </p>
         <Button
           variant="secondary"

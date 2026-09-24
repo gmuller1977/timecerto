@@ -37,8 +37,11 @@ export interface Player {
   /** Posição preferida por esporte */
   positions: Partial<Record<SportId, string>>;
   avatarUrl?: string;
-  /** Marcado como presente no sorteio atual */
-  present: boolean;
+  /*
+   * Não há mais `present` aqui. Quem vem sai das confirmações do jogo aberto
+   * (`useJogoStore`, `usePresentes`). Guardar dos dois jeitos é como o app
+   * volta a discordar de si mesmo.
+   */
   /** Goleiro / líbero — posição fixa que o algoritmo distribui primeiro */
   isKeeper?: boolean;
   createdAt: string;
@@ -64,6 +67,64 @@ export interface Player {
  * joga se sobrar vaga (`lib/vagas.ts`). Quem define é o administrador.
  */
 export type PlayerKind = 'mensalista' | 'convidado';
+
+// ─────────────────────────────────────────────────────────────
+// Jogo marcado (amador)
+// ─────────────────────────────────────────────────────────────
+
+export type JogoStatus = 'aberto' | 'encerrado' | 'cancelado';
+
+/**
+ * O jogo da semana — a pelada de quinta. É a fonte de verdade de quem vem:
+ * presença não mora mais no jogador, mora aqui.
+ *
+ * Só existe um `aberto` por vez; abrir outro encerra o anterior. Quando o
+ * organizador tem conta, o jogo é também um evento na nuvem (`remoteId`), que
+ * é o canal pelo qual os links do WhatsApp respondem.
+ */
+export interface Jogo {
+  id: string;
+  sport: SportId;
+  /** AAAA-MM-DD */
+  date: string;
+  /** HH:MM */
+  time: string;
+  place: string;
+  /** Vagas do jogo; null = sem limite */
+  vagas: number | null;
+  status: JogoStatus;
+  confirmations: Confirmacao[];
+  createdAt: string;
+  /** Id do evento na nuvem (events.id), quando o jogo está nos links */
+  remoteId?: string;
+  /**
+   * ESPELHO de `events.list_closed`, gravado quando a nuvem é lida. A fonte é
+   * a nuvem; o espelho existe para o botão de sortear saber o que dizer sem
+   * carregar o Supabase.
+   */
+  listaFechada?: boolean;
+  /** Nasceu da conversão do antigo `present` — ver lib/jogo.ts */
+  migrado?: boolean;
+}
+
+export type ConfirmacaoStatus = 'confirmado' | 'recusado' | 'sem-resposta';
+
+export interface Confirmacao {
+  /** Id LOCAL do jogador */
+  playerId: string;
+  status: ConfirmacaoStatus;
+  /** ISO — quando a resposta mudou pela última vez */
+  at: string;
+  /**
+   * Ordem de chegada no jogo. É o que decide a fila dos convidados; sem ele a
+   * fila vira ordem de cadastro, que não é justo. Nasce quando a pessoa passa
+   * a "confirmado" e só muda se ela sair e voltar — confirmar de novo não
+   * pode mandar ninguém para o fim da fila.
+   */
+  seq: number;
+  /** Quem respondeu: o organizador tocando na lista, ou a pessoa pelo link */
+  origem: 'organizador' | 'link';
+}
 
 export interface Team {
   id: string;

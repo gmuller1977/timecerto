@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useProStore } from '@/store/useProStore';
+import { useJogoStore } from '@/store/useJogoStore';
 
-const STORES = [useAppStore, useMatchStore, useProStore];
+const STORES = [useAppStore, useMatchStore, useProStore, useJogoStore];
 const allHydrated = () => STORES.every((s) => s.persist.hasHydrated());
 
 /**

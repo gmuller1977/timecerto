@@ -41,11 +41,9 @@ interface AppState {
     skill: SkillLevel;
     position?: string;
     kind?: PlayerKind;
-  }) => void;
+  }) => Player;
   updatePlayer: (id: string, patch: Partial<Player>) => void;
   removePlayer: (id: string) => void;
-  togglePresence: (id: string) => void;
-  setAllPresence: (present: boolean) => void;
   setSkill: (id: string, skill: SkillLevel) => void;
   setPosition: (id: string, position: string) => void;
   updateSettings: (patch: Partial<DrawSettings>) => void;
@@ -126,11 +124,11 @@ export const useAppStore = create<AppState>()(
           name: name.trim(),
           skills: { [sport]: skill },
           positions: position ? { [sport]: position } : {},
-          present: true,
           createdAt: new Date().toISOString(),
           kind: kind ?? 'mensalista',
         };
         set((s) => ({ players: [...s.players, player] }));
+        return player;
       },
 
       updatePlayer: (id, patch) =>
@@ -140,19 +138,6 @@ export const useAppStore = create<AppState>()(
 
       removePlayer: (id) =>
         set((s) => ({ players: s.players.filter((p) => p.id !== id) })),
-
-      togglePresence: (id) =>
-        set((s) => ({
-          players: s.players.map((p) =>
-            p.id === id ? { ...p, present: !p.present } : p,
-          ),
-        })),
-
-      // Pedido de cadastro não aprovado nunca entra no sorteio
-      setAllPresence: (present) =>
-        set((s) => ({
-          players: s.players.map((p) => ({ ...p, present: present && !p.pending })),
-        })),
 
       setSkill: (id, skill) =>
         set((s) => ({
@@ -196,4 +181,3 @@ export const useAppStore = create<AppState>()(
   ),
 );
 
-export const selectPresent = (s: AppState) => s.players.filter((p) => p.present);

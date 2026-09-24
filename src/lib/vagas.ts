@@ -1,4 +1,4 @@
-import type { PlayerKind } from '@/types';
+import type { Jogo, Player, PlayerKind } from '@/types';
 
 /**
  * Quem joga, quem espera. Regra decidida pelo Guilherme em 23/09/2026:
@@ -22,6 +22,11 @@ export interface Resposta {
   status: 'vou' | 'nao_vou' | null;
   /** ISO. Só importa para a ordem da fila dos convidados */
   answeredAt: string | null;
+  /**
+   * Ordem de chegada (`Confirmacao.seq`). Quando existe, é ela que ordena a
+   * fila; os links, que só conhecem `answeredAt`, não passam este campo.
+   */
+  ordem?: number;
 }
 
 export type Situacao =
@@ -46,12 +51,14 @@ export function distribuirVagas(slots: number | null, respostas: Resposta[]): Di
   const mensalistas = respostas.filter((r) => r.kind === 'mensalista' && r.status === 'vou');
   for (const r of mensalistas) situacao.set(r.id, { tipo: 'confirmado' });
 
-  // Empate de horário desempata pelo id, para a ordem nunca oscilar entre telas
+  // Empate desempata pelo id, para a ordem nunca oscilar entre telas
   const convidados = respostas
     .filter((r) => r.kind === 'convidado' && r.status === 'vou')
     .sort(
       (a, b) =>
-        (a.answeredAt ?? '').localeCompare(b.answeredAt ?? '') || a.id.localeCompare(b.id),
+        (a.ordem != null && b.ordem != null
+          ? a.ordem - b.ordem
+          : (a.answeredAt ?? '').localeCompare(b.answeredAt ?? '')) || a.id.localeCompare(b.id),
     );
 
   const cabem = slots == null ? Infinity : Math.max(0, slots - mensalistas.length);
@@ -77,4 +84,28 @@ export function distribuirVagas(slots: number | null, respostas: Resposta[]): Di
 /** Joga neste jogo? É o que decide a lista de presença do sorteio */
 export function joga(s: Situacao | undefined): boolean {
   return s?.tipo === 'confirmado' || s?.tipo === 'vaga';
+}
+
+/**
+ * A mesma regra, lida do Jogo do aparelho: vagas do jogo, confirmações e a
+ * ordem de chegada (`seq`). Situação por id LOCAL do jogador. Pendente de
+ * aprovação não joga e não entra.
+ */
+export function vagasDoJogo(jogo: Jogo, players: Player[]): Distribuicao {
+  const porJogador = new Map(jogo.confirmations.map((c) => [c.playerId, c]));
+  return distribuirVagas(
+    jogo.vagas,
+    players
+      .filter((p) => !p.pending)
+      .map((p) => {
+        const c = porJogador.get(p.id);
+        return {
+          id: p.id,
+          kind: p.kind ?? 'mensalista',
+          status: c?.status === 'confirmado' ? 'vou' : c?.status === 'recusado' ? 'nao_vou' : null,
+          answeredAt: c?.at ?? null,
+          ordem: c?.seq,
+        };
+      }),
+  );
 }

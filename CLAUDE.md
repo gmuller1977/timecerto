@@ -59,7 +59,7 @@ Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
   voltando; nome de mensalista é recusado.
 - `/#/r/CÓDIGO` — link de **cadastro de mensalistas** (`groups.register_code`):
   nome, **apelido**, nascimento, telefone, posição e nível. Fica **pendente**
-  (`players.pending`) até o administrador aprovar no topo do Elenco; pendente
+  (`players.pending`) até o administrador aprovar no topo de Atletas; pendente
   não aparece em link nenhum nem entra no sorteio. O nível é sugestão — o
   sorteio usa o que o administrador deixar.
 - `/#/a/TOKEN` — link pessoal do atleta: completa nascimento, altura e peso.
@@ -80,14 +80,15 @@ Definido pelo Guilherme em 23/09/2026. A tela Convites deixou de existir no
 amador em 24/09/2026 (etapa 3 de `docs/telas-amador.md`); o fluxo é o mesmo,
 em dois lugares:
 
-- **Elenco:** 1. **Convidar** no cabeçalho manda o link de cadastro
+- **Atletas** (a aba se chamava Elenco; a rota continua `/elenco`): 1. **Convidar** no cabeçalho manda o link de cadastro
   (`ConvidarSheet`); 2. os pedidos aparecem no topo, em âmbar, com aprovar e
   recusar na linha; tocar num jogador abre a ficha.
-- **Jogo, cartão "Próximo jogo"** (`components/cloud/ProximoJogo.tsx`):
-  3. abre o jogo: data, horário, **local** (`events.location`) e quantidade de
-  atletas; 4. **Convidar mensalistas** e **Convidar convidados**; 5. as
-  respostas, que atualizam sozinhas a cada 20 s com a lista aberta;
-  6. **Fechar a lista e sortear** leva ao sorteio só quem tem vaga.
+- **Jogo, bloco do jogo no topo** (`components/jogo/JogoBloco.tsx`, e a parte
+  dos links em `components/cloud/JogoNuvem.tsx`): 3. cria o jogo: data,
+  horário, **local** e vagas; 4. **Convidar mensalistas** e **Convidar
+  convidados**; 5. as respostas entram na lista do Jogo e atualizam sozinhas a
+  cada 20 s com a lista aberta; 6. **Fechar a lista e sortear** (no rodapé)
+  leva ao sorteio só quem tem vaga.
 - 7. no resultado, **Publicar os times no link** — todo mundo vê pelos dois links.
 
 `/convites` ficou só para o profissional; no amador leva ao Jogo. Conta (sair)
@@ -117,13 +118,45 @@ quem é mensalista e quem é convidado (`Player.kind`; ausente = mensalista).
   Mensalista desistiu, o primeiro da fila entra sozinho.
 - Convidado chega pelo organizador, por um mensalista ou se inscrevendo sozinho.
 
-**A fila não é guardada**: sai de `answered_at`, calculada por
-`distribuirVagas` em `lib/vagas.ts`. É a única implementação — a tela do
-organizador e os dois links chamam ela. `answered_at` só muda quando a resposta
-muda: apertar "vou" de novo não pode jogar o convidado para o fim da fila.
+**A fila não é guardada**: é calculada por `distribuirVagas` em
+`lib/vagas.ts`, a única implementação da regra. Os links a chamam com
+`answered_at`; o aparelho, por `vagasDoJogo`, com o `seq` do Jogo. A ordem só
+muda quando a resposta muda: apertar "vou" de novo não pode jogar o convidado
+para o fim da fila.
 
-"Usar respostas na lista de presença" marca para o sorteio só quem **tem vaga**
-(`joga()`); fila e "não vou" saem; sem resposta fica como está.
+### Jogo: a presença mora no jogo, não no jogador (amador)
+
+Fase A feita em 24/09/2026, aprovada pelo Guilherme. **`Player.present` não
+existe mais.** Quem vem sai das confirmações do Jogo aberto
+(`useJogoStore`, `timecerto:jogos:v1`; regras puras em `lib/jogo.ts`), e
+`usePresentes()` devolve quem joga: mensalista confirmado sempre, convidado
+confirmado se tem vaga. Sorteio, partida direta e a aba Jogo leem dali;
+`drawTeams` recebe a lista pronta. Duas fontes para a mesma coisa é como o app
+volta a divergir de si mesmo.
+
+- **Um jogo `aberto` por vez**; abrir outro encerra o anterior.
+- **`Confirmacao.seq` é a ordem de chegada** e decide a fila. Nasce quando a
+  pessoa passa a confirmada; confirmar de novo não muda; sair e voltar vai
+  para o fim. Sem ele a fila vira ordem de cadastro, que não é justo.
+- **Migração do `present`** (`migrarPresent`): na primeira carga depois de
+  todos os stores hidratarem (`MigracaoPresent` em `App.tsx`), sem jogo aberto
+  e com presentes, nasce o Jogo de hoje com uma confirmação por presente,
+  **sem limite de vagas** — um limite inventado mandaria para a fila quem
+  estava na lista. Jogo e marca gravam juntos; o `present` só sai depois. Se
+  cair no meio, ou roda inteira de novo, ou não roda mais.
+- **Adoção** (`JogoNuvem`): ao ler a nuvem, um evento aberto vira o Jogo do
+  aparelho — ou se liga ao Jogo migrado —, e as respostas dos links entram
+  como confirmações (`importarDoLink`). É o que impede a lista da semana de
+  sumir na atualização. Jogo criado no aparelho e não publicado não adota:
+  ganha "Publicar nos links", que troca o evento.
+- **Vale a resposta mais recente** entre o toque do organizador e o link.
+- `Jogo.listaFechada` é só ESPELHO de `events.list_closed`, para o botão de
+  sortear saber o que dizer sem carregar o Supabase.
+
+**Fase B, pendente:** os toques do organizador ainda não sobem para a nuvem —
+quem ele confirma na lista aparece no link como "sem resposta". Adicionar
+jogador no Elenco não confirma mais ninguém; o "Adicionar avulso" do Jogo
+confirma.
 
 Pagamento (mensalidade, avulso) fica para a etapa do financeiro.
 
