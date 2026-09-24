@@ -95,28 +95,60 @@ export function LoginPage() {
     }
   }
 
+  /*
+   * Composição pedida pelo Guilherme em 24/09/2026 (referência: tela de login do
+   * FairSet): marca no alto, boas-vindas, o botão do Google em destaque e o
+   * aviso de quem não precisa de conta embaixo — tudo centralizado na altura.
+   * Nas cores do TimeCerto, e só Google: quem entra é o organizador, e e-mail
+   * foi descartado em 23/09.
+   */
   return (
-    <Shell onBack={() => navigate(-1)}>
-      <p className="text-sm leading-relaxed text-ink-400">
-        Para administradores de pelada e técnicos. Com a conta você convida pelo
-        WhatsApp e acompanha quem confirmou.
-      </p>
-      <p className="mt-2 text-sm leading-relaxed text-ink-400">
-        Jogadores e atletas não precisam de conta — eles entram pelo link que você
-        manda.
-      </p>
+    <div className="mx-auto flex min-h-full w-full max-w-sm flex-col px-5">
+      <div className="safe-top pt-4">
+        <button onClick={() => navigate(-1)} className="-ml-1 p-1 text-ink-500" aria-label="Voltar">
+          <ArrowLeft size={22} />
+        </button>
+      </div>
 
-      {error && <p className="mt-5 text-sm text-red-300">{error}</p>}
+      <main className="flex flex-1 flex-col justify-center pb-16">
+        <p className="text-center text-5xl font-extrabold tracking-tight text-ink-50">
+          Time<span className="text-brand-400">Certo</span>
+        </p>
+        <h1 className="mt-8 text-center text-2xl font-bold text-ink-50">Bem-vindo!</h1>
+        <p className="mt-1 text-center text-sm text-ink-400">
+          Organize sua pelada ou o seu time
+        </p>
 
-      <button
-        onClick={google}
-        disabled={busy}
-        className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 text-base font-semibold text-[#1f1f1f] active:scale-[0.98] disabled:opacity-60"
-      >
-        <GoogleLogo />
-        {busy ? 'Abrindo o Google…' : 'Entrar com Google'}
-      </button>
-    </Shell>
+        <button
+          onClick={google}
+          disabled={busy}
+          className="mt-8 flex h-14 w-full items-center justify-center gap-3 rounded-2xl bg-white px-6 text-base font-semibold text-[#1f1f1f] active:scale-[0.98] disabled:opacity-60"
+        >
+          <GoogleLogo />
+          {busy ? 'Abrindo o Google…' : 'Entrar com Google'}
+        </button>
+
+        {error && (
+          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-center text-sm text-red-300">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-8 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-ink-800" />
+          <span className="text-xs text-ink-500">para quem organiza</span>
+          <span className="h-px flex-1 bg-ink-800" />
+        </div>
+        <p className="mt-4 text-center text-sm leading-relaxed text-ink-400">
+          A conta é do administrador da pelada e do técnico. Com ela você convida
+          pelo WhatsApp e acompanha quem confirmou.
+        </p>
+        <p className="mt-3 text-center text-sm leading-relaxed text-ink-400">
+          Jogador e atleta <span className="font-semibold text-brand-300">não precisam de conta</span>{' '}
+          — entram pelo link que o organizador manda.
+        </p>
+      </main>
+    </div>
   );
 }
 
