@@ -96,18 +96,128 @@ async function uid(): Promise<string> {
   return data.user.id;
 }
 
-/** O grupo deste modo, se o organizador já criou — em qualquer aparelho */
+/**
+ * O grupo deste modo, em qualquer aparelho: o que a pessoa criou e, se não
+ * criou nenhum, o grupo em que ela é administradora (convite por link,
+ * migração 012). Um grupo por conta e por modo — quem tem grupo próprio e
+ * aceita administrar outro continua vendo o próprio.
+ */
 export async function findMyGroup(mode: AppMode): Promise<CloudGroup | null> {
+  const eu = await uid();
   const { data, error } = await db()
     .from('groups')
     .select(GROUP_COLS)
-    .eq('owner_id', await uid())
+    .eq('owner_id', eu)
     .eq('mode', mode)
     .order('created_at')
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  return data && toGroup(data);
+  if (data) return toGroup(data);
+
+  const { data: membros, error: e2 } = await db()
+    .from('group_members')
+    .select('group_id, created_at')
+    .eq('user_id', eu)
+    .eq('role', 'organizador')
+    .order('created_at');
+  if (e2) throw e2;
+  if (!membros || membros.length === 0) return null;
+  const { data: grupos, error: e3 } = await db()
+    .from('groups')
+    .select(GROUP_COLS)
+    .in('id', membros.map((m) => m.group_id))
+    .eq('mode', mode);
+  if (e3) throw e3;
+  // O mais antigo em que virou administrador
+  const ordem = new Map(membros.map((m, i) => [m.group_id, i]));
+  const g = (grupos ?? []).sort((a, b) => (ordem.get(a.id) ?? 0) - (ordem.get(b.id) ?? 0))[0];
+  return g ? toGroup(g) : null;
+}
+
+// ── Administradores (migração 012) ──────────────────────────
+
+export interface Administrador {
+  userId: string;
+  role: 'dono' | 'organizador';
+  name: string;
+  avatarUrl: string | null;
+  desde: string;
+  souEu: boolean;
+}
+
+export interface ConviteAdmin {
+  token: string;
+  expiresAt: string;
+}
+
+/** Link de convite de administrador — uso único, vale 48 h */
+export const adminLink = (token: string) => `${base()}#/admin/${token}`;
+
+export async function administradores(groupId: string): Promise<Administrador[]> {
+  const { data, error } = await db().rpc('admins_do_grupo', { gid: groupId });
+  if (error) throw error;
+  return (data ?? []) as Administrador[];
+}
+
+/** Só o dono consegue (RLS): gera um convite novo */
+export async function criarConviteAdmin(groupId: string): Promise<ConviteAdmin> {
+  const { data, error } = await db()
+    .from('admin_invites')
+    .insert({ group_id: groupId })
+    .select('token, expires_at')
+    .single();
+  if (error) throw error;
+  return { token: data.token, expiresAt: data.expires_at };
+}
+
+/** Convites ainda válidos e não usados */
+export async function convitesAdminAbertos(groupId: string): Promise<ConviteAdmin[]> {
+  const { data, error } = await db()
+    .from('admin_invites')
+    .select('token, expires_at')
+    .eq('group_id', groupId)
+    .is('used_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((d) => ({ token: d.token, expiresAt: d.expires_at }));
+}
+
+export async function cancelarConviteAdmin(token: string): Promise<void> {
+  const { error } = await db().from('admin_invites').delete().eq('token', token);
+  if (error) throw error;
+}
+
+/** O dono remove um administrador, ou o administrador sai sozinho (RLS decide) */
+export async function removerAdmin(groupId: string, userId: string): Promise<void> {
+  const { error } = await db()
+    .from('group_members')
+    .delete()
+    .eq('group_id', groupId)
+    .eq('user_id', userId)
+    .neq('role', 'dono');
+  if (error) throw error;
+}
+
+export interface InfoConviteAdmin {
+  group: string;
+  mode: AppMode;
+  expirado: boolean;
+  usado: boolean;
+  usadoPorMim: boolean;
+}
+
+export async function conviteAdminInfo(token: string): Promise<InfoConviteAdmin> {
+  const { data, error } = await db().rpc('convite_admin_info', { p_token: token });
+  if (error) throw error;
+  return data as InfoConviteAdmin;
+}
+
+export async function aceitarConviteAdmin(token: string): Promise<{ group: string; mode: AppMode }> {
+  const { data, error } = await db().rpc('aceitar_convite_admin', { p_token: token });
+  if (error) throw error;
+  return data as { group: string; mode: AppMode };
 }
 
 export async function createGroup(mode: AppMode, name: string): Promise<CloudGroup> {

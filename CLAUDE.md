@@ -103,6 +103,27 @@ aparece no lugar do nome em listas, links, times, WhatsApp e placar —
 As telas de partida recebem o apelido pronto de `useRoster`. O nome completo
 fica na ficha.
 
+### Mais de um administrador (amador)
+
+Pedido do Guilherme em 24/09/2026, migração 012. O dono convida em **Ajustes ›
+Administradores** (`components/cloud/Administradores.tsx`); o link
+`/#/admin/TOKEN` (`AdminInvitePage`) pede o Google e, ao aceitar, a pessoa vira
+`organizador` em `group_members` — e `can_manage_group` já deixava o
+organizador gravar atletas, jogos, respostas e times.
+
+- **Uso único e 48 h** (`admin_invites`): o link dá poder de administrador; se
+  vazar no WhatsApp, não transforma mais ninguém.
+- **Só o dono convida e remove administradores** (`members_owner_manage`);
+  qualquer um sai sozinho, menos o dono (`members_self_leave`). Isto fechou
+  uma brecha: a política antiga deixava um organizador remover o dono.
+- `findMyGroup` acha o grupo próprio e, sem ele, o grupo em que a pessoa é
+  organizadora. **Um grupo por conta e por modo**: quem tem grupo próprio e
+  aceita administrar outro continua vendo o próprio.
+- Ao aceitar, a tela já sincroniza os atletas: a sincronização automática
+  procurou o grupo ao abrir o app, antes do aceite.
+- O administrador vê o que a base única já cobre (atletas; o resto nas
+  próximas fases).
+
 ### Fluxo do administrador (amador)
 
 Definido pelo Guilherme em 23/09/2026. A tela Convites deixou de existir no

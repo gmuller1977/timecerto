@@ -28,6 +28,12 @@ const GuestGroupPage = lazy(() =>
 const GuestRegisterPage = lazy(() =>
   import('@/pages/GuestRegisterPage').then((m) => ({ default: m.GuestRegisterPage })),
 );
+const AdminInvitePage = lazy(() =>
+  import('@/pages/AdminInvitePage').then((m) => ({ default: m.AdminInvitePage })),
+);
+const Administradores = lazy(() =>
+  import('@/components/cloud/Administradores').then((m) => ({ default: m.Administradores })),
+);
 const GuestAthletePage = lazy(() =>
   import('@/pages/GuestAthletePage').then((m) => ({ default: m.GuestAthletePage })),
 );
@@ -110,6 +116,11 @@ export default function App() {
                   title="Ajustes"
                   text="Esporte, local, horário, vagas, valores e os padrões do sorteio. Por enquanto, o esporte continua na aba Jogo."
                 >
+                  {hasSavedSession() && (
+                    <Suspense fallback={null}>
+                      <Administradores />
+                    </Suspense>
+                  )}
                   {/* Conta e Modo ainda não têm seção própria (etapa 4). Até lá,
                       são atalhos: a conta era o "Sair" da antiga tela Convites,
                       e as raízes de aba não têm seta para voltar ao menu */}
@@ -136,6 +147,8 @@ export default function App() {
           <Route path="/v/:code" element={<GuestGroupPage />} />
           <Route path="/r/:code" element={<GuestRegisterPage />} />
           <Route path="/a/:token" element={<GuestAthletePage />} />
+          {/* Convite de administrador — uso único, 48 h (migração 012) */}
+          <Route path="/admin/:token" element={<AdminInvitePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
