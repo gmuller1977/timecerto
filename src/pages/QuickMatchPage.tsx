@@ -260,7 +260,7 @@ export function QuickMatchPage() {
         </section>
       )}
 
-      <div className="safe-bottom fixed inset-x-0 bottom-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
+      <div className="safe-bottom above-tabbar fixed inset-x-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-lg">
           <Button size="lg" className="w-full" onClick={handleStart}>
             <PlayCircle size={19} strokeWidth={2.5} />

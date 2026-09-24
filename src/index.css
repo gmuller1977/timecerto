@@ -51,6 +51,22 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/*
+ * Barra de abas do modo amador (components/ui/TabLayout.tsx). Com ela na
+ * tela, os rodapés fixos das páginas sobem para cima dela; a área segura do
+ * iPhone passa a ser da barra, então o rodapé volta ao respiro normal.
+ */
+:root {
+  --tabbar-h: calc(4rem + env(safe-area-inset-bottom));
+}
+.above-tabbar {
+  bottom: 0;
+}
+html[data-tabbar] .above-tabbar {
+  bottom: var(--tabbar-h);
+  padding-bottom: 0.75rem;
+}
+
 /* Hide scrollbar but keep scroll */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
