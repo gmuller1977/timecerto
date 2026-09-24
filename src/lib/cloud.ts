@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
-import type { AppMode, DrawResult, Jogo, PlayerKind, TeamColor } from '@/types';
+import type { AppMode, ConfirmacaoStatus, DrawResult, Jogo, PlayerKind, TeamColor } from '@/types';
 
 /**
  * Tudo o que fala com o banco em nome do ORGANIZADOR (logado, sob RLS).
@@ -328,6 +328,44 @@ export async function createEvent(
 export async function publicarJogo(groupId: string, jogo: Jogo): Promise<CloudEvent> {
   await syncAmador(groupId);
   return createEvent(groupId, new Date(`${jogo.date}T${jogo.time}`), '', jogo.vagas, jogo.place);
+}
+
+/**
+ * Leva as respostas do ORGANIZADOR para a nuvem, para o link mostrar quem ele
+ * confirmou — e, principalmente, para o link saber que aquelas vagas já estão
+ * ocupadas. Sem isto, quem entrava pelo link via vaga livre onde não havia e
+ * furava a fila.
+ *
+ * `answered_at` vai com a hora do toque: é o que ordena a fila no link, e ela
+ * tem de bater com o `seq` do aparelho. "Sem resposta" apaga a linha.
+ */
+export async function enviarRespostas(
+  eventId: string,
+  itens: { remoteId: string; status: ConfirmacaoStatus; at: string }[],
+): Promise<void> {
+  const gravar = itens
+    .filter((i) => i.status !== 'sem-resposta')
+    .map((i) => ({
+      event_id: eventId,
+      player_id: i.remoteId,
+      status: i.status === 'confirmado' ? 'vou' : 'nao_vou',
+      answered_at: i.at,
+    }));
+  if (gravar.length > 0) {
+    const { error } = await db()
+      .from('attendance')
+      .upsert(gravar, { onConflict: 'event_id,player_id' });
+    if (error) throw error;
+  }
+  const apagar = itens.filter((i) => i.status === 'sem-resposta').map((i) => i.remoteId);
+  if (apagar.length > 0) {
+    const { error } = await db()
+      .from('attendance')
+      .delete()
+      .eq('event_id', eventId)
+      .in('player_id', apagar);
+    if (error) throw error;
+  }
 }
 
 /**

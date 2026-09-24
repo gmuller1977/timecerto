@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Lock, MessageCircle, RefreshCw, Send, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -7,6 +7,7 @@ import { useAuth } from '@/store/useAuth';
 import { useJogoStore } from '@/store/useJogoStore';
 import {
   createGroup,
+  enviarRespostas,
   fetchAttendance,
   findMyGroup,
   groupLink,
@@ -20,7 +21,7 @@ import {
   type CloudEvent,
   type CloudGroup,
 } from '@/lib/cloud';
-import { hoje } from '@/lib/jogo';
+import { hoje, pendentesDeEnvio } from '@/lib/jogo';
 import { explain } from '@/components/cloud/partes';
 import type { ConfirmacaoStatus, Jogo } from '@/types';
 
@@ -162,6 +163,12 @@ function Links({
   const criarJogo = useJogoStore((s) => s.criarJogo);
   const atualizarJogo = useJogoStore((s) => s.atualizarJogo);
   const importarDoLink = useJogoStore((s) => s.importarDoLink);
+  const marcarEnviados = useJogoStore((s) => s.marcarEnviados);
+  const limparEnvios = useJogoStore((s) => s.limparEnvios);
+  // Só envia depois da primeira leitura: as respostas do link entram antes, e
+  // o envio nunca sobrescreve uma resposta mais nova que ainda não chegou
+  const [lido, setLido] = useState(false);
+  const enviando = useRef(false);
   const [evento, setEvento] = useState<CloudEvent | null | undefined>(undefined);
   const [linkAdded, setLinkAdded] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -214,12 +221,51 @@ function Links({
     } catch (e) {
       onError(explain(e));
       setEvento(null);
+    } finally {
+      setLido(true);
     }
   }, [group.id, criarJogo, atualizarJogo, importarDoLink, onError]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  /*
+   * Fase B: os toques do organizador sobem para a nuvem, em lote, pouco depois
+   * do último. Sem sinal, esperam (enviadoEm continua diferente de at) e vão na
+   * próxima vez — o toque nunca espera a rede. Quem ainda não tem id na nuvem
+   * (o avulso de agora há pouco) faz o elenco subir antes.
+   */
+  const pendentes = jogo?.remoteId && evento?.id === jogo.remoteId ? pendentesDeEnvio(jogo) : [];
+  const assinatura = pendentes.map((c) => c.playerId + c.at).join();
+  useEffect(() => {
+    if (!lido || !assinatura || !jogo?.remoteId) return;
+    const eventId = jogo.remoteId;
+    const jogoId = jogo.id;
+    const timer = setTimeout(async () => {
+      if (enviando.current || !navigator.onLine) return;
+      enviando.current = true;
+      try {
+        const aberto = useJogoStore.getState().jogos.find((j) => j.id === jogoId);
+        if (!aberto) return;
+        const itens = pendentesDeEnvio(aberto);
+        const semNuvem = (id: string) => !useAppStore.getState().players.find((p) => p.id === id)?.remoteId;
+        if (itens.some((c) => semNuvem(c.playerId))) await syncAmador(group.id);
+        const remotoDe = new Map(useAppStore.getState().players.map((p) => [p.id, p.remoteId]));
+        const envio = itens.flatMap((c) => {
+          const remoteId = remotoDe.get(c.playerId);
+          return remoteId ? [{ remoteId, status: c.status, at: c.at }] : [];
+        });
+        await enviarRespostas(eventId, envio);
+        marcarEnviados(jogoId, itens.map((c) => ({ playerId: c.playerId, at: c.at })));
+      } catch (e) {
+        onError(explain(e));
+      } finally {
+        enviando.current = false;
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [lido, assinatura, jogo?.remoteId, jogo?.id, group.id, marcarEnviados, onError]);
 
   // Com a lista aberta, as respostas chegam sozinhas. Fechada, nada muda.
   const aberta = Boolean(jogo?.remoteId && !jogo.listaFechada);
@@ -252,6 +298,8 @@ function Links({
     onError(null);
     try {
       const ev = await publicarJogo(group.id, jogo);
+      // Evento novo: nada do que foi enviado antes está nele
+      limparEnvios(jogo.id);
       atualizarJogo(jogo.id, { remoteId: ev.id, listaFechada: false });
       await load();
     } catch (e) {

@@ -1,13 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Shuffle } from 'lucide-react';
+import { ArrowLeft, Check, Minus, Plus, Shuffle } from 'lucide-react';
+import { nomeDeExibicao } from '@/lib/nome';
+import type { Player } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
-import { usePresentes } from '@/store/useJogoStore';
+import { useJogoAberto, usePresentes } from '@/store/useJogoStore';
 import { SPORTS, KEEPER_POSITION } from '@/lib/sports';
 import { ROTATIONS, ROTATION_LIST, rotationFits, settersNeeded } from '@/lib/rotation';
-import { drawTeams, suggestTeamCount } from '@/lib/draw';
+import { drawTeams } from '@/lib/draw';
 import { cn } from '@/lib/utils';
+
+/** Jogadores por time: de 1 a 10, pedido do Guilherme em 24/09/2026 */
+const MAX_POR_TIME = 10;
+
+/** 14 vagas em 2 times = 7 por time. Sempre entre 1 e 10 */
+function sugerir(base: number, times: number): number {
+  return Math.min(MAX_POR_TIME, Math.max(1, Math.floor(base / times)));
+}
 
 function Toggle({
   label,
@@ -46,6 +56,62 @@ function Toggle({
   );
 }
 
+/**
+ * Quem levanta, marcado aqui mesmo. O sistema de jogo pede levantadores na
+ * hora do sorteio, e mandar para outra tela quebrava o fluxo — e o convidado
+ * que chegou pelo link nem posição tinha. Um toque marca ou desmarca; grava a
+ * posição no cadastro, então vale para os próximos sorteios também.
+ */
+function Levantadores({ presentes, aberto }: { presentes: Player[]; aberto: boolean }) {
+  const updatePlayer = useAppStore((s) => s.updatePlayer);
+  const [open, setOpen] = useState(aberto);
+  const levanta = (p: Player) => p.positions.volei === 'levantador' || Boolean(p.isKeeper);
+
+  function alternar(p: Player) {
+    const sim = !levanta(p);
+    updatePlayer(p.id, {
+      positions: { ...p.positions, volei: sim ? 'levantador' : '' },
+      // isKeeper também conta como levantador no sorteio: desmarcar limpa os dois
+      ...(sim ? {} : { isKeeper: false }),
+    });
+  }
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="mt-2 text-xs font-medium text-brand-400">
+        Escolher levantadores
+      </button>
+    );
+  }
+  const ordenados = [...presentes].sort(
+    (a, b) => Number(levanta(b)) - Number(levanta(a)) || nomeDeExibicao(a).localeCompare(nomeDeExibicao(b), 'pt-BR'),
+  );
+  return (
+    <div className="mt-2.5 flex flex-wrap gap-1.5">
+      {ordenados.map((p) => {
+        const sim = levanta(p);
+        return (
+          <button
+            key={p.id}
+            onClick={() => alternar(p)}
+            aria-pressed={sim}
+            className={cn(
+              'flex min-h-9 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium',
+              sim
+                ? 'border-brand-500 bg-brand-500/15 text-brand-200'
+                : 'border-ink-800 bg-ink-950 text-ink-400',
+            )}
+          >
+            {sim && <Check size={12} />}
+            {nomeDeExibicao(p)}
+            {p.kind === 'convidado' && <span className="text-[10px] text-ink-500">conv.</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function DrawPage() {
   const navigate = useNavigate();
   // Vindo do Próximo jogo, o sorteio é de um jogo da nuvem e pode ir para o link
@@ -57,14 +123,37 @@ export function DrawPage() {
   const [drawing, setDrawing] = useState(false);
 
   const present = usePresentes();
+  const jogo = useJogoAberto();
   const cfg = SPORTS[sport];
-  const maxTeams = Math.max(2, Math.floor(present.length / settings.teamSize));
+
+  /*
+   * Primeiro a quantidade de times; os jogadores por time saem da divisão.
+   * A base é o número de vagas do jogo (14 vagas em 2 times = 7 por time);
+   * jogo sem limite divide quem confirmou. O organizador pode mudar à mão,
+   * de 1 a 10 — trocar a quantidade de times refaz a conta.
+   */
+  const base = jogo?.vagas ?? present.length;
+  const sugestao = (times: number) => sugerir(base, times);
+  // Até 8 times (são 8 cores), e nunca mais times que duplas possíveis
+  const maxTeams = Math.max(2, Math.min(8, Math.floor(present.length / 2)));
 
   useEffect(() => {
     if (settings.numberOfTeams > maxTeams) {
-      updateSettings({ numberOfTeams: maxTeams });
+      updateSettings({ numberOfTeams: maxTeams, teamSize: sugerir(base, maxTeams) });
     }
-  }, [maxTeams, settings.numberOfTeams, updateSettings]);
+  }, [base, maxTeams, settings.numberOfTeams, updateSettings]);
+
+  // Ao abrir, sugere pela divisão. Uma vez só — e só quando já há base: numa
+  // recarga direta nesta tela, os presentes chegam um instante depois, e
+  // sugerir sobre zero daria times de 1.
+  const sugeriu = useRef(false);
+  useEffect(() => {
+    if (sugeriu.current || base <= 0) return;
+    sugeriu.current = true;
+    const s = sugerir(base, settings.numberOfTeams);
+    if (s !== settings.teamSize) updateSettings({ teamSize: s });
+  }, [base, settings.numberOfTeams, settings.teamSize, updateSettings]);
+  const sugerido = sugestao(settings.numberOfTeams);
 
   // Vagas não são jogadores: com menos presentes que vagas, todo mundo joga e
   // os times saem incompletos. Contar as vagas anunciava gente que não veio —
@@ -103,37 +192,12 @@ export function DrawPage() {
       </header>
 
       <section className="mt-2">
-        <p className="mb-2 text-sm font-medium text-ink-300">Jogadores por time</p>
-        <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-          {cfg.teamSizeOptions.map((n) => (
-            <button
-              key={n}
-              onClick={() => {
-                updateSettings({
-                  teamSize: n,
-                  numberOfTeams: suggestTeamCount(present.length, n),
-                });
-              }}
-              className={cn(
-                'size-12 shrink-0 rounded-xl border text-[15px] font-semibold transition-colors',
-                settings.teamSize === n
-                  ? 'border-brand-500 bg-brand-500/15 text-brand-300'
-                  : 'border-ink-800 bg-ink-900 text-ink-400',
-              )}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="mt-5">
         <p className="mb-2 text-sm font-medium text-ink-300">Quantidade de times</p>
         <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
           {Array.from({ length: Math.max(1, maxTeams - 1) }, (_, i) => i + 2).map((n) => (
             <button
               key={n}
-              onClick={() => updateSettings({ numberOfTeams: n })}
+              onClick={() => updateSettings({ numberOfTeams: n, teamSize: sugestao(n) })}
               className={cn(
                 'size-12 shrink-0 rounded-xl border text-[15px] font-semibold transition-colors',
                 settings.numberOfTeams === n
@@ -145,7 +209,50 @@ export function DrawPage() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="mt-5">
+        <p className="mb-2 text-sm font-medium text-ink-300">Jogadores por time</p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => updateSettings({ teamSize: Math.max(1, settings.teamSize - 1) })}
+            disabled={settings.teamSize <= 1}
+            aria-label="Menos um jogador por time"
+            className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-ink-800 bg-ink-900 text-ink-200 disabled:opacity-30"
+          >
+            <Minus size={20} />
+          </button>
+          <span
+            className="min-w-12 text-center text-3xl font-bold tabular-nums text-ink-50"
+            aria-live="polite"
+          >
+            {settings.teamSize}
+          </span>
+          <button
+            onClick={() =>
+              updateSettings({ teamSize: Math.min(MAX_POR_TIME, settings.teamSize + 1) })
+            }
+            disabled={settings.teamSize >= MAX_POR_TIME}
+            aria-label="Mais um jogador por time"
+            className="flex size-12 shrink-0 items-center justify-center rounded-xl border border-ink-800 bg-ink-900 text-ink-200 disabled:opacity-30"
+          >
+            <Plus size={20} />
+          </button>
+          {settings.teamSize !== sugerido && (
+            <button
+              onClick={() => updateSettings({ teamSize: sugerido })}
+              className="ml-auto text-xs font-medium text-brand-400"
+            >
+              Voltar para {sugerido}
+            </button>
+          )}
+        </div>
         <p className="mt-2 text-xs text-ink-500">
+          {base > 0
+            ? `Sugerido: ${sugerido} — ${base} ${jogo?.vagas != null ? 'vagas' : 'confirmados'} ÷ ${settings.numberOfTeams} times. De 1 a ${MAX_POR_TIME}.`
+            : `De 1 a ${MAX_POR_TIME}.`}
+        </p>
+        <p className="mt-1 text-xs text-ink-500">
           {allocated} {allocated === 1 ? 'jogador' : 'jogadores'} em quadra
           {bench > 0 && ` · ${bench} no banco`}
           {faltam > 0 && ` · faltam ${faltam} para completar os times`}
@@ -216,9 +323,15 @@ export function DrawPage() {
             </p>
             {needed > 0 && setters < needed * settings.numberOfTeams && (
               <p className="mt-1 text-[11px] text-amber-400">
-                Faltam {needed * settings.numberOfTeams - setters}. Marque mais
-                jogadores como levantador na tela anterior.
+                Faltam {needed * settings.numberOfTeams - setters}. Toque abaixo em quem
+                levanta.
               </p>
+            )}
+            {needed > 0 && (
+              <Levantadores
+                presentes={present}
+                aberto={setters < needed * settings.numberOfTeams}
+              />
             )}
           </div>
         </section>

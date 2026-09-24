@@ -40,6 +40,10 @@ interface JogoState {
     jogoId: string,
     respostas: { playerId: string; status: ConfirmacaoStatus; at: string }[],
   ) => void;
+  /** Estas respostas do organizador já estão na nuvem, com esta hora */
+  marcarEnviados: (jogoId: string, enviados: { playerId: string; at: string }[]) => void;
+  /** O jogo foi para um evento novo: nada do que foi enviado antes está lá */
+  limparEnvios: (jogoId: string) => void;
   migrar: () => void;
 }
 
@@ -104,6 +108,30 @@ export const useJogoStore = create<JogoState>()(
       importarDoLink: (jogoId, respostas) =>
         set((s) => ({
           jogos: s.jogos.map((j) => (j.id === jogoId ? importarRespostas(j, respostas) : j)),
+        })),
+
+      // Só marca se a resposta não mudou enquanto ia: senão a nova ainda precisa ir
+      marcarEnviados: (jogoId, enviados) =>
+        set((s) => ({
+          jogos: s.jogos.map((j) => {
+            if (j.id !== jogoId) return j;
+            const at = new Map(enviados.map((e) => [e.playerId, e.at]));
+            return {
+              ...j,
+              confirmations: j.confirmations.map((c) =>
+                at.get(c.playerId) === c.at ? { ...c, enviadoEm: c.at } : c,
+              ),
+            };
+          }),
+        })),
+
+      limparEnvios: (jogoId) =>
+        set((s) => ({
+          jogos: s.jogos.map((j) =>
+            j.id === jogoId
+              ? { ...j, confirmations: j.confirmations.map((c) => ({ ...c, enviadoEm: undefined })) }
+              : j,
+          ),
         })),
 
       /**

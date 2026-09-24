@@ -124,6 +124,12 @@ export interface Confirmacao {
   seq: number;
   /** Quem respondeu: o organizador tocando na lista, ou a pessoa pelo link */
   origem: 'organizador' | 'link';
+  /**
+   * O `at` que já está na nuvem. Diferente de `at` = resposta do organizador
+   * ainda não enviada — é assim que o toque sem sinal espera e vai depois.
+   * Resposta que veio do link já nasce enviada.
+   */
+  enviadoEm?: string;
 }
 
 export interface Team {

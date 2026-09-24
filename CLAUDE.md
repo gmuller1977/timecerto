@@ -169,10 +169,36 @@ volta a divergir de si mesmo.
 - `Jogo.listaFechada` é só ESPELHO de `events.list_closed`, para o botão de
   sortear saber o que dizer sem carregar o Supabase.
 
-**Fase B, pendente:** os toques do organizador ainda não sobem para a nuvem —
-quem ele confirma na lista aparece no link como "sem resposta". Adicionar
-jogador no Elenco não confirma mais ninguém; o "Adicionar avulso" do Jogo
-confirma.
+**Fase B, feita em 24/09/2026: os toques do organizador sobem para a nuvem.**
+Antes, o link não via quem o administrador confirmava — e, pior, achava que
+havia vaga onde não havia, e quem entrava pelo link furava a fila de espera.
+`JogoNuvem` envia em lote, 0,8 s depois do último toque, as confirmações com
+`origem: 'organizador'` e `enviadoEm !== at` (`pendentesDeEnvio`);
+`enviarRespostas` grava `vou`/`nao_vou` com `answered_at` = hora do toque (é o
+que ordena a fila no link) e apaga a linha no "sem resposta". Sem sinal, a
+confirmação espera e vai depois — o toque nunca espera a rede. Só envia depois
+da primeira leitura da nuvem, para as respostas do link entrarem antes.
+Resposta que veio do link nasce enviada; publicar o jogo num evento novo
+limpa as marcas (`limparEnvios`).
+
+As confirmações da migração do `present` têm hora no início dos tempos: o
+`present` antigo não pode vencer, nem sobrescrever na nuvem, um "não vou" que
+a pessoa deu de verdade pelo link.
+
+Adicionar jogador em Atletas não confirma ninguém; o "Adicionar avulso" do
+Jogo confirma.
+
+### Tela de sorteio
+
+Primeiro a quantidade de times; **jogadores por time saem da divisão**: vagas
+do jogo ÷ times (14 vagas em 2 times = 7), ou confirmados ÷ times em jogo sem
+limite. O organizador muda à mão, **de 1 a 10** — pedido do Guilherme em
+24/09/2026 (zero não forma time). Trocar a quantidade de times refaz a conta.
+
+Quando o sistema de jogo pede levantadores, **quem levanta se marca ali
+mesmo** (`Levantadores` em `DrawPage.tsx`), convidado incluído — antes o aviso
+mandava "para a tela anterior", que não edita posição. Grava a posição no
+cadastro, então vale para os próximos sorteios.
 
 Pagamento (mensalidade, avulso) fica para a etapa do financeiro.
 

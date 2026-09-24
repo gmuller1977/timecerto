@@ -49,7 +49,8 @@ export function responder(
   const atual = jogo.confirmations.find((c) => c.playerId === playerId);
   if (atual?.status === status) return jogo;
   const seq = status === 'confirmado' ? proximoSeq(jogo) : (atual?.seq ?? 0);
-  const nova = { playerId, status, at, seq, origem };
+  // O que veio do link já está na nuvem; o toque do organizador ainda vai
+  const nova = { playerId, status, at, seq, origem, ...(origem === 'link' ? { enviadoEm: at } : {}) };
   return {
     ...jogo,
     confirmations: atual
@@ -74,6 +75,14 @@ export function importarRespostas(
       if (atual && atual.at >= r.at) return j;
       return responder(j, r.playerId, r.status, 'link', r.at);
     }, jogo);
+}
+
+/**
+ * Respostas do organizador que ainda não estão na nuvem. Só as dele: o que
+ * veio do link já está lá.
+ */
+export function pendentesDeEnvio(jogo: Jogo) {
+  return jogo.confirmations.filter((c) => c.origem === 'organizador' && c.enviadoEm !== c.at);
 }
 
 /** Abre um jogo: o aberto anterior, se houver, é encerrado */
@@ -104,6 +113,11 @@ export interface EstadoMigracao {
  * O `seq` segue a ordem de cadastro, a única informação que existe; só pesa
  * na fila, que sem limite não existe.
  *
+ * A hora das confirmações migradas é o início dos tempos, de propósito: vale
+ * a resposta mais recente entre o organizador e o link, e o `present` antigo
+ * não pode vencer — nem sobrescrever na nuvem — um "não vou" que a pessoa
+ * deu de verdade pelo link.
+ *
  * Pendente de aprovação não é convertido: nunca podia jogar.
  */
 export function migrarPresent(
@@ -127,7 +141,7 @@ export function migrarPresent(
     confirmations: presentes.map((p, i) => ({
       playerId: p.id,
       status: 'confirmado',
-      at: quando,
+      at: new Date(0).toISOString(),
       seq: i + 1,
       origem: 'organizador',
     })),
