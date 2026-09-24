@@ -11,7 +11,7 @@ import {
 } from '@/lib/cloud';
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
-import { getPositionLabel } from '@/lib/sports';
+import { SPORTS, getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -66,6 +66,9 @@ export function GuestGroupPage() {
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [newName, setNewName] = useState('');
+  // O convidado informa a posição (pedido do Guilherme, 24/09/2026): sem ela o
+  // sorteio não sabe se ele é levantador ou goleiro
+  const [newPosition, setNewPosition] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -138,14 +141,15 @@ export function GuestGroupPage() {
     setFormError(null);
     try {
       if (viaConvidados) {
-        const id = await guestJoin(code, event.id, newName);
+        const id = await guestJoin(code, event.id, newName, newPosition);
         writeMe(code, id);
         setMe(id);
       } else {
-        await guestAddPlayer(code, event.id, newName, mine?.id ?? null);
+        await guestAddPlayer(code, event.id, newName, mine?.id ?? null, newPosition);
       }
       setFormOpen(false);
       setNewName('');
+      setNewPosition('');
       await load();
     } catch (err) {
       console.error('incluir pelo link', err);
@@ -172,6 +176,27 @@ export function GuestGroupPage() {
         placeholder="Nome e sobrenome"
         className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
       />
+      <p className="mt-4 text-xs font-medium text-ink-400">
+        {viaConvidados ? 'Sua posição' : 'Posição de quem você vai levar'}
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-2" role="group" aria-label="Posição">
+        {(SPORTS[data.group.sport as SportId]?.positions ?? []).map((pos) => (
+          <button
+            key={pos.id}
+            type="button"
+            onClick={() => setNewPosition(pos.id)}
+            aria-pressed={newPosition === pos.id}
+            className={cn(
+              'min-h-10 rounded-xl border px-3 py-2 text-sm font-medium',
+              newPosition === pos.id
+                ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                : 'border-ink-800 bg-ink-950 text-ink-400',
+            )}
+          >
+            {pos.label}
+          </button>
+        ))}
+      </div>
       {formError && <p className="mt-2 text-sm text-red-300">{formError}</p>}
       <div className="mt-3 flex gap-2">
         {!viaConvidados && (
@@ -188,7 +213,7 @@ export function GuestGroupPage() {
         )}
         <button
           type="submit"
-          disabled={saving || newName.trim().length < 2}
+          disabled={saving || newName.trim().length < 2 || !newPosition}
           className="h-12 flex-1 rounded-xl bg-brand-500 font-semibold text-ink-950 disabled:opacity-40"
         >
           {saving ? 'Enviando…' : viaConvidados ? 'Quero jogar' : 'Incluir convidado'}

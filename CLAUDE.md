@@ -60,8 +60,16 @@ Jogador e atleta **nunca criam conta**. Entram pelo link do WhatsApp:
   entra na fila de convidados. Qualquer um com o link marca por qualquer um;
   aceito, o organizador vê a lista.
 - `/#/v/CÓDIGO` — link de **convidados** (amador, `groups.guest_code`): põe o
-  nome e entra na fila. Nome de convidado que já existe = a mesma pessoa
-  voltando; nome de mensalista é recusado.
+  nome **e a posição** (obrigatória na tela, migração 011) e entra na fila.
+  Nome de convidado que já existe = a mesma pessoa voltando, e só ganha
+  posição se não tinha; nome de mensalista é recusado.
+
+**Só mensalista leva convidado** — decidido pelo Guilherme, travado nas duas
+pontas: na tela, "Levar alguém de fora" só existe no link dos mensalistas para
+quem se identificou como mensalista (convidado nem aparece em "Quem é você?");
+no banco, `guest_add_player` recusa quem não é mensalista. Quem leva também
+informa a posição do levado. No banco a posição é opcional, de propósito: quem
+estava com a versão antiga aberta na troca não fica travado.
 - `/#/r/CÓDIGO` — link de **cadastro de mensalistas** (`groups.register_code`):
   nome, **apelido**, nascimento, telefone, posição e nível. Fica **pendente**
   (`players.pending`) até o administrador aprovar no topo de Atletas; pendente

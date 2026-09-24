@@ -638,8 +638,18 @@ export async function guestRegister(
 }
 
 /** O convidado se inscreve pelo link de convidados e entra na fila */
-export async function guestJoin(code: string, eventId: string, name: string): Promise<string> {
-  const { data, error } = await db().rpc('guest_join', { code, p_event: eventId, p_name: name });
+export async function guestJoin(
+  code: string,
+  eventId: string,
+  name: string,
+  position: string,
+): Promise<string> {
+  const { data, error } = await db().rpc('guest_join', {
+    code,
+    p_event: eventId,
+    p_name: name,
+    p_position: position,
+  });
   if (error) throw error;
   return data as string;
 }
@@ -655,12 +665,14 @@ export async function guestAddPlayer(
   eventId: string,
   name: string,
   invitedBy: string | null,
+  position: string,
 ): Promise<string> {
   const { data, error } = await db().rpc('guest_add_player', {
     code,
     p_event: eventId,
     p_name: name,
     p_invited_by: invitedBy,
+    p_position: position,
   });
   if (error) throw error;
   return data as string;
