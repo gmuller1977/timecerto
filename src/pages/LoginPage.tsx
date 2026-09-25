@@ -104,11 +104,9 @@ export function LoginPage() {
    */
   return (
     <div className="mx-auto flex min-h-full w-full max-w-sm flex-col px-5">
-      <div className="safe-top pt-4">
-        <button onClick={() => navigate(-1)} className="-ml-1 p-1 text-ink-500" aria-label="Voltar">
-          <ArrowLeft size={22} />
-        </button>
-      </div>
+      {/* Sem conta o app não abre (ExigeConta, em App.tsx): voltar levaria de
+          novo para cá. A altura fica, para a marca não subir */}
+      <div className="safe-top h-12 pt-4" />
 
       <main className="flex flex-1 flex-col justify-center pb-16">
         <p className="text-center text-5xl font-extrabold tracking-tight text-ink-50">

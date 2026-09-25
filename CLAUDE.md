@@ -24,7 +24,13 @@ Alias `@/` aponta para `src/`.
 
 ## Estado atual
 
-O app roda offline, em `localStorage`, e continua funcionando sem login.
+O app roda offline, em `localStorage`. **Desde 25/09/2026 ele abre no login**, como o
+FairSet (pedido do Guilherme): as telas do organizador exigem conta
+(`ExigeConta` em `App.tsx`). A guarda só olha se há sessão SALVA no aparelho,
+sem rede — quem já entrou usa no ginásio sem sinal. Os links do WhatsApp
+(`/c`, `/v`, `/r`, `/a`, `/admin`) ficam de fora: mensalista, convidado e
+atleta não têm conta. Depois do login a pessoa volta para onde estava
+(`?volta=`); o login obrigatório não tem seta de voltar.
 O Supabase (projeto `whhvojozemwmnhnpyqpz`) entra para **login do
 organizador, convites e a base única** — ver "Convites" e "Base única" abaixo.
 
@@ -148,8 +154,8 @@ fica em Ajustes › Conta.
 O convite abre o WhatsApp ANTES de sincronizar — depois de um `await` o
 navegador pode barrar a janela.
 
-O Supabase só carrega para quem tem sessão salva (`lib/sessao.ts`): quem nunca
-entrou vê no Jogo uma linha leve de "Entrar", sem os 200 kB.
+O Supabase só carrega para quem tem sessão salva (`lib/sessao.ts`). Com o login
+obrigatório, isso vale para os links e para a própria tela de login.
 
 No link, reabrir mostra a resposta atual, deixa mudar e mostra quem confirmou.
 
