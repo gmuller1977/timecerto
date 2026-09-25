@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { FormJogo } from '@/components/jogo/FormJogo';
+import { SeloStatus } from '@/components/jogo/SeloStatus';
+import { statusDoJogo } from '@/lib/jogo';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogo, useJogoStore, useProximoJogo } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -27,6 +29,7 @@ import { vagasDoJogo, joga, type Situacao } from '@/lib/vagas';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { computeAllStats, formatDate } from '@/lib/stats';
+import { SPORTS } from '@/lib/sports';
 import { setsWonBy } from '@/lib/volleyStats';
 import { cn, initials } from '@/lib/utils';
 import type { Jogo, Player } from '@/types';
@@ -97,6 +100,17 @@ function Pagina({
   const matches = useMatchStore((s) => s.matches);
   const startMatch = useMatchStore((s) => s.startMatch);
   const [editando, setEditando] = useState(false);
+  const sportDoApp = useAppStore((s) => s.sport);
+  const setSport = useAppStore((s) => s.setSport);
+
+  /*
+   * O esporte é do jogo (migração 014). Abrir um jogo põe o app nele: o
+   * sorteio, a partida e os níveis do elenco leem o esporte do app, e assim
+   * seguem o jogo sem cada tela precisar saber de qual jogo veio.
+   */
+  useEffect(() => {
+    if (sportDoApp !== jogo.sport) setSport(jogo.sport);
+  }, [jogo.sport, sportDoApp, setSport]);
   const [busy, setBusy] = useState(false);
   const [comSessao] = useState(hasSavedSession);
 
@@ -181,6 +195,9 @@ function Pagina({
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-bold capitalize">{fmtDia(jogo)}</h1>
           <p className="flex items-center gap-1 truncate text-sm text-ink-400">
+            <span aria-hidden>{SPORTS[jogo.sport].emoji}</span>
+            <span className="text-ink-300">{SPORTS[jogo.sport].name}</span>
+            <span className="text-ink-600">·</span>
             {jogo.time}
             {jogo.place && (
               <>
@@ -202,12 +219,13 @@ function Pagina({
         )}
       </header>
 
-      <p className="text-sm text-ink-300">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-300">
+        <SeloStatus status={statusDoJogo(jogo, { proximoId: proximo?.id ?? null, jogoAoVivo: live?.jogoId ?? null })} />
+        <span>
         <strong className="text-ink-50">{jogam}</strong> {jogam === 1 ? 'confirmado' : 'confirmados'}
         {jogo.vagas != null ? ` · ${dist.livres ?? 0} ${dist.livres === 1 ? 'vaga' : 'vagas'}` : ' · sem limite de vagas'}
         {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
-        {jogo.status === 'encerrado' && ' · encerrado'}
-        {jogo.status === 'cancelado' && ' · cancelado'}
+        </span>
       </p>
 
       {editando && (

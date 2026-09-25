@@ -868,7 +868,7 @@ function sorteioDaNuvem(s: SorteioNuvem | null, jogoId: string, eventId: string)
 }
 
 const EVENT_SYNC_COLS =
-  'id, title, starts_at, location, slots, status, list_closed, teams, sorteio, updated_at, synced_at, created_at';
+  'id, title, starts_at, location, slots, sport, status, list_closed, teams, sorteio, updated_at, synced_at, created_at';
 
 interface LinhaJogo {
   id: string;
@@ -876,6 +876,8 @@ interface LinhaJogo {
   starts_at: string;
   location: string | null;
   slots: number | null;
+  /** Migração 014; nulo em jogo que nenhum aparelho atualizado gravou */
+  sport: SportId | null;
   status: string | null;
   list_closed: boolean | null;
   teams: unknown;
@@ -897,6 +899,7 @@ function doEvento(r: LinhaJogo, jogoId: string) {
     time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
     place: r.location ?? '',
     vagas: r.slots,
+    ...(r.sport ? { sport: r.sport } : {}),
     status: statusDaNuvem(r.status),
     remoteId: r.id,
     listaFechada: Boolean(r.list_closed),
@@ -966,8 +969,8 @@ function mesclarJogos(linhas: LinhaJogo[]) {
       }
       if (i < 0) {
         const id = novoIdLocal();
-        // O evento não guarda o esporte; o sorteio, quando há, sabe qual foi
-        jogos.push({ id, sport: r.sorteio?.sport ?? sport, confirmations: [], createdAt: r.created_at, ...doEvento(r, id) });
+        // Esporte do jogo (014); de um aparelho antigo, o do sorteio ou o deste
+        jogos.push({ id, sport: r.sport ?? r.sorteio?.sport ?? sport, confirmations: [], createdAt: r.created_at, ...doEvento(r, id) });
         continue;
       }
       const local = jogos[i];
@@ -998,6 +1001,7 @@ async function enviarJogos(groupId: string) {
     starts_at: new Date(`${j.date}T${j.time}`).toISOString(),
     location: j.place || null,
     slots: j.vagas,
+    sport: j.sport,
     status: j.status === 'aberto' ? 'programado' : j.status,
     sorteio: sorteioParaNuvem(j.sorteio),
     updated_at: j.updatedAt,

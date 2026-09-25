@@ -112,6 +112,45 @@ export function proximoJogo(jogos: Jogo[], agora = Date.now()): Jogo | null {
   );
 }
 
+/** O que o cartão e o filtro dizem de um jogo. Derivado, nunca guardado */
+export type StatusDoJogo =
+  | 'recebendo'
+  | 'lista_fechada'
+  | 'em_jogo'
+  | 'agendado'
+  | 'sem_encerrar'
+  | 'encerrado'
+  | 'cancelado';
+
+export const ROTULO_STATUS: Record<StatusDoJogo, string> = {
+  recebendo: 'Recebendo inscrições',
+  lista_fechada: 'Lista fechada',
+  em_jogo: 'Em jogo',
+  agendado: 'Agendado',
+  sem_encerrar: 'Não encerrado',
+  encerrado: 'Encerrado',
+  cancelado: 'Cancelado',
+};
+
+/**
+ * O status de um jogo, na ordem em que as perguntas importam:
+ * - cancelado e encerrado são o que o organizador disse;
+ * - com partida ao vivo, está em jogo;
+ * - o PRÓXIMO recebe inscrições (links e toques) até a lista fechar;
+ * - os outros programados esperam a vez: agendados;
+ * - passou da janela de 12 h sem ninguém encerrar: não encerrado.
+ */
+export function statusDoJogo(
+  jogo: Jogo,
+  ctx: { proximoId: string | null; jogoAoVivo: string | null; agora?: number },
+): StatusDoJogo {
+  if (jogo.status === 'cancelado') return 'cancelado';
+  if (jogo.status === 'encerrado') return 'encerrado';
+  if (ctx.jogoAoVivo === jogo.id) return 'em_jogo';
+  if (ctx.proximoId === jogo.id) return jogo.listaFechada ? 'lista_fechada' : 'recebendo';
+  return inicioDo(jogo) >= (ctx.agora ?? Date.now()) - JANELA_PROXIMO_MS ? 'agendado' : 'sem_encerrar';
+}
+
 // ── Migração do antigo `present` ────────────────────────────
 
 /** O jogador como estava gravado antes: ainda com o booleano */

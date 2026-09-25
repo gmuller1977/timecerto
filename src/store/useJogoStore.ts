@@ -15,7 +15,7 @@ import {
 import { joga, vagasDoJogo } from '@/lib/vagas';
 
 /** Campos do jogo que o organizador edita — e que vão para a nuvem */
-type EdicaoDoJogo = Partial<Pick<Jogo, 'date' | 'time' | 'place' | 'vagas' | 'status'>>;
+type EdicaoDoJogo = Partial<Pick<Jogo, 'sport' | 'date' | 'time' | 'place' | 'vagas' | 'status'>>;
 
 interface JogoState {
   /** Mais recente primeiro. Vários `aberto` (programados) ao mesmo tempo */

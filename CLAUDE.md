@@ -188,6 +188,22 @@ como o app volta a divergir de si mesmo.
   12 h atrás (`proximoJogo` em `lib/jogo.ts`, a mesma regra de `guest_group`
   na migração 013). Os outros jogos esperam a vez: a página deles diz qual
   está nos links, e só o próximo oferece convite, lista fechada e publicar.
+- **O esporte é do jogo** (migração 014, pedido do Guilherme em 25/09/2026).
+  A aba Jogo não tem mais seletor de esporte no topo: ele é escolhido ao
+  criar o jogo, aparece no cartão e é um dos filtros. Isto substitui o plano
+  de `docs/telas-amador.md` de levar o esporte para Ajustes como configuração
+  do grupo. **Abrir um jogo põe o app no esporte dele** (`setSport` em
+  `JogoPage`), e é assim que sorteio, partida e níveis do elenco seguem o jogo
+  sem cada tela saber de onde veio. Consequência aceita: Atletas mostra os
+  níveis do esporte do último jogo aberto. Depois do sorteio o esporte não muda.
+  Os links usam o esporte do jogo — posições e a posição do convidado.
+- **Status do jogo é derivado, nunca guardado** (`statusDoJogo` em
+  `lib/jogo.ts`): cancelado/encerrado pelo organizador; em jogo com partida ao
+  vivo; o próximo recebe inscrições até a lista fechar; os outros programados
+  são agendados; passou da janela de 12 h sem encerrar, "não encerrado". O
+  mesmo selo (`SeloStatus`) no cartão, na página e no filtro.
+- **Filtros da lista**: modalidade, dia e status. Filtrando, os anteriores
+  aparecem abertos — recolhidos, esconderiam o resultado.
 - **O sorteio e as partidas pertencem ao jogo**: `Jogo.sorteio` e
   `Match.jogoId`. O sorteio sai da página do jogo (`/sortear` com `jogoId` no
   estado) e o resultado abre em `/resultado?jogo=ID`; sem `?jogo`, vale o

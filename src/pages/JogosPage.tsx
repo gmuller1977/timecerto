@@ -1,16 +1,24 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarPlus, ChevronDown, ChevronRight, History, MapPin, Radio, Swords } from 'lucide-react';
+import { CalendarPlus, ChevronDown, ChevronRight, History, MapPin, Radio, Swords, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogoStore } from '@/store/useJogoStore';
-import { SportPicker } from '@/components/sports/SportPicker';
 import { FormJogo } from '@/components/jogo/FormJogo';
+import { SeloStatus } from '@/components/jogo/SeloStatus';
 import { Button } from '@/components/ui/Button';
-import { inicioDo, JANELA_PROXIMO_MS, proximoJogo } from '@/lib/jogo';
+import {
+  inicioDo,
+  JANELA_PROXIMO_MS,
+  proximoJogo,
+  ROTULO_STATUS,
+  statusDoJogo,
+  type StatusDoJogo,
+} from '@/lib/jogo';
+import { SPORTS, SPORT_LIST } from '@/lib/sports';
 import { vagasDoJogo } from '@/lib/vagas';
 import { cn } from '@/lib/utils';
-import type { Jogo, Player } from '@/types';
+import type { Jogo, Player, SportId } from '@/types';
 
 const fmtDia = (j: Jogo) =>
   new Date(`${j.date}T${j.time}`).toLocaleDateString('pt-BR', {
@@ -19,13 +27,32 @@ const fmtDia = (j: Jogo) =>
     month: '2-digit',
   });
 
+const ORDEM_STATUS: StatusDoJogo[] = [
+  'recebendo',
+  'lista_fechada',
+  'em_jogo',
+  'agendado',
+  'sem_encerrar',
+  'encerrado',
+  'cancelado',
+];
+
+interface Filtros {
+  sport: SportId | null;
+  /** YYYY-MM-DD */
+  dia: string;
+  status: StatusDoJogo | null;
+}
+// Os filtros sobrevivem a abrir um jogo e voltar. Memória da sessão
+let filtrosGuardados: Filtros = { sport: null, dia: '', status: null };
+
 /**
  * Aba Jogo: todos os jogos marcados (pedido do Guilherme em 24/09/2026). Os
  * próximos em ordem de data; os anteriores recolhidos. Tocar num jogo abre a
  * página dele — confirmados, times, partidas e estatística.
  *
- * O primeiro dos próximos é o que os links do WhatsApp mostram
- * (`proximoJogo`, a mesma regra do link).
+ * O esporte é escolhido em cada jogo (migração 014), e não mais num seletor
+ * no topo: o cartão mostra a modalidade, e ela é um dos filtros.
  */
 export function JogosPage() {
   const navigate = useNavigate();
@@ -37,22 +64,40 @@ export function JogosPage() {
   const matchCount = useMatchStore((s) => s.matches.filter((m) => m.mode !== 'profissional').length);
   const [criando, setCriando] = useState(false);
   const [verAnteriores, setVerAnteriores] = useState(false);
+  const [filtros, setFiltrosState] = useState(filtrosGuardados);
+  const setFiltros = (f: Partial<Filtros>) => {
+    filtrosGuardados = { ...filtros, ...f };
+    setFiltrosState(filtrosGuardados);
+  };
   // O instante de abrir a tela: basta para separar próximos de anteriores
   const [agora] = useState(() => Date.now());
 
-  const { proximos, anteriores, proximo } = useMemo(() => {
+  const filtrando = Boolean(filtros.sport || filtros.dia || filtros.status);
+
+  const { proximos, anteriores, proximo, statusDe } = useMemo(() => {
+    const prox = proximoJogo(jogos, agora);
+    const ctx = { proximoId: prox?.id ?? null, jogoAoVivo: live?.jogoId ?? null, agora };
+    const statusDe = new Map(jogos.map((j) => [j.id, statusDoJogo(j, ctx)]));
+    const passa = (j: Jogo) =>
+      (!filtros.sport || j.sport === filtros.sport) &&
+      (!filtros.dia || j.date === filtros.dia) &&
+      (!filtros.status || statusDe.get(j.id) === filtros.status);
     const vivo = (j: Jogo) => j.status === 'aberto' && inicioDo(j) >= agora - JANELA_PROXIMO_MS;
+    const lista = jogos.filter(passa);
     return {
-      proximos: jogos.filter(vivo).sort((a, b) => inicioDo(a) - inicioDo(b)),
-      anteriores: jogos.filter((j) => !vivo(j)).sort((a, b) => inicioDo(b) - inicioDo(a)),
-      proximo: proximoJogo(jogos, agora),
+      proximos: lista.filter(vivo).sort((a, b) => inicioDo(a) - inicioDo(b)),
+      anteriores: lista.filter((j) => !vivo(j)).sort((a, b) => inicioDo(b) - inicioDo(a)),
+      proximo: prox,
+      statusDe,
     };
-  }, [jogos, agora]);
+  }, [jogos, agora, live?.jogoId, filtros]);
 
   const ativos = useMemo(() => players.filter((p) => !p.pending), [players]);
+  // Filtrando, o que achou aparece inteiro: esconder anteriores esconderia o resultado
+  const mostraAnteriores = verAnteriores || filtrando;
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
+    <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
       <header className="safe-top flex items-center justify-between gap-3 pt-6 pb-4">
         <h1 className="text-2xl font-bold tracking-tight">Jogo</h1>
         <button
@@ -83,7 +128,40 @@ export function JogosPage() {
         </button>
       )}
 
-      <SportPicker />
+      {/* A ação principal da aba, acima dos jogos */}
+      {criando ? (
+        <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+          <p className="mb-3 text-[15px] font-semibold text-ink-50">Novo jogo</p>
+          <FormJogo
+            onCancel={() => setCriando(false)}
+            onDone={(j) => {
+              setCriando(false);
+              navigate(`/jogo/${j.id}`);
+            }}
+          />
+        </section>
+      ) : (
+        <div className="flex gap-2">
+          <Button size="lg" className="flex-1" onClick={() => setCriando(true)}>
+            <CalendarPlus size={19} />
+            Novo jogo
+          </Button>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="shrink-0 px-4"
+            onClick={() => navigate('/partida')}
+            aria-label="Partida direta, sem jogo marcado"
+          >
+            <Swords size={18} />
+            Partida direta
+          </Button>
+        </div>
+      )}
+
+      {migrado && jogos.length > 0 && (
+        <FiltroBar filtros={filtros} setFiltros={setFiltros} filtrando={filtrando} />
+      )}
 
       {migrado && (
         <>
@@ -97,53 +175,44 @@ export function JogosPage() {
                   key={j.id}
                   jogo={j}
                   players={ativos}
-                  nosLinks={j.id === proximo?.id}
+                  status={statusDe.get(j.id)!}
+                  destaque={j.id === proximo?.id}
                   onOpen={() => navigate(`/jogo/${j.id}`)}
                 />
               ))}
-              {proximos.length === 0 && !criando && (
+              {proximos.length === 0 && (
                 <p className="rounded-2xl border border-dashed border-ink-800 px-4 py-5 text-center text-sm text-ink-400">
-                  Nenhum jogo marcado. Crie o próximo para marcar quem vem e sortear.
+                  {filtrando
+                    ? 'Nenhum jogo próximo com esses filtros.'
+                    : 'Nenhum jogo marcado. Crie o próximo para marcar quem vem e sortear.'}
                 </p>
               )}
             </div>
           </section>
 
-          {criando ? (
-            <section className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-              <p className="mb-3 text-[15px] font-semibold text-ink-50">Novo jogo</p>
-              <FormJogo
-                onCancel={() => setCriando(false)}
-                onDone={(j) => {
-                  setCriando(false);
-                  navigate(`/jogo/${j.id}`);
-                }}
-              />
-            </section>
-          ) : (
-            <button
-              onClick={() => setCriando(true)}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 py-3 text-sm font-medium text-brand-300"
-            >
-              <CalendarPlus size={16} />
-              Novo jogo
-            </button>
-          )}
-
           {anteriores.length > 0 && (
             <section className="mt-6">
               <button
                 onClick={() => setVerAnteriores((v) => !v)}
+                disabled={filtrando}
                 className="flex w-full items-center gap-1.5 text-[11px] font-semibold tracking-wide text-ink-500 uppercase"
-                aria-expanded={verAnteriores}
+                aria-expanded={mostraAnteriores}
               >
-                <ChevronDown size={14} className={cn('transition-transform', verAnteriores && 'rotate-180')} />
+                {!filtrando && (
+                  <ChevronDown size={14} className={cn('transition-transform', mostraAnteriores && 'rotate-180')} />
+                )}
                 Anteriores ({anteriores.length})
               </button>
-              {verAnteriores && (
+              {mostraAnteriores && (
                 <div className="mt-2 flex flex-col gap-2">
                   {anteriores.map((j) => (
-                    <CartaoJogo key={j.id} jogo={j} players={ativos} onOpen={() => navigate(`/jogo/${j.id}`)} />
+                    <CartaoJogo
+                      key={j.id}
+                      jogo={j}
+                      players={ativos}
+                      status={statusDe.get(j.id)!}
+                      onOpen={() => navigate(`/jogo/${j.id}`)}
+                    />
                   ))}
                 </div>
               )}
@@ -151,74 +220,135 @@ export function JogosPage() {
           )}
         </>
       )}
-
-      <div className="safe-bottom above-tabbar fixed inset-x-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-lg gap-2">
-          <Button size="lg" className="flex-1" onClick={() => setCriando(true)} disabled={criando}>
-            <CalendarPlus size={19} />
-            Novo jogo
-          </Button>
-          <Button variant="secondary" size="lg" className="shrink-0" onClick={() => navigate('/partida')}>
-            <Swords size={18} />
-            Partida direta
-          </Button>
-        </div>
-      </div>
     </div>
+  );
+}
+
+function FiltroBar({
+  filtros,
+  setFiltros,
+  filtrando,
+}: {
+  filtros: Filtros;
+  setFiltros: (f: Partial<Filtros>) => void;
+  filtrando: boolean;
+}) {
+  const chip = (ativo: boolean) =>
+    cn(
+      'h-9 shrink-0 rounded-lg border px-3 text-xs font-semibold',
+      ativo ? 'border-brand-500 bg-brand-500/15 text-brand-300' : 'border-ink-800 bg-ink-950 text-ink-400',
+    );
+  const campo =
+    'h-10 w-full rounded-lg border border-ink-800 bg-ink-950 px-2.5 text-xs text-ink-200 outline-none [color-scheme:dark]';
+  return (
+    <section className="mt-5" aria-label="Filtros">
+      <div className="no-scrollbar flex gap-1.5 overflow-x-auto">
+        <button className={chip(!filtros.sport)} onClick={() => setFiltros({ sport: null })}>
+          Todas
+        </button>
+        {SPORT_LIST.map((s) => (
+          <button
+            key={s.id}
+            className={chip(filtros.sport === s.id)}
+            aria-pressed={filtros.sport === s.id}
+            onClick={() => setFiltros({ sport: filtros.sport === s.id ? null : s.id })}
+          >
+            {s.emoji} {s.name}
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">Dia</span>
+          <input
+            type="date"
+            value={filtros.dia}
+            onChange={(e) => setFiltros({ dia: e.target.value })}
+            aria-label="Filtrar por dia"
+            className={cn(campo, !filtros.dia && 'text-ink-500')}
+          />
+        </label>
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">Status</span>
+          <select
+            value={filtros.status ?? ''}
+            onChange={(e) => setFiltros({ status: (e.target.value || null) as StatusDoJogo | null })}
+            aria-label="Filtrar por status"
+            className={cn(campo, !filtros.status && 'text-ink-500')}
+          >
+            <option value="">Todos os status</option>
+            {ORDEM_STATUS.map((s) => (
+              <option key={s} value={s}>
+                {ROTULO_STATUS[s]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {filtrando && (
+          <button
+            onClick={() => setFiltros({ sport: null, dia: '', status: null })}
+            className="flex h-10 shrink-0 items-center gap-1 rounded-lg border border-ink-800 px-2.5 text-xs text-ink-300"
+            aria-label="Limpar filtros"
+          >
+            <X size={14} />
+            Limpar
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
 function CartaoJogo({
   jogo,
   players,
-  nosLinks = false,
+  status,
+  destaque = false,
   onOpen,
 }: {
   jogo: Jogo;
   players: Player[];
-  nosLinks?: boolean;
+  status: StatusDoJogo;
+  /** O jogo que está nos links */
+  destaque?: boolean;
   onOpen: () => void;
 }) {
   const dist = vagasDoJogo(jogo, players);
   const jogam = dist.mensalistasConfirmados + dist.convidadosComVaga;
-  const selo =
-    jogo.status === 'cancelado'
-      ? { texto: 'Cancelado', cls: 'border border-ink-700 text-ink-500' }
-      : jogo.status === 'encerrado'
-        ? { texto: 'Encerrado', cls: 'border border-ink-700 text-ink-400' }
-        : nosLinks
-          ? { texto: 'Nos links', cls: 'bg-brand-500/15 text-brand-300' }
-          : null;
+  const esporte = SPORTS[jogo.sport];
   return (
     <button
       onClick={onOpen}
       className={cn(
         'flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left active:scale-[0.99]',
-        nosLinks ? 'border-brand-500/40 bg-ink-900' : 'border-ink-800 bg-ink-900',
+        destaque ? 'border-brand-500/40 bg-ink-900' : 'border-ink-800 bg-ink-900',
       )}
     >
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-ink-800" aria-hidden>
+        <span className="text-xl leading-none">{esporte.emoji}</span>
+      </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
-          <span className="truncate text-[15px] font-semibold capitalize text-ink-50">
-            {fmtDia(jogo)} · {jogo.time}
-          </span>
-          {selo && (
-            <span className={cn('shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase', selo.cls)}>
-              {selo.texto}
-            </span>
+        <span className="block truncate text-[15px] font-semibold capitalize text-ink-50">
+          {fmtDia(jogo)} · {jogo.time}
+        </span>
+        <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-400">
+          <span className="shrink-0 font-medium text-ink-300">{esporte.name}</span>
+          {jogo.place && (
+            <>
+              <span className="text-ink-600">·</span>
+              <MapPin size={12} className="shrink-0 text-ink-500" />
+              <span className="truncate">{jogo.place}</span>
+            </>
           )}
         </span>
-        {jogo.place && (
-          <span className="mt-0.5 flex items-center gap-1 text-xs text-ink-400">
-            <MapPin size={12} className="shrink-0 text-ink-500" />
-            <span className="truncate">{jogo.place}</span>
+        <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-400">
+          <SeloStatus status={status} />
+          <span>
+            <strong className="text-ink-200">{jogam}</strong> {jogam === 1 ? 'confirmado' : 'confirmados'}
+            {jogo.vagas != null && ` de ${jogo.vagas}`}
+            {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
+            {jogo.sorteio && ' · times sorteados'}
           </span>
-        )}
-        <span className="mt-1 block text-xs text-ink-400">
-          <strong className="text-ink-200">{jogam}</strong> {jogam === 1 ? 'confirmado' : 'confirmados'}
-          {jogo.vagas != null && ` de ${jogo.vagas}`}
-          {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
-          {jogo.sorteio && ' · times sorteados'}
         </span>
       </span>
       <ChevronRight size={18} className="shrink-0 text-ink-600" />
