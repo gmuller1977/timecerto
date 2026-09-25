@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Lock, MessageCircle, RefreshCw, UserPlus } from 'lucide-react';
+import { BellRing, ChevronRight, Lock, MessageCircle, RefreshCw, SkipForward, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { useJogoStore } from '@/store/useJogoStore';
+import { useAppStore } from '@/store/useAppStore';
+import { vagasDoJogo } from '@/lib/vagas';
+import { haQuantoChamado } from '@/lib/jogo';
+import { nomeDeExibicao } from '@/lib/nome';
+import { whatsappTo } from '@/lib/phone';
 import {
   createGroup,
   findMyGroup,
@@ -16,7 +21,7 @@ import {
   type CloudGroup,
 } from '@/lib/cloud';
 import { explain } from '@/components/cloud/partes';
-import type { Jogo } from '@/types';
+import type { Jogo, Player } from '@/types';
 
 const fmtData = (jogo: Jogo) =>
   new Date(`${jogo.date}T${jogo.time}`).toLocaleString('pt-BR', {
@@ -125,10 +130,10 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
     if (!jogo.remoteId) return;
     const fechar = !jogo.listaFechada;
     const pergunta = fechar
-      ? 'Fechar a lista? Os links param de aceitar respostas e a fila congela.'
+      ? 'Fechar a lista? Quem tem vaga continua; quem chegar pelos links entra na fila de espera e é chamado se abrir vaga.'
       : jogo.timesPublicados
-        ? 'Reabrir a lista? Os links voltam a aceitar respostas e os times publicados saem do link.'
-        : 'Reabrir a lista? Os links voltam a aceitar respostas.';
+        ? 'Reabrir a lista? Quem estava na fila de espera volta para a fila normal, e os times publicados saem do link.'
+        : 'Reabrir a lista? Quem estava na fila de espera volta para a fila normal.';
     if (!window.confirm(pergunta)) return;
     setBusy(true);
     try {
@@ -207,12 +212,15 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
           ) : (
             <>
               {jogo.listaFechada && (
+                <ChamadasDaEspera jogo={jogo} group={group} detalhes={detalhes} />
+              )}
+              {jogo.listaFechada && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-300">
                   <Lock size={13} className="shrink-0 text-ink-500" />
                   Lista fechada
                   {jogo.timesPublicados
                     ? ' · times publicados no link'
-                    : ' · os links não aceitam mais respostas'}
+                    : ' · quem chega entra na fila de espera'}
                 </p>
               )}
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -258,3 +266,89 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
     </div>
   );
 }
+
+/**
+ * Lista fechada (migração 015): quem o banco chamou da fila de espera. O
+ * administrador avisa pelo WhatsApp — direto no número, se o cadastro tem — e
+ * passa a vez quando achar que esperou o bastante. Não há prazo automático:
+ * perto do jogo, só ele sabe quanto dá para esperar.
+ */
+function ChamadasDaEspera({ jogo, group, detalhes }: { jogo: Jogo; group: CloudGroup; detalhes: string }) {
+  const players = useAppStore((s) => s.players);
+  const responder = useJogoStore((s) => s.responder);
+  const dist = useMemo(() => vagasDoJogo(jogo, players), [jogo, players]);
+  // O "há quanto tempo" anda sozinho
+  const [, setTique] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTique((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const porId = new Map(players.map((p) => [p.id, p]));
+  const chamados = players.filter((p) => dist.situacao.get(p.id)?.tipo === 'chamado');
+  const livres = dist.livres ?? 0;
+
+  if (chamados.length === 0) {
+    if (livres > 0 && dist.naEspera === 0) {
+      return (
+        <p className="mt-2 rounded-xl border border-ink-800 px-3 py-2.5 text-xs leading-relaxed text-ink-400">
+          {livres === 1 ? 'Há 1 vaga aberta' : `Há ${livres} vagas abertas`} e ninguém na fila de espera.
+          Quem entrar pelo link é chamado na hora.
+        </p>
+      );
+    }
+    return null;
+  }
+
+  function chamar(p: Player) {
+    const base = p.kind === 'convidado' && group.guestCode ? guestLink(group.guestCode) : groupLink(group.code);
+    const link = p.remoteId ? `${base}?eu=${p.remoteId}` : base;
+    const texto = `⚡ ${group.name}
+${detalhes}
+
+${nomeDeExibicao(p)}, abriu uma vaga e você é o próximo da fila de espera! Ainda quer jogar? Responda no link:
+${link}`;
+    const destino = p.phone ? whatsappTo(p.phone) : 'https://wa.me/';
+    window.open(`${destino}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+  }
+
+  function passar(p: Player) {
+    const proximo = dist.naEspera > 0 ? 'O próximo da fila de espera será chamado.' : 'A fila de espera está vazia.';
+    if (!window.confirm(`Passar a vez de ${nomeDeExibicao(p)}? ${proximo} Se ele responder depois, volta para o fim da fila.`)) return;
+    responder(jogo.id, p.id, 'pulado');
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2">
+      {chamados.map((p) => {
+        const c = jogo.confirmations.find((x) => x.playerId === p.id);
+        const saiu = c?.vagaDe ? porId.get(c.vagaDe) : undefined;
+        return (
+          <div key={p.id} className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-200">
+              <BellRing size={15} className="shrink-0" />
+              Vaga aberta: {nomeDeExibicao(p)} foi chamado
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-amber-100/80">
+              {haQuantoChamado(c?.chamadoEm, true)}
+              {saiu && ` · no lugar de ${nomeDeExibicao(saiu)}`}
+              {' · '}esperando ele confirmar no link.
+              {!p.phone && ' Sem telefone no cadastro: o WhatsApp abre para escolher o contato.'}
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Button size="sm" onClick={() => chamar(p)}>
+                <MessageCircle size={16} />
+                Chamar no WhatsApp
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => passar(p)}>
+                <SkipForward size={16} />
+                Passar a vez
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+

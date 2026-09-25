@@ -228,3 +228,85 @@ export function drawTeams(
 export function suggestTeamCount(presentCount: number, teamSize: number): number {
   return Math.max(2, Math.floor(presentCount / teamSize));
 }
+
+/** Uma troca nos times sorteados: alguém entra, alguém sai, ou os dois */
+export interface MudancaNosTimes {
+  entra?: Player;
+  sai?: Player;
+  /** Nome do time, ou "Reservas" */
+  onde: string;
+}
+
+/**
+ * A lista mudou depois do sorteio — alguém saiu, alguém foi chamado da fila
+ * de espera e aceitou (migração 015). Devolve os times com a troca feita, sem
+ * sortear de novo, e a lista do que mudou; `null` se os times ainda batem com
+ * quem joga.
+ *
+ * Quem entra vai para o lugar de quem abriu a vaga dele (`vagaDe`), no mesmo
+ * time; sem essa ligação, para o lugar do primeiro que saiu; sem ninguém que
+ * saiu, para o time com menos gente. Quem saiu sem substituto só sai.
+ *
+ * O equilíbrio pode piorar — é o preço de não mexer no time de ninguém. Quem
+ * decide entre isto e sortear de novo é o administrador.
+ */
+export function encaixarNoSorteio(
+  sorteio: DrawResult,
+  jogando: Player[],
+  vagaDe: (playerId: string) => string | undefined,
+): { novo: DrawResult; mudancas: MudancaNosTimes[] } | null {
+  const noSorteio = new Set([...sorteio.teams.flatMap((t) => t.players), ...sorteio.bench].map((p) => p.id));
+  const jogam = new Set(jogando.map((p) => p.id));
+  const novos = jogando.filter((p) => !noSorteio.has(p.id));
+
+  const teams = sorteio.teams.map((t) => ({ ...t, players: [...t.players] }));
+  const bench = [...sorteio.bench];
+  // Onde está cada um que saiu: índice do time, ou -1 para reservas
+  const sairam = [
+    ...teams.flatMap((t, i) => t.players.filter((p) => !jogam.has(p.id)).map((p) => ({ p, time: i }))),
+    ...bench.filter((p) => !jogam.has(p.id)).map((p) => ({ p, time: -1 })),
+  ];
+  if (novos.length === 0 && sairam.length === 0) return null;
+
+  const nomeDe = (i: number) => (i < 0 ? 'Reservas' : teams[i].name);
+  const lista = (i: number) => (i < 0 ? bench : teams[i].players);
+  const mudancas: MudancaNosTimes[] = [];
+  const usados = new Set<string>();
+
+  for (const entra of novos) {
+    const de = vagaDe(entra.id);
+    const par =
+      sairam.find((s) => !usados.has(s.p.id) && s.p.id === de) ??
+      sairam.find((s) => !usados.has(s.p.id) && s.time >= 0) ??
+      sairam.find((s) => !usados.has(s.p.id));
+    if (par) {
+      usados.add(par.p.id);
+      const l = lista(par.time);
+      l[l.indexOf(par.p)] = entra;
+      mudancas.push({ entra, sai: par.p, onde: nomeDe(par.time) });
+    } else {
+      const i = teams.reduce(
+        (m, t, k) =>
+          t.players.length < teams[m].players.length ||
+          (t.players.length === teams[m].players.length && t.totalSkill < teams[m].totalSkill)
+            ? k
+            : m,
+        0,
+      );
+      teams[i].players.push(entra);
+      mudancas.push({ entra, onde: nomeDe(i) });
+    }
+  }
+  for (const s of sairam) {
+    if (usados.has(s.p.id)) continue;
+    const l = lista(s.time);
+    l.splice(l.indexOf(s.p), 1);
+    mudancas.push({ sai: s.p, onde: nomeDe(s.time) });
+  }
+
+  for (const t of teams) recalc(t, sorteio.sport);
+  return {
+    novo: { ...sorteio, id: uid(), teams, bench, balanceScore: balanceScore(teams) },
+    mudancas,
+  };
+}

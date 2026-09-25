@@ -170,6 +170,45 @@ quem é mensalista e quem é convidado (`Player.kind`; ausente = mensalista).
 muda quando a resposta muda: apertar "vou" de novo não pode jogar o convidado
 para o fim da fila.
 
+### Fila de espera com confirmação (amador)
+
+Feito em 25/09/2026, migração 015, com o desenho aprovado pelo Guilherme.
+**Com a lista ABERTA nada muda**: o convidado que passa das vagas fica na
+fila e entra sozinho quando abre vaga. **Com a lista FECHADA**, a fila vira
+espera e precisa de confirmação:
+
+- **Fechar a lista** converte quem estava na fila em `espera`, na ordem.
+  Quem chega pelo link depois — mensalista ou convidado — também entra na
+  espera. O link continua aceitando "não vou" de quem tinha vaga.
+- **Alguém com vaga sai** (link ou administrador): o BANCO chama o primeiro
+  da espera (`chamado`, com `chamado_em` e `vaga_de` = quem saiu). A regra
+  mora em gatilhos (`fila_ao_responder`, `fila_ao_fechar`, `chamar_proximo`),
+  para valer igual pelos dois caminhos. A vaga do chamado fica reservada.
+- **Mensalista vem antes de convidado na espera**, depois por `espera_desde`.
+- **O chamado responde no link**: sim entra, não chama o próximo.
+- **O administrador vê "Vaga aberta"** em `LinksDoJogo` (`ChamadasDaEspera`):
+  "Chamar no WhatsApp" abre a conversa com a mensagem pronta — direto no
+  número se o cadastro tem telefone — e o link leva `?eu=ID`, que já abre como
+  aquela pessoa. **Não há prazo automático**: "Passar a vez" grava `pulado` e o
+  banco chama o próximo. O pulado que responder depois volta para o fim.
+- **Depois do sorteio, quem decide é o administrador** (`AjusteDosTimes` na
+  página do jogo): "Ajustar os times" põe quem entrou no lugar de quem saiu,
+  no mesmo time (`encaixarNoSorteio` em `lib/draw.ts`, pela `vagaDe`), e
+  republica no link se os times estavam publicados; ou "Sortear de novo".
+- Reabrir a lista devolve todos da espera à fila de sempre.
+- `answered_at` continua sendo a hora da última mudança — é por ela que o
+  app sabe o que é mais novo. A ordem da espera é outra coluna,
+  `espera_desde`, justamente para não brigar com isso.
+
+O SQL foi provado num Postgres de verdade (PGlite) antes de ir para o banco:
+fechar, entrar na espera, prioridade do mensalista, sair, recusar, pular,
+aceitar, voltar depois de pulado, vaga sobrando e reabrir.
+
+**Fase 2, pendente**: notificação no celular (web push) para quem permitir.
+Exige service worker, tabela de inscrições e uma Edge Function com a chave
+privada em `supabase secrets`. No iPhone só funciona com o site instalado na
+tela inicial — por isso o WhatsApp da fase 1 continua sendo o aviso real.
+
 ### Jogo: a presença mora no jogo, não no jogador (amador)
 
 Fase A feita em 24/09/2026, aprovada pelo Guilherme. **`Player.present` não

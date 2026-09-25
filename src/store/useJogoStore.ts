@@ -10,6 +10,7 @@ import {
   novoJogo,
   proximoJogo,
   responder,
+  type RespostaDaNuvem,
   semPresent,
 } from '@/lib/jogo';
 import { joga, vagasDoJogo } from '@/lib/vagas';
@@ -45,10 +46,7 @@ interface JogoState {
   /** Resposta do organizador com status explícito (ex.: o avulso chega confirmado) */
   responder: (jogoId: string, playerId: string, status: ConfirmacaoStatus) => void;
   /** Respostas que chegaram pelos links, por id LOCAL */
-  importarDoLink: (
-    jogoId: string,
-    respostas: { playerId: string; status: ConfirmacaoStatus; at: string }[],
-  ) => void;
+  importarDoLink: (jogoId: string, respostas: RespostaDaNuvem[]) => void;
   /** Estas respostas do organizador já estão na nuvem, com esta hora */
   marcarEnviados: (jogoId: string, enviados: { playerId: string; at: string }[]) => void;
   migrar: () => void;

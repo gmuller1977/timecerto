@@ -59,21 +59,45 @@ export function responder(
   };
 }
 
+/** Uma resposta como vem da nuvem, já com o id LOCAL do jogador */
+export interface RespostaDaNuvem {
+  playerId: string;
+  status: ConfirmacaoStatus;
+  at: string;
+  /** Lista fechada (migração 015) */
+  esperaDesde?: string;
+  chamadoEm?: string;
+  vagaDe?: string;
+}
+
 /**
  * Traz respostas dos links. Vale a mais recente: se o organizador mexeu na
  * pessoa depois da resposta dela, o toque dele fica. Aplicadas em ordem de
  * hora, então o `seq` de quem veio pelo link segue a ordem das respostas.
  */
-export function importarRespostas(
-  jogo: Jogo,
-  respostas: { playerId: string; status: ConfirmacaoStatus; at: string }[],
-): Jogo {
+export function importarRespostas(jogo: Jogo, respostas: RespostaDaNuvem[]): Jogo {
   return [...respostas]
     .sort((a, b) => a.at.localeCompare(b.at))
     .reduce((j, r) => {
       const atual = j.confirmations.find((c) => c.playerId === r.playerId);
       if (atual && atual.at >= r.at) return j;
-      return responder(j, r.playerId, r.status, 'link', r.at);
+      const depois = responder(j, r.playerId, r.status, 'link', r.at);
+      // A espera é do banco: a hora, a ordem e de quem é a vaga vêm junto
+      return {
+        ...depois,
+        confirmations: depois.confirmations.map((c) =>
+          c.playerId === r.playerId
+            ? {
+                ...c,
+                at: r.at,
+                enviadoEm: r.at,
+                esperaDesde: r.esperaDesde,
+                chamadoEm: r.chamadoEm,
+                vagaDe: r.vagaDe,
+              }
+            : c,
+        ),
+      };
     }, jogo);
 }
 
@@ -149,6 +173,19 @@ export function statusDoJogo(
   if (ctx.jogoAoVivo === jogo.id) return 'em_jogo';
   if (ctx.proximoId === jogo.id) return jogo.listaFechada ? 'lista_fechada' : 'recebendo';
   return inicioDo(jogo) >= (ctx.agora ?? Date.now()) - JANELA_PROXIMO_MS ? 'agendado' : 'sem_encerrar';
+}
+
+/** "chamado há 12 min": quanto tempo a vaga da espera aguarda a resposta */
+export function haQuantoChamado(desde: string | null | undefined, maiuscula = false, agora = Date.now()): string {
+  const texto = (() => {
+    if (!desde) return 'chamado, esperando resposta';
+    const min = Math.max(0, Math.round((agora - new Date(desde).getTime()) / 60000));
+    if (min < 1) return 'chamado agora';
+    if (min < 60) return `chamado há ${min} min`;
+    const h = Math.floor(min / 60);
+    return `chamado há ${h} h${min % 60 ? ` ${min % 60} min` : ''}`;
+  })();
+  return maiuscula ? texto[0].toUpperCase() + texto.slice(1) : texto;
 }
 
 // ── Migração do antigo `present` ────────────────────────────

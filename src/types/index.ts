@@ -131,7 +131,17 @@ export interface Jogo {
   enviadoEm?: string;
 }
 
-export type ConfirmacaoStatus = 'confirmado' | 'recusado' | 'sem-resposta';
+/**
+ * `espera`, `chamado` e `pulado` são da lista FECHADA (migração 015) e
+ * quem os escreve é o banco — o organizador só escreve `pulado`.
+ */
+export type ConfirmacaoStatus =
+  | 'confirmado'
+  | 'recusado'
+  | 'sem-resposta'
+  | 'espera'
+  | 'chamado'
+  | 'pulado';
 
 export interface Confirmacao {
   /** Id LOCAL do jogador */
@@ -154,6 +164,12 @@ export interface Confirmacao {
    * Resposta que veio do link já nasce enviada.
    */
   enviadoEm?: string;
+  /** Lista fechada: desde quando espera — é a ordem da espera */
+  esperaDesde?: string;
+  /** Quando foi chamado da espera */
+  chamadoEm?: string;
+  /** Id LOCAL de quem saiu e abriu a vaga do chamado */
+  vagaDe?: string;
 }
 
 export interface Team {

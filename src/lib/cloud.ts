@@ -578,6 +578,24 @@ export async function openEvent(groupId: string): Promise<CloudEvent | null> {
  * `answered_at` vai com a hora do toque: é o que ordena a fila no link, e ela
  * tem de bater com o `seq` do aparelho.
  */
+/** A resposta do aparelho como a nuvem guarda (migrações 013 e 015) */
+const STATUS_PARA_NUVEM: Record<ConfirmacaoStatus, string> = {
+  confirmado: 'vou',
+  recusado: 'nao_vou',
+  'sem-resposta': 'sem_resposta',
+  espera: 'espera',
+  chamado: 'chamado',
+  pulado: 'pulado',
+};
+const STATUS_DA_NUVEM: Record<string, ConfirmacaoStatus> = {
+  vou: 'confirmado',
+  nao_vou: 'recusado',
+  sem_resposta: 'sem-resposta',
+  espera: 'espera',
+  chamado: 'chamado',
+  pulado: 'pulado',
+};
+
 export async function enviarRespostas(
   eventId: string,
   itens: { remoteId: string; status: ConfirmacaoStatus; at: string }[],
@@ -587,7 +605,7 @@ export async function enviarRespostas(
   const gravar = itens.map((i) => ({
     event_id: eventId,
     player_id: i.remoteId,
-    status: i.status === 'confirmado' ? 'vou' : i.status === 'recusado' ? 'nao_vou' : 'sem_resposta',
+    status: STATUS_PARA_NUVEM[i.status],
     answered_at: i.at,
   }));
   if (gravar.length > 0) {
@@ -599,8 +617,9 @@ export async function enviarRespostas(
 }
 
 /**
- * Fecha ou reabre a lista. Fechada, o link para de aceitar resposta e a fila
- * congela — é o que deixa o sorteio publicado bater com a lista.
+ * Fecha ou reabre a lista. Fechada, quem tem vaga fica e quem chega vai para
+ * a fila de espera (migração 015: o banco converte a fila e chama o próximo
+ * quando abre vaga) — é o que deixa o sorteio publicado bater com a lista.
  *
  * Reabrir tira os times do link: com respostas mudando, eles deixariam de
  * valer, e time velho no link é pior que nenhum.
@@ -676,8 +695,11 @@ export interface GuestGroup {
     name: string;
     kind: PlayerKind;
     position: string | null;
-    status: 'vou' | 'nao_vou' | null;
+    status: 'vou' | 'nao_vou' | 'espera' | 'chamado' | 'pulado' | null;
     answeredAt: string | null;
+    /** Lista fechada (migração 015) */
+    esperaDesde: string | null;
+    chamadoEm: string | null;
     /** Nome de quem levou, quando a pessoa entrou como convidado */
     invitedBy: string | null;
   }[];
@@ -1045,10 +1067,12 @@ async function sincronizarRespostas() {
         .map((p) => [p.remoteId!, p.id]),
     );
 
-  for (const j of ativos) {
+  // A espera (lista fechada, migração 015) é decidida no banco: quem foi
+  // chamado, desde quando, e de quem era a vaga
+  const receber = async (j: Jogo) => {
     const { data, error } = await db()
       .from('attendance')
-      .select('player_id, status, answered_at')
+      .select('player_id, status, answered_at, espera_desde, chamado_em, vaga_de')
       .eq('event_id', j.remoteId!);
     if (error) throw error;
     const mapa = localDe();
@@ -1057,11 +1081,22 @@ async function sincronizarRespostas() {
       (data ?? []).flatMap((a) => {
         const playerId = mapa.get(a.player_id);
         if (!playerId) return [];
-        const status: ConfirmacaoStatus =
-          a.status === 'vou' ? 'confirmado' : a.status === 'nao_vou' ? 'recusado' : 'sem-resposta';
-        return [{ playerId, status, at: a.answered_at }];
+        return [
+          {
+            playerId,
+            status: STATUS_DA_NUVEM[a.status] ?? 'sem-resposta',
+            at: a.answered_at,
+            esperaDesde: a.espera_desde ?? undefined,
+            chamadoEm: a.chamado_em ?? undefined,
+            vagaDe: (a.vaga_de && mapa.get(a.vaga_de)) || undefined,
+          },
+        ];
       }),
     );
+  };
+
+  for (const j of ativos) {
+    await receber(j);
 
     const atual = useJogoStore.getState().jogos.find((x) => x.id === j.id);
     const itens = atual ? pendentesDeEnvio(atual) : [];
@@ -1073,6 +1108,9 @@ async function sincronizarRespostas() {
     });
     await enviarRespostas(j.remoteId!, envio);
     useJogoStore.getState().marcarEnviados(j.id, itens.map((c) => ({ playerId: c.playerId, at: c.at })));
+    // O envio pode ter aberto vaga e o banco já chamou alguém: lê de novo,
+    // para o administrador ver quem foi chamado sem esperar a próxima rodada
+    if (j.listaFechada) await receber(j);
   }
 }
 

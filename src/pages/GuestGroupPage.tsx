@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Check, Lock, MapPin, UserPlus, X } from 'lucide-react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { BellRing, Check, Hourglass, Lock, MapPin, UserPlus, X } from 'lucide-react';
 import {
   guestAddPlayer,
   guestGroup,
@@ -57,12 +57,22 @@ const fmtEvent = (iso: string) =>
  *
  * Vaga e fila saem de `distribuirVagas`, a mesma função da tela do
  * organizador — as três telas não podem discordar sobre quem joga.
+ *
+ * Com a lista fechada (migração 015) o link continua vivo: quem tinha vaga
+ * pode sair, quem chega entra na fila de espera, e quem foi chamado da espera
+ * confirma aqui. `?eu=ID` no link — é o que o administrador manda pelo
+ * WhatsApp ao chamar alguém — já abre como aquela pessoa.
  */
 export function GuestGroupPage() {
   const { code = '' } = useParams();
+  const [params] = useSearchParams();
   const [data, setData] = useState<GuestGroup | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [me, setMe] = useState<string | null>(() => readMe(code));
+  const [me, setMe] = useState<string | null>(() => {
+    const doLink = params.get('eu');
+    if (doLink) writeMe(code, doLink);
+    return doLink ?? readMe(code);
+  });
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -89,16 +99,16 @@ export function GuestGroupPage() {
     load();
   }, [load]);
 
-  // Lista fechada e times ainda não publicados: o sorteio está para sair, e
-  // quem está olhando o link vê os times chegarem sem recarregar
-  const esperandoTimes = Boolean(data?.event?.listClosed && !data.event.teams);
+  // Lista fechada: os times estão para sair, e a fila de espera anda — quem
+  // está olhando o link vê as duas coisas chegarem sem recarregar
+  const acompanhando = Boolean(data?.event?.listClosed);
   useEffect(() => {
-    if (!esperandoTimes) return;
+    if (!acompanhando) return;
     const timer = setInterval(() => {
       if (!document.hidden) load();
     }, 20_000);
     return () => clearInterval(timer);
-  }, [esperandoTimes, load]);
+  }, [acompanhando, load]);
 
   if (error) return <Frame><p className="mt-10 text-center text-sm leading-relaxed text-ink-400">{error}</p></Frame>;
   if (!data) return <Frame><p className="mt-10 text-center text-sm text-ink-500">Carregando…</p></Frame>;
@@ -115,6 +125,11 @@ export function GuestGroupPage() {
     .filter((p) => sit(p.id)?.tipo === 'fila')
     .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
   const comVaga = convidados.filter((p) => sit(p.id)?.tipo === 'vaga');
+  // Lista fechada: quem foi chamado e quem espera, mensalista ou convidado
+  const chamados = data.players.filter((p) => sit(p.id)?.tipo === 'chamado');
+  const espera = data.players
+    .filter((p) => sit(p.id)?.tipo === 'espera')
+    .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
 
   // No link de convidados, "eu" só pode ser um convidado; no dos mensalistas, um mensalista
   const mine = data.players.find(
@@ -164,9 +179,11 @@ export function GuestGroupPage() {
         {viaConvidados ? 'Qual é o seu nome?' : 'Quem você vai levar?'}
       </p>
       <p className="mt-1 text-xs leading-relaxed text-ink-500">
-        {event?.slots
-          ? 'Entra na fila de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.'
-          : 'Entra na lista de convidados, já confirmado.'}
+        {fechada
+          ? 'A lista já fechou: entra na fila de espera. Se alguém sair, é chamado aqui para confirmar se ainda quer jogar.'
+          : event?.slots
+            ? 'Entra na fila de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.'
+            : 'Entra na lista de convidados, já confirmado.'}
       </p>
       <input
         autoFocus
@@ -216,7 +233,13 @@ export function GuestGroupPage() {
           disabled={saving || newName.trim().length < 2 || !newPosition}
           className="h-12 flex-1 rounded-xl bg-brand-500 font-semibold text-ink-950 disabled:opacity-40"
         >
-          {saving ? 'Enviando…' : viaConvidados ? 'Quero jogar' : 'Incluir convidado'}
+          {saving
+            ? 'Enviando…'
+            : fechada
+              ? 'Entrar na fila de espera'
+              : viaConvidados
+                ? 'Quero jogar'
+                : 'Incluir convidado'}
         </button>
       </div>
     </form>
@@ -248,7 +271,7 @@ export function GuestGroupPage() {
           )}
           <p className="mt-1 text-sm text-ink-400">
             {event.slots
-              ? `${dist.mensalistasConfirmados + dist.convidadosComVaga} de ${event.slots} vagas preenchidas${dist.naFila ? ` · ${dist.naFila} na fila` : ''}`
+              ? `${dist.mensalistasConfirmados + dist.convidadosComVaga} de ${event.slots} vagas preenchidas${dist.naFila ? ` · ${dist.naFila} na fila` : ''}${dist.naEspera ? ` · ${dist.naEspera} na fila de espera` : ''}`
               : `${dist.mensalistasConfirmados + dist.convidadosComVaga} confirmados`}
           </p>
           {fechada && (
@@ -280,14 +303,7 @@ export function GuestGroupPage() {
                 }}
               />
             ) : viaConvidados ? (
-              fechada ? (
-                <p className="text-sm leading-relaxed text-ink-400">
-                  A lista deste jogo já fechou. Quer jogar mesmo assim? Fale com o
-                  organizador.
-                </p>
-              ) : (
-                nameForm
-              )
+              nameForm
             ) : (
               <>
                 <p className="text-[15px] font-semibold text-ink-50">Quem é você?</p>
@@ -327,6 +343,8 @@ export function GuestGroupPage() {
                 <span className="w-5 shrink-0">
                   {p.status === 'vou' && <Check size={17} className="text-brand-400" />}
                   {p.status === 'nao_vou' && <X size={17} className="text-ink-500" />}
+                  {p.status === 'espera' && <Hourglass size={16} className="text-ink-400" />}
+                  {p.status === 'chamado' && <BellRing size={16} className="text-amber-300" />}
                 </span>
               </button>
             ))}
@@ -388,8 +406,33 @@ export function GuestGroupPage() {
         </section>
       )}
 
+      {/* Lista fechada: a fila de espera, na ordem em que será chamada */}
+      {event && fechada && (chamados.length > 0 || espera.length > 0) && (
+        <section className="mt-6">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
+            Fila de espera
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {chamados.map((p) => (
+              <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
+                <span className="text-xs font-medium text-amber-300">chamado, confirmando</span>
+              </GuestLine>
+            ))}
+            {espera.map((p) => (
+              <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
+                <span className="text-xs text-ink-400">{posicao(sit(p.id))}º na espera</span>
+              </GuestLine>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+            Se alguém com vaga sair, o primeiro da espera é chamado para confirmar. Mensalistas vêm antes
+            dos convidados.
+          </p>
+        </section>
+      )}
+
       {/* Mensalista leva alguém de fora */}
-      {!viaConvidados && event && mine && !fechada && (
+      {!viaConvidados && event && mine && (
         <section className="mt-4">
           {formOpen ? (
             nameForm
@@ -399,7 +442,7 @@ export function GuestGroupPage() {
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 py-3.5 text-sm font-medium text-brand-300"
             >
               <UserPlus size={17} />
-              Levar alguém de fora
+              {fechada ? 'Pôr alguém de fora na fila de espera' : 'Levar alguém de fora'}
             </button>
           )}
         </section>
@@ -409,7 +452,7 @@ export function GuestGroupPage() {
 }
 
 function posicao(s: Situacao | undefined): number {
-  return s?.tipo === 'fila' ? s.posicao : 0;
+  return s?.tipo === 'fila' || s?.tipo === 'espera' ? s.posicao : 0;
 }
 
 function MyCard({
@@ -424,40 +467,123 @@ function MyCard({
   name: string;
   situacao: Situacao | undefined;
   convidado: boolean;
-  /** Lista fechada: mostra a situação, sem os botões */
+  /** Lista fechada: vale a fila de espera (migração 015) */
   fechada: boolean;
   saving: boolean;
   onAnswer: (s: 'vou' | 'nao_vou') => void;
   onNotMe: () => void;
 }) {
+  const cabecalho = (
+    <p className="text-sm text-ink-400">
+      Você é <span className="font-semibold text-ink-50">{name}</span>
+      <button onClick={onNotMe} className="ml-2 text-xs text-ink-500 underline">
+        não sou eu
+      </button>
+    </p>
+  );
+  const botao = (texto: React.ReactNode, onClick: () => void, forte = true) => (
+    <button
+      disabled={saving}
+      onClick={onClick}
+      className={cn(
+        'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98] disabled:opacity-50',
+        forte ? 'border-brand-500 bg-brand-500 text-ink-950' : 'border-ink-700 bg-ink-800 text-ink-100',
+      )}
+    >
+      {texto}
+    </button>
+  );
+
+  if (fechada) {
+    const tipo = situacao?.tipo;
+    // Abriu vaga para ele: a pergunta que importa, em destaque
+    if (tipo === 'chamado') {
+      return (
+        <div className="rounded-2xl border-2 border-amber-400/70 bg-amber-500/10 p-4">
+          {cabecalho}
+          <p className="mt-3 flex items-center gap-2 text-lg font-bold text-amber-200">
+            <BellRing size={20} className="shrink-0" />
+            Abriu uma vaga para você!
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-100/85">
+            Você era o próximo da fila de espera. Ainda quer jogar? Se não puder, a vaga vai
+            para o próximo.
+          </p>
+          <div className="mt-3 flex gap-2">
+            {botao(<><Check size={20} /> Sim, quero jogar</>, () => onAnswer('vou'))}
+            {botao(<><X size={20} /> Não posso</>, () => onAnswer('nao_vou'), false)}
+          </div>
+        </div>
+      );
+    }
+    const vai = tipo === 'confirmado' || tipo === 'vaga';
+    const esperando = tipo === 'espera' || tipo === 'fila';
+    return (
+      <div className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
+        {cabecalho}
+        {vai ? (
+          <>
+            <p className="mt-3 rounded-xl bg-brand-500/15 px-3 py-2.5 text-sm font-medium text-brand-200">
+              {tipo === 'vaga' ? 'Você tem vaga neste jogo' : 'Presença confirmada'}
+            </p>
+            <button
+              disabled={saving}
+              onClick={() => {
+                if (window.confirm('Sair do jogo? A sua vaga vai para o próximo da fila de espera.')) {
+                  onAnswer('nao_vou');
+                }
+              }}
+              className="mt-3 text-sm text-ink-400 underline"
+            >
+              Não vou mais
+            </button>
+          </>
+        ) : esperando ? (
+          <>
+            <p className="mt-3 flex items-start gap-2 rounded-xl bg-ink-800 px-3 py-2.5 text-sm text-ink-200">
+              <Hourglass size={16} className="mt-0.5 shrink-0 text-ink-400" />
+              <span>
+                Você é o <strong>{situacao && 'posicao' in situacao ? situacao.posicao : 1}º</strong> da fila de
+                espera. Se alguém sair, você é chamado aqui para confirmar — e o organizador te avisa.
+              </span>
+            </p>
+            <button disabled={saving} onClick={() => onAnswer('nao_vou')} className="mt-3 text-sm text-ink-400 underline">
+              Sair da fila
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mt-3 text-sm leading-relaxed text-ink-300">
+              {tipo === 'pulado'
+                ? 'Abriu uma vaga, mas a vez passou para o próximo antes da sua resposta.'
+                : 'A lista deste jogo já fechou.'}{' '}
+              Ainda dá para entrar na fila de espera: se alguém sair, você é chamado para confirmar.
+            </p>
+            <div className="mt-3 flex">
+              {botao(tipo === 'pulado' ? 'Voltar para a fila de espera' : 'Entrar na fila de espera', () => onAnswer('vou'))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   const vai = situacao?.tipo === 'confirmado' || situacao?.tipo === 'vaga' || situacao?.tipo === 'fila';
   const status =
     situacao?.tipo === 'vaga'
       ? { text: 'Você tem vaga neste jogo', tone: 'ok' as const }
       : situacao?.tipo === 'fila'
         ? {
-            text: fechada
-              ? `A lista fechou com você em ${situacao.posicao}º na fila, sem vaga neste jogo.`
-              : `Você é o ${situacao.posicao}º da fila. Se abrir vaga, você entra sozinho.`,
+            text: `Você é o ${situacao.posicao}º da fila. Se abrir vaga, você entra sozinho.`,
             tone: 'wait' as const,
           }
         : situacao?.tipo === 'confirmado'
           ? { text: 'Presença confirmada', tone: 'ok' as const }
-          : fechada
-            ? {
-                text: situacao?.tipo === 'nao_vou' ? 'Você marcou que não vai' : 'Você não respondeu a tempo',
-                tone: 'wait' as const,
-              }
-            : null;
+          : null;
 
   return (
     <div className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
-      <p className="text-sm text-ink-400">
-        Você é <span className="font-semibold text-ink-50">{name}</span>
-        <button onClick={onNotMe} className="ml-2 text-xs text-ink-500 underline">
-          não sou eu
-        </button>
-      </p>
+      {cabecalho}
       {status && (
         <p
           className={cn(
@@ -468,45 +594,37 @@ function MyCard({
           {status.text}
         </p>
       )}
-      {fechada ? (
-        <p className="mt-3 text-xs leading-relaxed text-ink-500">
-          A lista fechou. Para mudar a sua resposta, fale com o organizador.
-        </p>
-      ) : (
-        <>
-          <p className="mt-3 text-[15px] font-semibold text-ink-50">
-            {convidado ? (vai ? 'Mudou de ideia?' : 'Vai jogar?') : 'Você vai?'}
-          </p>
-          <div className="mt-2 flex gap-2">
-            <button
-              disabled={saving}
-              onClick={() => onAnswer('vou')}
-              className={cn(
-                'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
-                vai ? 'border-brand-500 bg-brand-500 text-ink-950' : 'border-ink-700 bg-ink-800 text-ink-100',
-              )}
-            >
-              <Check size={20} /> Vou
-            </button>
-            <button
-              disabled={saving}
-              onClick={() => onAnswer('nao_vou')}
-              className={cn(
-                'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
-                situacao?.tipo === 'nao_vou'
-                  ? 'border-ink-400 bg-ink-600 text-ink-50'
-                  : 'border-ink-700 bg-ink-800 text-ink-100',
-              )}
-            >
-              <X size={20} /> Não vou
-            </button>
-          </div>
-          {convidado && vai && (
-            <p className="mt-2 text-xs leading-relaxed text-ink-500">
-              Se desistir e depois voltar, você vai para o fim da fila.
-            </p>
+      <p className="mt-3 text-[15px] font-semibold text-ink-50">
+        {convidado ? (vai ? 'Mudou de ideia?' : 'Vai jogar?') : 'Você vai?'}
+      </p>
+      <div className="mt-2 flex gap-2">
+        <button
+          disabled={saving}
+          onClick={() => onAnswer('vou')}
+          className={cn(
+            'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
+            vai ? 'border-brand-500 bg-brand-500 text-ink-950' : 'border-ink-700 bg-ink-800 text-ink-100',
           )}
-        </>
+        >
+          <Check size={20} /> Vou
+        </button>
+        <button
+          disabled={saving}
+          onClick={() => onAnswer('nao_vou')}
+          className={cn(
+            'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
+            situacao?.tipo === 'nao_vou'
+              ? 'border-ink-400 bg-ink-600 text-ink-50'
+              : 'border-ink-700 bg-ink-800 text-ink-100',
+          )}
+        >
+          <X size={20} /> Não vou
+        </button>
+      </div>
+      {convidado && vai && (
+        <p className="mt-2 text-xs leading-relaxed text-ink-500">
+          Se desistir e depois voltar, você vai para o fim da fila.
+        </p>
       )}
     </div>
   );

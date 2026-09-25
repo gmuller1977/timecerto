@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-
 import {
   ArrowLeft,
   Ban,
+  BellRing,
   Check,
   ChevronRight,
   Flag,
@@ -19,7 +20,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { FormJogo } from '@/components/jogo/FormJogo';
 import { SeloStatus } from '@/components/jogo/SeloStatus';
-import { statusDoJogo } from '@/lib/jogo';
+import { haQuantoChamado, statusDoJogo } from '@/lib/jogo';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogo, useJogoStore, useProximoJogo } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -27,7 +28,7 @@ import { useHydrated } from '@/store/useHydrated';
 import { nomeDeExibicao } from '@/lib/nome';
 import { vagasDoJogo, joga, type Situacao } from '@/lib/vagas';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
-import { TEAM_COLOR_CLASSES } from '@/lib/draw';
+import { TEAM_COLOR_CLASSES, encaixarNoSorteio } from '@/lib/draw';
 import { computeAllStats, formatDate } from '@/lib/stats';
 import { SPORTS } from '@/lib/sports';
 import { setsWonBy } from '@/lib/volleyStats';
@@ -228,6 +229,10 @@ function Pagina({
         </span>
       </p>
 
+      {jogo.status === 'aberto' && jogo.sorteio && (
+        <AjusteDosTimes jogo={jogo} players={players} dist={dist} comSessao={comSessao} navigate={navigate} />
+      )}
+
       {editando && (
         <section className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
           <FormJogo jogo={jogo} onCancel={() => setEditando(false)} onDone={() => setEditando(false)} />
@@ -413,12 +418,16 @@ function Confirmados({
     const tipo = (p: Player) => dist.situacao.get(p.id)?.tipo;
     const posicao = (p: Player) => {
       const s = dist.situacao.get(p.id);
-      return s?.tipo === 'fila' ? s.posicao : 0;
+      return s?.tipo === 'fila' || s?.tipo === 'espera' ? s.posicao : 0;
     };
     return {
       vao: list.filter((p) => tipo(p) === 'confirmado' || tipo(p) === 'vaga'),
       fila: list.filter((p) => tipo(p) === 'fila').sort((a, b) => posicao(a) - posicao(b)),
-      ausentes: list.filter((p) => !['confirmado', 'vaga', 'fila'].includes(tipo(p) ?? '')),
+      chamados: list.filter((p) => tipo(p) === 'chamado'),
+      espera: list.filter((p) => tipo(p) === 'espera').sort((a, b) => posicao(a) - posicao(b)),
+      ausentes: list.filter(
+        (p) => !['confirmado', 'vaga', 'fila', 'chamado', 'espera'].includes(tipo(p) ?? ''),
+      ),
     };
   }, [players, query, dist]);
 
@@ -440,7 +449,8 @@ function Confirmados({
         <p className="text-sm text-ink-400">
           <strong className="text-ink-100">{confirmados}</strong> de {players.length} marcados
         </p>
-        {editavel && players.length > 0 && (
+        {/* Com a lista fechada, marcar todos furaria a fila de espera */}
+        {editavel && !jogo.listaFechada && players.length > 0 && (
           <button
             onClick={() => marcarTodos(jogo.id, players.map((p) => p.id), confirmados !== players.length)}
             className="text-xs font-medium text-brand-400"
@@ -464,6 +474,8 @@ function Confirmados({
 
       <Grupo titulo="Confirmados" players={grupos.vao} sit={sit} onToggle={onToggle} />
       <Grupo titulo="Fila" players={grupos.fila} sit={sit} onToggle={onToggle} />
+      <Grupo titulo="Chamados da espera" players={grupos.chamados} sit={sit} onToggle={onToggle} />
+      <Grupo titulo="Fila de espera" players={grupos.espera} sit={sit} onToggle={onToggle} />
       <Grupo titulo="Ausentes" players={grupos.ausentes} sit={sit} onToggle={onToggle} />
 
       {editavel &&
@@ -533,8 +545,9 @@ function Grupo({
 function PresenceRow({ player, situacao, onToggle }: { player: Player; situacao: Situacao | undefined; onToggle: () => void }) {
   const convidado = player.kind === 'convidado';
   const vai = situacao?.tipo === 'confirmado' || situacao?.tipo === 'vaga';
-  const naFila = situacao?.tipo === 'fila';
-  const confirmou = vai || naFila;
+  const naFila = situacao?.tipo === 'fila' || situacao?.tipo === 'espera';
+  const chamado = situacao?.tipo === 'chamado';
+  const confirmou = vai || naFila || chamado;
   return (
     <button
       onClick={onToggle}
@@ -548,14 +561,32 @@ function PresenceRow({ player, situacao, onToggle }: { player: Player; situacao:
       <span
         className={cn(
           'flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold transition-colors',
-          vai ? 'bg-brand-500 text-ink-950' : naFila ? 'border border-brand-500/50 text-brand-300' : 'bg-ink-800 text-ink-500',
+          vai
+            ? 'bg-brand-500 text-ink-950'
+            : chamado
+              ? 'border-2 border-amber-400 text-amber-300'
+              : naFila
+                ? 'border border-brand-500/50 text-brand-300'
+                : 'bg-ink-800 text-ink-500',
         )}
       >
-        {vai ? <Check size={18} strokeWidth={3} /> : situacao?.tipo === 'fila' ? `${situacao.posicao}º` : initials(player.name)}
+        {vai ? (
+          <Check size={18} strokeWidth={3} />
+        ) : chamado ? (
+          <BellRing size={17} />
+        ) : situacao?.tipo === 'fila' || situacao?.tipo === 'espera' ? (
+          `${situacao.posicao}º`
+        ) : (
+          initials(player.name)
+        )}
       </span>
       <span className={cn('min-w-0 flex-1 truncate text-[15px] font-medium', vai ? 'text-ink-50' : 'text-ink-400')}>
         {nomeDeExibicao(player)}
         {situacao?.tipo === 'nao_vou' && <span className="ml-2 text-xs font-normal text-ink-500">não vai</span>}
+        {situacao?.tipo === 'pulado' && (
+          <span className="ml-2 text-xs font-normal text-ink-500">a vez passou</span>
+        )}
+        {chamado && <span className="block text-xs font-normal text-amber-300">{haQuantoChamado(situacao.desde)}</span>}
       </span>
       <span
         className={cn(
@@ -566,6 +597,93 @@ function PresenceRow({ player, situacao, onToggle }: { player: Player; situacao:
         {convidado ? 'Convidado' : 'Mensalista'}
       </span>
     </button>
+  );
+}
+
+/**
+ * A lista mudou depois do sorteio: alguém saiu, alguém foi chamado da espera
+ * e aceitou. Decidido pelo Guilherme em 25/09/2026 que quem escolhe é o
+ * administrador — encaixar sem mexer no resto, ou sortear de novo.
+ */
+function AjusteDosTimes({
+  jogo,
+  players,
+  dist,
+  comSessao,
+  navigate,
+}: {
+  jogo: Jogo;
+  players: Player[];
+  dist: ReturnType<typeof vagasDoJogo>;
+  comSessao: boolean;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const guardarSorteio = useJogoStore((s) => s.guardarSorteio);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const plano = useMemo(() => {
+    if (!jogo.sorteio) return null;
+    const jogando = players.filter((p) => joga(dist.situacao.get(p.id)));
+    const vagaDe = new Map(jogo.confirmations.map((c) => [c.playerId, c.vagaDe]));
+    return encaixarNoSorteio(jogo.sorteio, jogando, (id) => vagaDe.get(id));
+  }, [jogo.sorteio, jogo.confirmations, players, dist]);
+
+  // Depois do ajuste o plano some; o que aconteceu com o link fica à vista
+  if (!plano) {
+    return aviso ? <p className="mt-3 rounded-xl bg-ink-900 px-3 py-2 text-xs text-ink-300">{aviso}</p> : null;
+  }
+
+  async function ajustar() {
+    if (!plano) return;
+    const novo = { ...plano.novo, jogoId: jogo.id, eventId: jogo.remoteId };
+    guardarSorteio(jogo.id, novo);
+    // Times no link têm de acompanhar: time velho no link é pior que nenhum
+    if (jogo.timesPublicados && jogo.remoteId && comSessao) {
+      try {
+        const { publishTeams } = await import('@/lib/cloud');
+        await publishTeams(jogo.remoteId, novo);
+        setAviso('Times ajustados e atualizados no link.');
+      } catch (e) {
+        console.error('republicar times', e);
+        setAviso('Times ajustados aqui, mas não deu para atualizar o link. Publique de novo no resultado.');
+      }
+    } else {
+      setAviso(null);
+    }
+  }
+
+  const frase = (m: (typeof plano.mudancas)[number]) =>
+    m.entra && m.sai
+      ? `${nomeDeExibicao(m.entra)} entra no lugar de ${nomeDeExibicao(m.sai)} (${m.onde})`
+      : m.entra
+        ? `${nomeDeExibicao(m.entra)} entra no ${m.onde}`
+        : `${nomeDeExibicao(m.sai!)} sai do ${m.onde}`;
+
+  return (
+    <section className="mt-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+      <p className="text-sm font-semibold text-amber-200">A lista mudou depois do sorteio</p>
+      <ul className="mt-1 list-disc pl-5 text-xs leading-relaxed text-amber-100/85">
+        {plano.mudancas.map((m, i) => (
+          <li key={i}>{frase(m)}</li>
+        ))}
+      </ul>
+      {dist.chamados > 0 && (
+        <p className="mt-1.5 text-xs leading-relaxed text-amber-100">
+          {dist.chamados === 1 ? 'Há 1 pessoa chamada' : `Há ${dist.chamados} pessoas chamadas`} da fila de
+          espera sem responder. Vale esperar a resposta antes de ajustar.
+        </p>
+      )}
+      <div className="mt-2.5 grid grid-cols-2 gap-2">
+        <Button size="sm" onClick={ajustar}>
+          Ajustar os times
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => navigate('/sortear', { state: { jogoId: jogo.id } })}>
+          Sortear de novo
+        </Button>
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-amber-100/70">
+        Ajustar troca só quem mudou; o equilíbrio pode piorar um pouco. Sortear de novo refaz todos os times.
+      </p>
+    </section>
   );
 }
 
