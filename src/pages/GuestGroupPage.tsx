@@ -14,6 +14,7 @@ import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
 import { cn } from '@/lib/utils';
+import { AvisoDoAtleta } from '@/components/cloud/Avisos';
 
 /** Quem este aparelho é, por link. Conveniência — errar custa um toque. */
 const meKey = (code: string) => `timecerto:guest:${code.toUpperCase()}`;
@@ -290,18 +291,21 @@ export function GuestGroupPage() {
           {/* Eu */}
           <section className="mt-6">
             {mine ? (
-              <MyCard
-                name={mine.name}
-                situacao={sit(mine.id)}
-                convidado={viaConvidados}
-                fechada={fechada}
-                saving={saving}
-                onAnswer={answer}
-                onNotMe={() => {
-                  writeMe(code, null);
-                  setMe(null);
-                }}
-              />
+              <>
+                <MyCard
+                  name={mine.name}
+                  situacao={sit(mine.id)}
+                  convidado={viaConvidados}
+                  fechada={fechada}
+                  saving={saving}
+                  onAnswer={answer}
+                  onNotMe={() => {
+                    writeMe(code, null);
+                    setMe(null);
+                  }}
+                />
+                <AvisoDoAtleta code={code} playerId={mine.id} />
+              </>
             ) : viaConvidados ? (
               nameForm
             ) : (

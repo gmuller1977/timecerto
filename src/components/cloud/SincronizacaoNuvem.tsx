@@ -3,7 +3,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useAuth } from '@/store/useAuth';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { findMyGroup, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
+import { anunciarJogo, findMyGroup, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 
 const naoEnviado = (x: { remoteId?: string; enviadoEm?: string; updatedAt?: string }) =>
@@ -30,6 +30,10 @@ async function rodar(): Promise<void> {
       await syncAmador(grupo);
       await sincronizarJogos(grupo);
       await sincronizarPartidas(grupo);
+      // O jogo que virou o próximo porque o anterior passou da janela de 12 h:
+      // nada muda no banco nessa hora, então quem anuncia é esta rodada.
+      // Falhar aqui não pode travar a sincronização
+      await anunciarJogo(grupo).catch((e) => console.warn('anunciar o próximo jogo', e));
     }
   } catch (e) {
     console.error('sincronizar com a nuvem', e);

@@ -210,10 +210,53 @@ O SQL foi provado num Postgres de verdade (PGlite) antes de ir para o banco:
 fechar, entrar na espera, prioridade do mensalista, sair, recusar, pular,
 aceitar, voltar depois de pulado, vaga sobrando e reabrir.
 
-**Fase 2, pendente**: notificação no celular (web push) para quem permitir.
-Exige service worker, tabela de inscrições e uma Edge Function com a chave
-privada em `supabase secrets`. No iPhone só funciona com o site instalado na
-tela inicial — por isso o WhatsApp da fase 1 continua sendo o aviso real.
+**Fase 2 — avisos no celular: feita**, ver a seção seguinte.
+
+### Avisos no celular (web push)
+
+Feito em 25/09/2026, migração 016, com o escopo decidido pelo Guilherme. Quem
+ativa **"Me avise pelo celular"** no link (`AvisoDoAtleta`) recebe: vaga
+aberta para ele, jogo novo marcado, o próprio time quando é publicado ou muda,
+e o aviso manual do administrador. O administrador que ativa em **Ajustes ›
+Avisos no celular** (`AvisosDoAdmin`) recebe: alguém saiu da lista fechada, o
+chamado aceitou ou recusou, e vaga aberta sem ninguém na espera.
+
+- **Caixa de saída**: todo aviso vira uma linha em `avisos`, gravada pelos
+  gatilhos ou por `avisar_inscritos`. Só entra quem tem para onde entregar.
+  Um **Database Webhook** chama a Edge Function
+  [`enviar-aviso`](supabase/functions/enviar-aviso/index.ts) a cada linha nova.
+- **A função marca "saiu" antes de entregar**: chamá-la de fora ou duas vezes
+  não inventa nem repete aviso. Inscrição que o serviço de push dá por morta
+  (404/410) é apagada.
+- **As tabelas não têm política**: só as funções mexem. O administrador sabe
+  QUAIS atletas têm aviso (`inscritos_com_aviso`), nunca as chaves.
+- **Só endereços dos serviços de push** (Google, Apple, Mozilla, Microsoft),
+  no banco e de novo na função: sem isso, alguém cadastraria um endereço
+  qualquer e faria o servidor mandar requisições para ele.
+- **Jogo novo** é anunciado uma vez (`events.anunciado_em`): ao criar ou
+  mudar um jogo, e pela sincronização do administrador (`anunciar_jogo`) —
+  que pega o jogo que virou o próximo só porque o anterior passou da janela.
+  Os jogos que existiam ao rodar a migração contam como anunciados.
+- **Times**: só quem mudou de lugar é avisado; republicar depois de encaixar
+  um substituto não avisa o time inteiro.
+- **Service worker** (`public/sw.js`) só recebe aviso: não guarda cache nem
+  intercepta requisição, para não prender o app numa versão velha.
+- **iPhone** só recebe com o site instalado na tela de início (regra da
+  Apple, iOS 16.4+); o link mostra como. Quem abre pelo ícone cai no login, e
+  o login oferece "Sou jogador: abrir a lista do meu grupo" com o link que o
+  aparelho já usou. O painel do jogo mostra quem **não** tem aviso, para
+  chamar pelo WhatsApp.
+- Horários dos avisos em America/Sao_Paulo (`quando_do_jogo`).
+
+**Configuração (uma vez)**: par de chaves com `npx web-push
+generate-vapid-keys`; a **pública** em `VITE_VAPID_PUBLIC_KEY` (`.env` e
+Vercel — é pública por natureza); a **privada** só em Edge Functions ›
+Secrets, junto com `VAPID_PUBLIC_KEY` e `VAPID_SUBJECT` (mailto:). Sem a
+chave pública no app, nada de avisos aparece.
+
+**Não dá para testar no navegador do painel do Claude**: ele não registra
+service worker. O fluxo das telas foi testado com o navegador simulado; a
+entrega de verdade, só num celular.
 
 ### Jogo: a presença mora no jogo, não no jogador (amador)
 

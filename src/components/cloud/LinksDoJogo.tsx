@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellRing, ChevronRight, Lock, MessageCircle, RefreshCw, SkipForward, UserPlus } from 'lucide-react';
+import { Bell, BellOff, BellRing, ChevronRight, Send, Lock, MessageCircle, RefreshCw, SkipForward, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { useJogoStore } from '@/store/useJogoStore';
@@ -12,7 +12,9 @@ import { whatsappTo } from '@/lib/phone';
 import {
   createGroup,
   findMyGroup,
+  avisarInscritos,
   groupLink,
+  inscritosComAviso,
   guestLink,
   setListClosed,
   shareOnWhatsApp,
@@ -72,11 +74,22 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
   const [name, setName] = useState('Pelada');
   const [busy, setBusy] = useState(false);
   const [linkAdded, setLinkAdded] = useState(0);
+  // Ids da NUVEM dos atletas com aviso no celular (migração 016). Vazio se a
+  // migração ainda não rodou — aí o painel só não mostra quem tem aviso
+  const [comAviso, setComAviso] = useState<Set<string>>(new Set());
+  const lerAvisos = (g: CloudGroup) =>
+    inscritosComAviso(g.id)
+      .then((ids) => setComAviso(new Set(ids)))
+      .catch((e) => console.warn('inscritos com aviso', e));
 
   useEffect(() => {
     let alive = true;
     findMyGroup('amador')
-      .then((g) => alive && setGroup(g))
+      .then((g) => {
+        if (!alive) return;
+        setGroup(g);
+        if (g) void lerAvisos(g);
+      })
       .catch((e) => {
         if (!alive) return;
         setError(explain(e));
@@ -91,6 +104,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
     const n = await syncAmador(g.id);
     if (n > 0) setLinkAdded(n);
     await sincronizarJogos(g.id);
+    await lerAvisos(g);
   }
 
   async function handleCreate() {
@@ -212,7 +226,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
           ) : (
             <>
               {jogo.listaFechada && (
-                <ChamadasDaEspera jogo={jogo} group={group} detalhes={detalhes} />
+                <ChamadasDaEspera jogo={jogo} group={group} detalhes={detalhes} comAviso={comAviso} />
               )}
               {jogo.listaFechada && (
                 <p className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-300">
@@ -259,6 +273,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
               >
                 {jogo.listaFechada ? 'Reabrir a lista' : 'Fechar a lista sem sortear'}
               </button>
+              {comAviso.size > 0 && <AvisarInscritos group={group} quantos={comAviso.size} />}
             </>
           )}
         </>
@@ -273,7 +288,18 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
  * passa a vez quando achar que esperou o bastante. Não há prazo automático:
  * perto do jogo, só ele sabe quanto dá para esperar.
  */
-function ChamadasDaEspera({ jogo, group, detalhes }: { jogo: Jogo; group: CloudGroup; detalhes: string }) {
+function ChamadasDaEspera({
+  jogo,
+  group,
+  detalhes,
+  comAviso,
+}: {
+  jogo: Jogo;
+  group: CloudGroup;
+  detalhes: string;
+  /** Ids da NUVEM dos atletas com aviso no celular */
+  comAviso: Set<string>;
+}) {
   const players = useAppStore((s) => s.players);
   const responder = useJogoStore((s) => s.responder);
   const dist = useMemo(() => vagasDoJogo(jogo, players), [jogo, players]);
@@ -335,6 +361,19 @@ ${link}`;
               {' · '}esperando ele confirmar no link.
               {!p.phone && ' Sem telefone no cadastro: o WhatsApp abre para escolher o contato.'}
             </p>
+            <p className="mt-1 flex items-center gap-1.5 text-xs text-amber-100/80">
+              {p.remoteId && comAviso.has(p.remoteId) ? (
+                <>
+                  <Bell size={13} className="shrink-0" />
+                  Recebeu o aviso no celular.
+                </>
+              ) : (
+                <>
+                  <BellOff size={13} className="shrink-0" />
+                  Sem aviso no celular: vale chamar pelo WhatsApp.
+                </>
+              )}
+            </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Button size="sm" onClick={() => chamar(p)}>
                 <MessageCircle size={16} />
@@ -352,3 +391,70 @@ ${link}`;
   );
 }
 
+
+/**
+ * Aviso manual para todos os atletas com aviso no celular (migração 016):
+ * quadra mudou, jogo cancelado, falta gente. Vai para o grupo inteiro, não só
+ * para quem confirmou este jogo.
+ */
+function AvisarInscritos({ group, quantos }: { group: CloudGroup; quantos: number }) {
+  const [aberto, setAberto] = useState(false);
+  const [texto, setTexto] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [resultado, setResultado] = useState<string | null>(null);
+
+  async function enviar() {
+    setBusy(true);
+    setResultado(null);
+    try {
+      const n = await avisarInscritos(group.id, texto);
+      setResultado(n === 1 ? 'Aviso enviado para 1 atleta.' : `Aviso enviado para ${n} atletas.`);
+      setTexto('');
+      setAberto(false);
+    } catch (e) {
+      setResultado(explain(e));
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="mt-3 border-t border-ink-800 pt-3">
+      {aberto ? (
+        <>
+          <textarea
+            autoFocus
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            maxLength={300}
+            rows={3}
+            placeholder="Ex.: A quadra mudou para o Ginásio 2."
+            className="w-full resize-none rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
+          />
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setAberto(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" className="flex-1" disabled={busy || texto.trim().length < 2} onClick={enviar}>
+              <Send size={15} />
+              {busy ? 'Enviando…' : `Avisar ${quantos} ${quantos === 1 ? 'atleta' : 'atletas'}`}
+            </Button>
+          </div>
+        </>
+      ) : (
+        <button
+          onClick={() => setAberto(true)}
+          className="flex w-full items-center gap-2 text-left text-xs text-ink-400"
+        >
+          <Bell size={14} className="shrink-0 text-brand-400" />
+          <span className="flex-1">
+            {quantos === 1
+              ? 'Avisar pelo celular o atleta com aviso ativado'
+              : `Avisar pelo celular os ${quantos} atletas com aviso ativado`}
+          </span>
+          <ChevronRight size={15} className="shrink-0 text-ink-600" />
+        </button>
+      )}
+      {resultado && <p className="mt-2 text-xs text-ink-300">{resultado}</p>}
+    </div>
+  );
+}

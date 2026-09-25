@@ -35,6 +35,9 @@ const AdminInvitePage = lazy(() =>
 const Administradores = lazy(() =>
   import('@/components/cloud/Administradores').then((m) => ({ default: m.Administradores })),
 );
+const AvisosDoAdmin = lazy(() =>
+  import('@/components/cloud/Avisos').then((m) => ({ default: m.AvisosDoAdmin })),
+);
 const GuestAthletePage = lazy(() =>
   import('@/pages/GuestAthletePage').then((m) => ({ default: m.GuestAthletePage })),
 );
@@ -141,6 +144,7 @@ export default function App() {
                     {hasSavedSession() && (
                       <Suspense fallback={null}>
                         <Administradores />
+                        <AvisosDoAdmin />
                       </Suspense>
                     )}
                     {/* Conta e Modo ainda não têm seção própria (etapa 4). Até lá,

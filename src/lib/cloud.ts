@@ -5,6 +5,7 @@ import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
 import { inicioDo, pendentesDeEnvio } from '@/lib/jogo';
 import { uid as novoIdLocal } from '@/lib/utils';
+import type { InscricaoDeAviso } from '@/lib/avisos';
 import type {
   AppMode,
   ConfirmacaoStatus,
@@ -1327,4 +1328,65 @@ async function enviarPartidas(groupId: string) {
     if (error) throw error;
     mesclarPartidas((data ?? []) as unknown as LinhaPartida[]);
   }
+}
+
+// ── Avisos no celular (migração 016) ────────────────────────
+
+/** O atleta ativa os avisos pelo link, como a pessoa que ele escolheu */
+export async function guestInscreverAviso(code: string, playerId: string, s: InscricaoDeAviso): Promise<void> {
+  const { error } = await db().rpc('guest_inscrever_aviso', {
+    code,
+    p_player: playerId,
+    p_endpoint: s.endpoint,
+    p_p256dh: s.p256dh,
+    p_auth: s.auth,
+  });
+  if (error) throw error;
+}
+
+export async function guestCancelarAviso(code: string, endpoint: string): Promise<void> {
+  const { error } = await db().rpc('guest_cancelar_aviso', { code, p_endpoint: endpoint });
+  if (error) throw error;
+}
+
+/** O administrador ativa os avisos dele, pela conta */
+export async function inscreverAdmin(groupId: string, s: InscricaoDeAviso): Promise<void> {
+  const { error } = await db().rpc('inscrever_admin', {
+    p_group: groupId,
+    p_endpoint: s.endpoint,
+    p_p256dh: s.p256dh,
+    p_auth: s.auth,
+  });
+  if (error) throw error;
+}
+
+export async function cancelarAvisoAdmin(endpoint: string): Promise<void> {
+  const { error } = await db().rpc('cancelar_aviso_admin', { p_endpoint: endpoint });
+  if (error) throw error;
+}
+
+/** Ids da NUVEM dos atletas com aviso ativado — sem as chaves dos celulares */
+export async function inscritosComAviso(groupId: string): Promise<string[]> {
+  const { data, error } = await db().rpc('inscritos_com_aviso', { p_group: groupId });
+  if (error) throw error;
+  return ((data ?? []) as (string | { inscritos_com_aviso: string })[]).map((r) =>
+    typeof r === 'string' ? r : r.inscritos_com_aviso,
+  );
+}
+
+/** Aviso manual do administrador para todos os inscritos. Devolve quantos */
+export async function avisarInscritos(groupId: string, texto: string): Promise<number> {
+  const { data, error } = await db().rpc('avisar_inscritos', { p_group: groupId, p_texto: texto });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/**
+ * Anuncia o próximo jogo aos inscritos, se ainda não foi. O banco já anuncia
+ * quando um jogo é criado ou muda; isto pega o jogo que virou o próximo só
+ * porque o anterior passou da janela de 12 h — nada no banco muda nessa hora.
+ */
+export async function anunciarJogo(groupId: string): Promise<void> {
+  const { error } = await db().rpc('anunciar_jogo', { p_group: groupId });
+  if (error) throw error;
 }

@@ -24,6 +24,10 @@ export function LoginPage() {
   const signOut = useAuth((s) => s.signOut);
 
   const [busy, setBusy] = useState(false);
+  // O jogador que instalou o site na tela de início (é o que o iPhone exige
+  // para receber avisos) abre o app pelo ícone, no endereço inicial — e ele
+  // cai aqui. O link que o aparelho já usou leva de volta à lista dele
+  const [linksLembrados] = useState(codigosLembrados);
   const [error, setError] = useState<string | null>(
     oauthError ? 'O login com o Google não foi concluído. Tente de novo.' : null,
   );
@@ -145,9 +149,34 @@ export function LoginPage() {
           Jogador e atleta <span className="font-semibold text-brand-300">não precisam de conta</span>{' '}
           — entram pelo link que o organizador manda.
         </p>
+        {linksLembrados.length > 0 && (
+          <div className="mt-5 flex flex-col gap-2">
+            {linksLembrados.map((c) => (
+              <button
+                key={c}
+                onClick={() => navigate(`/c/${c}`)}
+                className="h-12 w-full rounded-2xl border border-ink-700 text-sm font-semibold text-ink-100 active:scale-[0.98]"
+              >
+                Sou jogador: abrir a lista do meu grupo
+              </button>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );
+}
+
+/** Os links de grupo que este aparelho já abriu (GuestGroupPage lembra "quem é você") */
+function codigosLembrados(): string[] {
+  try {
+    return Object.keys(localStorage)
+      .filter((k) => k.startsWith('timecerto:guest:') && localStorage.getItem(k))
+      .map((k) => k.slice('timecerto:guest:'.length))
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
 }
 
 /** Logo oficial do Google — as cores fazem parte da marca, não do tema */
