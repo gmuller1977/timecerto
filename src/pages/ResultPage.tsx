@@ -1,11 +1,11 @@
 import { nomeDeExibicao } from '@/lib/nome';
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Check, Copy, Link2, PlayCircle, RotateCcw, Share2 } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
-import { usePresentes } from '@/store/useJogoStore';
+import { useJogo, useJogoStore, useProximoJogo, usePresentes } from '@/store/useJogoStore';
 import { useHydrated } from '@/store/useHydrated';
 import { SPORTS } from '@/lib/sports';
 import { TEAM_COLOR_CLASSES, drawTeams, skillOf } from '@/lib/draw';
@@ -15,8 +15,16 @@ import { cn } from '@/lib/utils';
 export function ResultPage() {
   const navigate = useNavigate();
   const hydrated = useHydrated();
-  const result = useAppStore((s) => s.lastResult);
-  const presentes = usePresentes();
+  // O sorteio de um jogo mora nele (`Jogo.sorteio`), igual em todos os
+  // aparelhos. Sem jogo — Partida direta antiga —, o último sorteio local
+  const jogoId = useSearchParams()[0].get('jogo') ?? undefined;
+  const jogo = useJogo(jogoId);
+  const proximo = useProximoJogo();
+  const lastResult = useAppStore((s) => s.lastResult);
+  const result = jogoId ? (jogo?.sorteio ?? null) : lastResult;
+  const presentes = usePresentes(jogo?.id);
+  const guardarSorteio = useJogoStore((s) => s.guardarSorteio);
+  const atualizarJogo = useJogoStore((s) => s.atualizarJogo);
   const settings = useAppStore((s) => s.settings);
   const setResult = useAppStore((s) => s.setResult);
   const startMatch = useMatchStore((s) => s.startMatch);
@@ -30,7 +38,10 @@ export function ResultPage() {
   // Espera o armazenamento: decidir "não há resultado" antes da leitura
   // expulsava o usuário de um sorteio que existia (ver Armadilhas, CLAUDE.md)
   if (!hydrated) return null;
-  if (!result) return <Navigate to="/amador" replace />;
+  if (!result) return <Navigate to={jogo ? `/jogo/${jogo.id}` : '/amador'} replace />;
+  const voltar = jogo ? `/jogo/${jogo.id}?aba=times` : '/amador';
+  // Os links mostram o próximo jogo: só ele tem para onde publicar
+  const eventId = jogo && jogo.id === proximo?.id ? jogo.remoteId : undefined;
 
   const cfg = SPORTS[result.sport];
   const text = formatResultText(result, { showStars });
@@ -45,21 +56,26 @@ export function ResultPage() {
 
   function handleRedraw() {
     const next = drawTeams(presentes, settings);
-    setResult(result?.eventId ? { ...next, eventId: result.eventId } : next);
+    if (jogo) {
+      const doJogo = { ...next, jogoId: jogo.id, eventId: jogo.remoteId };
+      guardarSorteio(jogo.id, doJogo);
+      setResult(doJogo);
+    } else setResult(next);
   }
 
   // Carregado sob demanda: o cliente do Supabase não entra no pacote do placar
   async function handlePublish() {
-    if (!result?.eventId) return;
+    if (!eventId || !result) return;
     setPublishing(true);
     setPublishMsg(null);
     try {
       const { publishTeams } = await import('@/lib/cloud');
-      const fora = await publishTeams(result.eventId, result);
+      const fora = await publishTeams(eventId, result);
       setPublishedId(result.id);
+      if (jogo) atualizarJogo(jogo.id, { timesPublicados: true, listaFechada: true });
       if (fora > 0) {
         setPublishMsg(
-          `${fora === 1 ? '1 jogador não está' : `${fora} jogadores não estão`} no grupo da nuvem e ficou de fora do link. Toque no ↻ do Próximo jogo, na aba Jogo, e publique de novo.`,
+          `${fora === 1 ? '1 jogador não está' : `${fora} jogadores não estão`} no grupo da nuvem e ficou de fora do link. Toque no ↻ na página do jogo e publique de novo.`,
         );
       }
     } catch (e) {
@@ -78,7 +94,7 @@ export function ResultPage() {
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-36">
       <header className="safe-top flex items-center justify-between gap-3 pt-6 pb-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/amador')} className="p-1 text-ink-400" aria-label="Voltar ao Jogo">
+          <button onClick={() => navigate(voltar)} className="p-1 text-ink-400" aria-label="Voltar ao jogo">
             <ArrowLeft size={22} />
           </button>
           <div>
@@ -148,7 +164,7 @@ export function ResultPage() {
         )}
       </div>
 
-      {result.eventId && (
+      {eventId && (
         <div className="mt-4">
           <Button
             size="lg"
@@ -181,6 +197,7 @@ export function ResultPage() {
           const [a, b] = result.teams;
           startMatch({
             sport: result.sport,
+            jogoId: jogo?.id,
             teams: [
               { id: a.id, name: a.name, color: a.color, playerIds: a.players.map((p) => p.id) },
               { id: b.id, name: b.name, color: b.color, playerIds: b.players.map((p) => p.id) },

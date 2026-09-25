@@ -5,7 +5,7 @@ import { nomeDeExibicao } from '@/lib/nome';
 import type { Player } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
-import { useJogoAberto, usePresentes } from '@/store/useJogoStore';
+import { useJogo, useJogoStore, useProximoJogo, usePresentes } from '@/store/useJogoStore';
 import { SPORTS, KEEPER_POSITION } from '@/lib/sports';
 import { ROTATIONS, ROTATION_LIST, rotationFits, settersNeeded } from '@/lib/rotation';
 import { drawTeams } from '@/lib/draw';
@@ -114,16 +114,19 @@ function Levantadores({ presentes, aberto }: { presentes: Player[]; aberto: bool
 
 export function DrawPage() {
   const navigate = useNavigate();
-  // Vindo do Próximo jogo, o sorteio é de um jogo da nuvem e pode ir para o link
-  const eventId = (useLocation().state as { eventId?: string } | null)?.eventId;
+  // O sorteio é de um jogo: o que a página do jogo mandou, ou o próximo
+  const jogoId = (useLocation().state as { jogoId?: string } | null)?.jogoId;
   const sport = useAppStore((s) => s.sport);
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
   const setResult = useAppStore((s) => s.setResult);
   const [drawing, setDrawing] = useState(false);
 
-  const present = usePresentes();
-  const jogo = useJogoAberto();
+  const guardarSorteio = useJogoStore((s) => s.guardarSorteio);
+  const escolhido = useJogo(jogoId);
+  const proximo = useProximoJogo();
+  const jogo = jogoId ? escolhido : proximo;
+  const present = usePresentes(jogo?.id);
   const cfg = SPORTS[sport];
 
   /*
@@ -171,9 +174,12 @@ export function DrawPage() {
     setDrawing(true);
     setTimeout(() => {
       const result = drawTeams(present, { ...settings, sport });
-      setResult(eventId ? { ...result, eventId } : result);
+      // O sorteio mora no jogo — e vai para a nuvem com ele (migração 013)
+      const doJogo = jogo ? { ...result, jogoId: jogo.id, eventId: jogo.remoteId } : result;
+      if (jogo) guardarSorteio(jogo.id, doJogo);
+      setResult(doJogo);
       setDrawing(false);
-      navigate('/resultado');
+      navigate(jogo ? `/resultado?jogo=${jogo.id}` : '/resultado');
     }, 450);
   }
 

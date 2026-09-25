@@ -1,23 +1,29 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ConfirmacaoStatus, Jogo, Player, SportId } from '@/types';
+import type { ConfirmacaoStatus, DrawResult, Jogo, Player, SportId } from '@/types';
 import { useAppStore } from '@/store/useAppStore';
 import {
   abrirJogo,
   importarRespostas,
   migrarPresent,
   novoJogo,
+  proximoJogo,
   responder,
   semPresent,
 } from '@/lib/jogo';
 import { joga, vagasDoJogo } from '@/lib/vagas';
 
+/** Campos do jogo que o organizador edita — e que vão para a nuvem */
+type EdicaoDoJogo = Partial<Pick<Jogo, 'date' | 'time' | 'place' | 'vagas' | 'status'>>;
+
 interface JogoState {
-  /** Mais recente primeiro; no máximo um `aberto` */
+  /** Mais recente primeiro. Vários `aberto` (programados) ao mesmo tempo */
   jogos: Jogo[];
   /** Migrações de dados já feitas neste aparelho, com a hora */
   migracoes: { present?: string };
+  /** Até onde este aparelho já leu os jogos da nuvem (synced_at do servidor) */
+  leituraJogos?: string;
 
   criarJogo: (input: {
     sport: SportId;
@@ -25,16 +31,19 @@ interface JogoState {
     time: string;
     place: string;
     vagas: number | null;
-    remoteId?: string;
   }) => Jogo;
+  /** Edição do organizador: carimba a hora e vai para a nuvem */
+  editarJogo: (id: string, patch: EdicaoDoJogo) => void;
+  /** Espelhos e ligações que vêm da nuvem — NÃO carimba a hora */
   atualizarJogo: (id: string, patch: Partial<Omit<Jogo, 'id' | 'confirmations'>>) => void;
-  encerrarJogo: (id: string) => void;
+  /** O sorteio deste jogo: guarda e vai para a nuvem */
+  guardarSorteio: (id: string, sorteio: DrawResult) => void;
   /** Um toque na lista: confirmado ↔ sem resposta */
-  alternar: (playerId: string) => void;
+  alternar: (jogoId: string, playerId: string) => void;
   /** "Marcar todos" / "Desmarcar todos" */
-  marcarTodos: (playerIds: string[], confirmado: boolean) => void;
+  marcarTodos: (jogoId: string, playerIds: string[], confirmado: boolean) => void;
   /** Resposta do organizador com status explícito (ex.: o avulso chega confirmado) */
-  responder: (playerId: string, status: ConfirmacaoStatus) => void;
+  responder: (jogoId: string, playerId: string, status: ConfirmacaoStatus) => void;
   /** Respostas que chegaram pelos links, por id LOCAL */
   importarDoLink: (
     jogoId: string,
@@ -42,18 +51,19 @@ interface JogoState {
   ) => void;
   /** Estas respostas do organizador já estão na nuvem, com esta hora */
   marcarEnviados: (jogoId: string, enviados: { playerId: string; at: string }[]) => void;
-  /** O jogo foi para um evento novo: nada do que foi enviado antes está lá */
-  limparEnvios: (jogoId: string) => void;
   migrar: () => void;
 }
 
-/** Aplica uma regra pura ao jogo aberto; sem jogo aberto, não faz nada */
-const noAberto = (jogos: Jogo[], f: (j: Jogo) => Jogo) =>
-  jogos.map((j) => (j.status === 'aberto' ? f(j) : j));
+const agora = () => new Date().toISOString();
+
+/** Aplica uma regra pura a um jogo */
+const noJogo = (jogos: Jogo[], id: string, f: (j: Jogo) => Jogo) =>
+  jogos.map((j) => (j.id === id ? f(j) : j));
 
 /**
- * O jogo da semana e quem vem nele. Substitui o antigo `Player.present` —
- * ver `Jogo` em types/index.ts. As regras moram em lib/jogo.ts.
+ * Os jogos marcados e quem vem em cada um. Substitui o antigo
+ * `Player.present` — ver `Jogo` em types/index.ts. As regras moram em
+ * lib/jogo.ts; a sincronização com a nuvem, em lib/cloud.ts.
  */
 export const useJogoStore = create<JogoState>()(
   persist(
@@ -61,23 +71,28 @@ export const useJogoStore = create<JogoState>()(
       jogos: [],
       migracoes: {},
 
+      // O id da nuvem nasce aqui, como o dos atletas: um envio só resolve
+      // novos e existentes
       criarJogo: (input) => {
-        const jogo = novoJogo(input);
+        const jogo = { ...novoJogo(input), remoteId: crypto.randomUUID(), updatedAt: agora() };
         set((s) => ({ jogos: abrirJogo(s.jogos, jogo) }));
         return jogo;
       },
 
-      atualizarJogo: (id, patch) =>
-        set((s) => ({ jogos: s.jogos.map((j) => (j.id === id ? { ...j, ...patch } : j)) })),
+      editarJogo: (id, patch) =>
+        set((s) => ({ jogos: noJogo(s.jogos, id, (j) => ({ ...j, ...patch, updatedAt: agora() })) })),
 
-      encerrarJogo: (id) =>
+      atualizarJogo: (id, patch) =>
+        set((s) => ({ jogos: noJogo(s.jogos, id, (j) => ({ ...j, ...patch })) })),
+
+      guardarSorteio: (id, sorteio) =>
         set((s) => ({
-          jogos: s.jogos.map((j) => (j.id === id ? { ...j, status: 'encerrado' as const } : j)),
+          jogos: noJogo(s.jogos, id, (j) => ({ ...j, sorteio: { ...sorteio, jogoId: id }, updatedAt: agora() })),
         })),
 
-      alternar: (playerId) =>
+      alternar: (jogoId, playerId) =>
         set((s) => ({
-          jogos: noAberto(s.jogos, (j) => {
+          jogos: noJogo(s.jogos, jogoId, (j) => {
             const c = j.confirmations.find((x) => x.playerId === playerId);
             return responder(
               j,
@@ -88,9 +103,9 @@ export const useJogoStore = create<JogoState>()(
           }),
         })),
 
-      marcarTodos: (playerIds, confirmado) =>
+      marcarTodos: (jogoId, playerIds, confirmado) =>
         set((s) => ({
-          jogos: noAberto(s.jogos, (j) =>
+          jogos: noJogo(s.jogos, jogoId, (j) =>
             playerIds.reduce((acc, id) => {
               const c = acc.confirmations.find((x) => x.playerId === id);
               // Desmarcar não apaga quem disse "não vou": isso é uma resposta
@@ -100,21 +115,18 @@ export const useJogoStore = create<JogoState>()(
           ),
         })),
 
-      responder: (playerId, status) =>
+      responder: (jogoId, playerId, status) =>
         set((s) => ({
-          jogos: noAberto(s.jogos, (j) => responder(j, playerId, status, 'organizador')),
+          jogos: noJogo(s.jogos, jogoId, (j) => responder(j, playerId, status, 'organizador')),
         })),
 
       importarDoLink: (jogoId, respostas) =>
-        set((s) => ({
-          jogos: s.jogos.map((j) => (j.id === jogoId ? importarRespostas(j, respostas) : j)),
-        })),
+        set((s) => ({ jogos: noJogo(s.jogos, jogoId, (j) => importarRespostas(j, respostas)) })),
 
       // Só marca se a resposta não mudou enquanto ia: senão a nova ainda precisa ir
       marcarEnviados: (jogoId, enviados) =>
         set((s) => ({
-          jogos: s.jogos.map((j) => {
-            if (j.id !== jogoId) return j;
+          jogos: noJogo(s.jogos, jogoId, (j) => {
             const at = new Map(enviados.map((e) => [e.playerId, e.at]));
             return {
               ...j,
@@ -123,15 +135,6 @@ export const useJogoStore = create<JogoState>()(
               ),
             };
           }),
-        })),
-
-      limparEnvios: (jogoId) =>
-        set((s) => ({
-          jogos: s.jogos.map((j) =>
-            j.id === jogoId
-              ? { ...j, confirmations: j.confirmations.map((c) => ({ ...c, enviadoEm: undefined })) }
-              : j,
-          ),
         })),
 
       /**
@@ -153,20 +156,25 @@ export const useJogoStore = create<JogoState>()(
     }),
     {
       name: 'timecerto:jogos:v1',
-      partialize: (s) => ({ jogos: s.jogos, migracoes: s.migracoes }),
+      partialize: (s) => ({ jogos: s.jogos, migracoes: s.migracoes, leituraJogos: s.leituraJogos }),
     },
   ),
 );
 
-/** O jogo aberto, se houver */
-export function useJogoAberto(): Jogo | null {
-  return useJogoStore((s) => s.jogos.find((j) => j.status === 'aberto') ?? null);
+/** Um jogo pelo id local */
+export function useJogo(id: string | undefined): Jogo | null {
+  return useJogoStore((s) => (id ? (s.jogos.find((j) => j.id === id) ?? null) : null));
+}
+
+/** O próximo jogo — o que os links do WhatsApp mostram (`proximoJogo`) */
+export function useProximoJogo(): Jogo | null {
+  const jogos = useJogoStore((s) => s.jogos);
+  return useMemo(() => proximoJogo(jogos), [jogos]);
 }
 
 /**
- * Quem joga no jogo aberto: mensalista confirmado sempre; convidado confirmado
- * se tem vaga. É o que o sorteio e a partida direta usam. Sem jogo aberto,
- * ninguém.
+ * Quem joga num jogo: mensalista confirmado sempre; convidado confirmado se
+ * tem vaga. É o que o sorteio e a partida direta usam. Sem jogo, ninguém.
  */
 export function presentesDoJogo(jogo: Jogo | null, players: Player[]): Player[] {
   if (!jogo) return [];
@@ -174,8 +182,11 @@ export function presentesDoJogo(jogo: Jogo | null, players: Player[]): Player[] 
   return players.filter((p) => joga(dist.situacao.get(p.id)));
 }
 
-export function usePresentes(): Player[] {
-  const jogo = useJogoAberto();
+/** Quem joga no jogo indicado — ou, sem indicação, no próximo */
+export function usePresentes(jogoId?: string): Player[] {
+  const escolhido = useJogo(jogoId);
+  const proximo = useProximoJogo();
+  const jogo = jogoId ? escolhido : proximo;
   const players = useAppStore((s) => s.players);
   return useMemo(() => presentesDoJogo(jogo, players), [jogo, players]);
 }

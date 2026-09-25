@@ -42,7 +42,7 @@ export function RosterPage() {
   const removePlayer = useAppStore((s) => s.removePlayer);
   const [convidando, setConvidando] = useState(false);
   /*
-   * Aprovar, recusar e juntar são só locais: a sincronização (SincronizacaoAtletas,
+   * Aprovar, recusar e juntar são só locais: a sincronização (SincronizacaoNuvem,
    * em App.tsx) leva a decisão para a nuvem logo depois. Recusar e juntar deixam
    * a marca de exclusão do pedido (removePlayer), que viaja — por isso não
    * precisam mais de internet na hora, e o pedido não volta.

@@ -85,12 +85,31 @@ export function pendentesDeEnvio(jogo: Jogo) {
   return jogo.confirmations.filter((c) => c.origem === 'organizador' && c.enviadoEm !== c.at);
 }
 
-/** Abre um jogo: o aberto anterior, se houver, é encerrado */
+/**
+ * Acrescenta um jogo. Vários ficam programados ao mesmo tempo (pedido do
+ * Guilherme em 24/09/2026) — abrir um novo não encerra mais o anterior.
+ */
 export function abrirJogo(jogos: Jogo[], jogo: Jogo): Jogo[] {
-  return [
-    jogo,
-    ...jogos.map((j) => (j.status === 'aberto' ? { ...j, status: 'encerrado' as const } : j)),
-  ].slice(0, 30);
+  return [jogo, ...jogos].slice(0, 200);
+}
+
+/** Quando o jogo começa, em ms */
+export const inicioDo = (j: Jogo) => new Date(`${j.date}T${j.time}`).getTime();
+
+/** Janela em que o jogo de hoje continua sendo "o próximo": 12 h depois do início */
+export const JANELA_PROXIMO_MS = 12 * 3600 * 1000;
+
+/**
+ * O próximo jogo: o mais cedo ainda programado, a partir de 12 h atrás. É a
+ * MESMA regra que o link do WhatsApp usa (guest_group, migração 013) — a tela
+ * e o link não podem discordar sobre qual jogo está recebendo respostas.
+ */
+export function proximoJogo(jogos: Jogo[], agora = Date.now()): Jogo | null {
+  return (
+    jogos
+      .filter((j) => j.status === 'aberto' && inicioDo(j) >= agora - JANELA_PROXIMO_MS)
+      .sort((a, b) => inicioDo(a) - inicioDo(b))[0] ?? null
+  );
 }
 
 // ── Migração do antigo `present` ────────────────────────────

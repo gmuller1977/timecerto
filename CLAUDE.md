@@ -29,10 +29,11 @@ O Supabase (projeto `whhvojozemwmnhnpyqpz`) entra para **login do
 organizador, convites e a base única** — ver "Convites" e "Base única" abaixo.
 
 **Base única, em fases** (aprovada pelo Guilherme em 24/09/2026 — "uma base de
-dados única, em qualquer plataforma"): 1. atletas — **feito**; 2. jogo da
-semana; 3. partidas e estatísticas; 4. configurações. Até a fase de cada coisa,
-ela continua só no aparelho: partidas e configurações de um aparelho não
-aparecem no outro.
+dados única, em qualquer plataforma"): 1. atletas — **feito** (migração 010);
+2. jogos, sorteios e partidas — **feito** (migração 013; a estatística sai das
+partidas, então veio junto); 3. configurações. Até lá, as configurações de um
+aparelho não aparecem no outro. A partida **ao vivo** fica no aparelho que
+marca o placar e sobe quando termina.
 
 `.env` local tem `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` (a publishable
 key). Na Vercel, as mesmas duas em Settings → Environment Variables. A secret
@@ -121,8 +122,8 @@ organizador gravar atletas, jogos, respostas e times.
   aceita administrar outro continua vendo o próprio.
 - Ao aceitar, a tela já sincroniza os atletas: a sincronização automática
   procurou o grupo ao abrir o app, antes do aceite.
-- O administrador vê o que a base única já cobre (atletas; o resto nas
-  próximas fases).
+- O administrador vê o que a base única já cobre: atletas, jogos, respostas,
+  sorteios e partidas encerradas.
 
 ### Fluxo do administrador (amador)
 
@@ -133,12 +134,12 @@ em dois lugares:
 - **Atletas** (a aba se chamava Elenco; a rota continua `/elenco`): 1. **Convidar** no cabeçalho manda o link de cadastro
   (`ConvidarSheet`); 2. os pedidos aparecem no topo, em âmbar, com aprovar e
   recusar na linha; tocar num jogador abre a ficha.
-- **Jogo, bloco do jogo no topo** (`components/jogo/JogoBloco.tsx`, e a parte
-  dos links em `components/cloud/JogoNuvem.tsx`): 3. cria o jogo: data,
-  horário, **local** e vagas; 4. **Convidar mensalistas** e **Convidar
-  convidados**; 5. as respostas entram na lista do Jogo e atualizam sozinhas a
-  cada 20 s com a lista aberta; 6. **Fechar a lista e sortear** (no rodapé)
-  leva ao sorteio só quem tem vaga.
+- **Jogo** (`JogosPage`, a lista; `JogoPage`, a página de um jogo; a parte dos
+  links em `components/cloud/LinksDoJogo.tsx`): 3. cria o jogo: data,
+  horário, **local** e vagas (`components/jogo/FormJogo.tsx`); 4. **Convidar
+  mensalistas** e **Convidar convidados**, na página do próximo jogo; 5. as
+  respostas entram na lista e atualizam sozinhas (sincronização a cada 30 s);
+  6. **Fechar a lista e sortear** (no rodapé) leva ao sorteio só quem tem vaga.
 - 7. no resultado, **Publicar os times no link** — todo mundo vê pelos dois links.
 
 `/convites` ficou só para o profissional; no amador leva ao Jogo. Conta (sair)
@@ -172,14 +173,25 @@ para o fim da fila.
 ### Jogo: a presença mora no jogo, não no jogador (amador)
 
 Fase A feita em 24/09/2026, aprovada pelo Guilherme. **`Player.present` não
-existe mais.** Quem vem sai das confirmações do Jogo aberto
+existe mais.** Quem vem sai das confirmações de cada Jogo
 (`useJogoStore`, `timecerto:jogos:v1`; regras puras em `lib/jogo.ts`), e
-`usePresentes()` devolve quem joga: mensalista confirmado sempre, convidado
-confirmado se tem vaga. Sorteio, partida direta e a aba Jogo leem dali;
-`drawTeams` recebe a lista pronta. Duas fontes para a mesma coisa é como o app
-volta a divergir de si mesmo.
+`usePresentes(jogoId)` devolve quem joga: mensalista confirmado sempre,
+convidado confirmado se tem vaga. Sorteio, partida direta e a página do jogo
+leem dali; `drawTeams` recebe a lista pronta. Duas fontes para a mesma coisa é
+como o app volta a divergir de si mesmo.
 
-- **Um jogo `aberto` por vez**; abrir outro encerra o anterior.
+- **Vários jogos programados ao mesmo tempo** (pedido do Guilherme em
+  24/09/2026): a aba Jogo lista todos, e tocar num abre a página dele, com
+  Confirmados, Times, Partidas e Estatística. Encerrar e cancelar são à mão,
+  na edição do jogo; o jogo sai de "Próximos" também 12 h depois do horário.
+- **Os links mostram o PRÓXIMO jogo**: o mais cedo ainda aberto, a partir de
+  12 h atrás (`proximoJogo` em `lib/jogo.ts`, a mesma regra de `guest_group`
+  na migração 013). Os outros jogos esperam a vez: a página deles diz qual
+  está nos links, e só o próximo oferece convite, lista fechada e publicar.
+- **O sorteio e as partidas pertencem ao jogo**: `Jogo.sorteio` e
+  `Match.jogoId`. O sorteio sai da página do jogo (`/sortear` com `jogoId` no
+  estado) e o resultado abre em `/resultado?jogo=ID`; sem `?jogo`, vale o
+  último sorteio local (`lastResult`), para a partida direta antiga.
 - **`Confirmacao.seq` é a ordem de chegada** e decide a fila. Nasce quando a
   pessoa passa a confirmada; confirmar de novo não muda; sair e voltar vai
   para o fim. Sem ele a fila vira ordem de cadastro, que não é justo.
@@ -189,11 +201,10 @@ volta a divergir de si mesmo.
   **sem limite de vagas** — um limite inventado mandaria para a fila quem
   estava na lista. Jogo e marca gravam juntos; o `present` só sai depois. Se
   cair no meio, ou roda inteira de novo, ou não roda mais.
-- **Adoção** (`JogoNuvem`): ao ler a nuvem, um evento aberto vira o Jogo do
-  aparelho — ou se liga ao Jogo migrado —, e as respostas dos links entram
-  como confirmações (`importarDoLink`). É o que impede a lista da semana de
-  sumir na atualização. Jogo criado no aparelho e não publicado não adota:
-  ganha "Publicar nos links", que troca o evento.
+- **Adoção** (`mesclarJogos` em `lib/cloud.ts`): ao ler a nuvem, o Jogo
+  migrado do `present` que ainda não tem id da nuvem se liga ao evento aberto
+  que já existe, em vez de criar outro. É o que impede a lista da semana de
+  sumir na atualização. Todo jogo novo já nasce com o id da nuvem.
 - **Vale a resposta mais recente** entre o toque do organizador e o link.
 - `Jogo.listaFechada` é só ESPELHO de `events.list_closed`, para o botão de
   sortear saber o que dizer sem carregar o Supabase.
@@ -201,14 +212,15 @@ volta a divergir de si mesmo.
 **Fase B, feita em 24/09/2026: os toques do organizador sobem para a nuvem.**
 Antes, o link não via quem o administrador confirmava — e, pior, achava que
 havia vaga onde não havia, e quem entrava pelo link furava a fila de espera.
-`JogoNuvem` envia em lote, 0,8 s depois do último toque, as confirmações com
-`origem: 'organizador'` e `enviadoEm !== at` (`pendentesDeEnvio`);
-`enviarRespostas` grava `vou`/`nao_vou` com `answered_at` = hora do toque (é o
-que ordena a fila no link) e apaga a linha no "sem resposta". Sem sinal, a
-confirmação espera e vai depois — o toque nunca espera a rede. Só envia depois
-da primeira leitura da nuvem, para as respostas do link entrarem antes.
-Resposta que veio do link nasce enviada; publicar o jogo num evento novo
-limpa as marcas (`limparEnvios`).
+A sincronização (`SincronizacaoNuvem`) envia em lote, 1,5 s depois do último
+toque, as confirmações com `origem: 'organizador'` e `enviadoEm !== at`
+(`pendentesDeEnvio`); `enviarRespostas` grava `vou`/`nao_vou` com
+`answered_at` = hora do toque (é o que ordena a fila no link). **"Sem resposta"
+é gravado como `sem_resposta`, não apagado** (migração 013): apagar a linha
+não contava a um segundo aparelho que o organizador desmarcou alguém. Os links
+leem `sem_resposta` como nulo. Sem sinal, a confirmação espera e vai depois —
+o toque nunca espera a rede. As respostas da nuvem são lidas antes do envio,
+para as do link entrarem primeiro. Resposta que veio do link nasce enviada.
 
 As confirmações da migração do `present` têm hora no início dos tempos: o
 `present` antigo não pode vencer, nem sobrescrever na nuvem, um "não vou" que
@@ -249,9 +261,13 @@ velho no link é pior que nenhum.
 `events.teams` guarda **só ids da nuvem** (`PublishedTeams` em `lib/cloud.ts`).
 O nome sai da lista que `guest_group` já devolve, com apelido; o nível nunca
 sai do aparelho. Publicar é explícito, no resultado: publicar sozinho
-mostraria cada "Refazer" no link. O sorteio só sabe de qual jogo é quando sai
-do cartão Próximo jogo (`DrawResult.eventId`, que chega pelo estado da navegação) — um
-sorteio feito pela lista de jogadores não tem botão de publicar.
+mostraria cada "Refazer" no link. Só o sorteio do **próximo** jogo tem botão
+de publicar — é o único que os links mostram.
+
+O sorteio **completo** (com níveis, para "Refazer" e começar partida em outro
+aparelho) viaja em `events.sorteio`, que só membros do grupo leem — os mesmos
+que já leem `players`, com os níveis; o convidado dos links não passa por ali.
+`events.teams` é a versão pública, e só muda ao publicar.
 
 Com a lista fechada e sem times, o link se atualiza a cada 20 s até eles
 chegarem.
@@ -262,7 +278,7 @@ O foco atual é o **modo amador**; o profissional espera. Ordem combinada:
 
 1. Mensalistas e convidados — **feito**
 2. Do convite ao sorteio: fechar a lista, sortear só quem tem vaga, times no link — **feito**
-3. Partidas na nuvem: resultados e estatística no link, histórico em outro aparelho
+3. Partidas na nuvem: histórico em outro aparelho — **feito** (migração 013); falta resultados e estatística no link
 4. Financeiro: mensalidade, avulso, Pix, quem pagou
 5. Acabamento: co-organizador, offline no ginásio (service worker), avisos
 
@@ -275,7 +291,7 @@ crie política para `anon`; crie uma função `guest_*` nova.
 Feita em 24/09/2026, migração 010. **A nuvem é a base comum do elenco amador
 em todos os aparelhos da conta**; cada aparelho é uma cópia que funciona sem
 sinal. `syncAmador` (`lib/cloud.ts`) envia o que ESTE aparelho editou e traz o
-que os outros editaram. Quem dispara é `SincronizacaoAtletas` (em `App.tsx`,
+que os outros editaram. Quem dispara é `SincronizacaoNuvem` (em `App.tsx`,
 carregada só com sessão salva): ao abrir, ao voltar ao app, quando a internet
 volta, a cada 30 s e 1,5 s depois de qualquer edição.
 
@@ -312,6 +328,32 @@ preencheu foi o atleta).
 
 As telas que falam com o banco são carregadas sob demanda (`lazy` em
 `App.tsx`): o cliente do Supabase não entra no pacote do placar.
+
+### Base única — fase 2: jogos, sorteios e partidas (amador)
+
+Feita em 25/09/2026, migração 013, com a lista de jogos. Mesmo desenho da fase
+1 — `updated_at` decide, `synced_at` é a leitura incremental, o servidor
+recusa a edição mais velha e o aparelho relê o que mandou. A ordem de uma
+rodada importa: **atletas, jogos, partidas** (`SincronizacaoNuvem`), porque
+respostas, sorteio e partida falam de jogadores pelo id da nuvem, e a partida
+fala do jogo pelo id da nuvem.
+
+- **Jogo = evento** (`salvar_jogos`). Sobem data, local, vagas, status e o
+  sorteio; `list_closed` e `teams` NÃO passam por ali — são gravados na hora,
+  por quem fecha a lista ou publica, e o aparelho só os espelha. `closed`
+  acompanha o status, porque as funções dos links olham `closed`.
+- **Partida encerrada sobe inteira em `matches.dados`** (`salvar_partidas`),
+  com os ids de jogador trocados pelos da nuvem (`trocarJogadores`) e o jogo
+  em `event_id`. As tabelas `games`/`rallies` continuam vazias: o link de
+  resultados (`guest_matches`) ainda lê de lá, e é outra etapa.
+- **Excluir partida vira lápide** (`useMatchStore.excluidas`), como o atleta.
+- **Só o amador sobe.** Partida do profissional segue no aparelho.
+- **Esporte do jogo recebido**: o evento não tem coluna de esporte; o jogo que
+  chega de outro aparelho pega o do sorteio, ou o do aparelho. A Estatística
+  usa o esporte das próprias partidas — no teste, um jogo recebido sem sorteio
+  ficou com o esporte padrão e a tabela saiu vazia.
+- Jogador que não está no elenco do aparelho sai do sorteio e da partida
+  recebidos, em vez de virar um id solto.
 
 ## Mapa
 
@@ -518,9 +560,11 @@ Produção: https://timecerto-theta.vercel.app
 
 ## Fase 2 — o que falta
 
-Feito: login do organizador, grupo na nuvem, convites e presença.
-Falta: subir partidas (sem isso `guest_matches` devolve vazio e o convidado
-não vê resultados), login por WhatsApp, financeiro do grupo, ranking.
+Feito: login do organizador, grupo na nuvem, convites, presença, e jogos,
+sorteios e partidas entre aparelhos (migração 013).
+Falta: resultados no link (as partidas sobem em `matches.dados`, mas
+`guest_matches` lê `games`/`rallies` e devolve vazio — o convidado ainda não vê
+resultados), login por WhatsApp, financeiro do grupo, ranking.
 O esquema está em `supabase/schema.sql` com RLS por grupo e papéis
 (dono/organizador/jogador).
 

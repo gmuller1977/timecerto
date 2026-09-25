@@ -4,7 +4,8 @@ import { useHydrated } from '@/store/useHydrated';
 import { useJogoStore } from '@/store/useJogoStore';
 import { HashRouter, Link, Navigate, Route, Routes } from 'react-router-dom';
 import { HomePage } from '@/pages/HomePage';
-import { TodayPage } from '@/pages/TodayPage';
+import { JogosPage } from '@/pages/JogosPage';
+import { JogoPage } from '@/pages/JogoPage';
 import { RosterPage } from '@/pages/RosterPage';
 import { LineupPage } from '@/pages/LineupPage';
 import { ProPlayersPage } from '@/pages/ProPlayersPage';
@@ -52,10 +53,10 @@ function MigracaoPresent() {
   return null;
 }
 
-// Base única: mantém os atletas iguais em todos os aparelhos da conta
-const SincronizacaoAtletas = lazy(() =>
-  import('@/components/cloud/SincronizacaoAtletas').then((m) => ({
-    default: m.SincronizacaoAtletas,
+// Base única: atletas, jogos, sorteios e respostas iguais em todos os aparelhos
+const SincronizacaoNuvem = lazy(() =>
+  import('@/components/cloud/SincronizacaoNuvem').then((m) => ({
+    default: m.SincronizacaoNuvem,
   })),
 );
 
@@ -69,7 +70,7 @@ function Nuvem() {
   if (!hydrated || !comSessao) return null;
   return (
     <Suspense fallback={null}>
-      <SincronizacaoAtletas />
+      <SincronizacaoNuvem />
     </Suspense>
   );
 }
@@ -93,7 +94,8 @@ export default function App() {
           {/* Modo amador, com a barra de abas (docs/telas-amador.md). A aba de
               cada rota está em components/ui/TabBar.tsx */}
           <Route element={<TabLayout />}>
-            <Route path="/amador" element={<TodayPage />} />
+            <Route path="/amador" element={<JogosPage />} />
+            <Route path="/jogo/:id" element={<JogoPage />} />
             <Route path="/resultado" element={<ResultPage />} />
             <Route path="/partida" element={<QuickMatchPage />} />
             <Route path="/partida/:id" element={<MatchSummaryPage />} />

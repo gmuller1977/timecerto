@@ -9,7 +9,7 @@ export type TabId = 'jogo' | 'elenco' | 'financeiro' | 'ajustes';
  * diz quais telas moram dentro dela, para a aba certa ficar acesa em qualquer
  * profundidade.
  *
- * Jogo (TodayPage) é presença e ação; Atletas (RosterPage) é o cadastro.
+ * Jogo (JogosPage, JogoPage) é presença e ação; Atletas (RosterPage) é o cadastro.
  * A aba se chamava Elenco; a rota continua /elenco.
  * Financeiro e Ajustes ainda são lugar reservado — docs/telas-amador.md.
  */
@@ -25,7 +25,7 @@ export const TABS: {
     label: 'Jogo',
     icon: Volleyball,
     root: '/amador',
-    prefixes: ['/amador', '/resultado', '/partida', '/historico'],
+    prefixes: ['/amador', '/jogo', '/resultado', '/partida', '/historico'],
   },
   {
     id: 'elenco',

@@ -91,12 +91,12 @@ export type PlayerKind = 'mensalista' | 'convidado';
 export type JogoStatus = 'aberto' | 'encerrado' | 'cancelado';
 
 /**
- * O jogo da semana — a pelada de quinta. É a fonte de verdade de quem vem:
- * presença não mora mais no jogador, mora aqui.
+ * Um jogo marcado — a pelada de quinta. É a fonte de verdade de quem vem:
+ * presença não mora no jogador, mora aqui. Sorteio e partidas pertencem ao jogo.
  *
- * Só existe um `aberto` por vez; abrir outro encerra o anterior. Quando o
- * organizador tem conta, o jogo é também um evento na nuvem (`remoteId`), que
- * é o canal pelo qual os links do WhatsApp respondem.
+ * Vários ficam `aberto` (programados) ao mesmo tempo; os links do WhatsApp
+ * mostram o PRÓXIMO (`proximoJogo`). Com conta, o jogo é o evento da nuvem
+ * (`remoteId` = events.id), igual em todos os aparelhos (migração 013).
  */
 export interface Jogo {
   id: string;
@@ -119,8 +119,16 @@ export interface Jogo {
    * carregar o Supabase.
    */
   listaFechada?: boolean;
+  /** ESPELHO de `events.teams` preenchido: os times estão publicados no link */
+  timesPublicados?: boolean;
   /** Nasceu da conversão do antigo `present` — ver lib/jogo.ts */
   migrado?: boolean;
+  /** O sorteio deste jogo (o último feito) */
+  sorteio?: DrawResult;
+  /** ISO — última edição do jogo (dados, status, sorteio). Decide entre aparelhos */
+  updatedAt?: string;
+  /** O `updatedAt` que já está na nuvem. Diferente = edição não enviada */
+  enviadoEm?: string;
 }
 
 export type ConfirmacaoStatus = 'confirmado' | 'recusado' | 'sem-resposta';
@@ -199,6 +207,8 @@ export interface DrawResult {
    * saiu do cartão Próximo jogo — é o que permite publicar os times no link dele.
    */
   eventId?: string;
+  /** Jogo (id LOCAL) a que o sorteio pertence */
+  jogoId?: string;
 }
 
 export interface Group {
@@ -403,6 +413,14 @@ export interface Match {
   notes?: string;
   /** Ausente = amador (partidas de antes da separação dos modos) */
   mode?: AppMode;
+  /** Jogo (id LOCAL) a que a partida pertence */
+  jogoId?: string;
+  /** Id na nuvem (matches.id) */
+  remoteId?: string;
+  /** ISO — última edição; decide entre aparelhos */
+  updatedAt?: string;
+  /** O `updatedAt` que já está na nuvem */
+  enviadoEm?: string;
 }
 
 export interface PlayerStats {

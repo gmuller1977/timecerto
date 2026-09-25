@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Bookmark, Check, PlayCircle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
@@ -53,7 +53,9 @@ export function QuickMatchPage() {
   const addSquad = useAppStore((s) => s.addSquad);
   const startMatch = useMatchStore((s) => s.startMatch);
 
-  const present = usePresentes();
+  // Vinda da página de um jogo, a partida é dele e usa os confirmados dele
+  const jogoId = useSearchParams()[0].get('jogo') ?? undefined;
+  const present = usePresentes(jogoId);
   const mySquads = squads.filter((q) => q.sport === sport);
 
   const [homeSquadId, setHomeSquadId] = useState<string | null>(
@@ -115,7 +117,7 @@ export function QuickMatchPage() {
       color: awayColor,
       playerIds: [],
     };
-    startMatch({ sport, teams: [home, away] });
+    startMatch({ sport, jogoId, teams: [home, away] });
     navigate('/placar');
   }
 

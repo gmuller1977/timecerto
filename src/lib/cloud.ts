@@ -1,7 +1,21 @@
 import { supabase } from '@/lib/supabase';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
-import type { AppMode, ConfirmacaoStatus, DrawResult, Jogo, Player, PlayerKind, TeamColor } from '@/types';
+import { useJogoStore } from '@/store/useJogoStore';
+import { useMatchStore } from '@/store/useMatchStore';
+import { inicioDo, pendentesDeEnvio } from '@/lib/jogo';
+import { uid as novoIdLocal } from '@/lib/utils';
+import type {
+  AppMode,
+  ConfirmacaoStatus,
+  DrawResult,
+  Jogo,
+  Match,
+  Player,
+  PlayerKind,
+  SportId,
+  TeamColor,
+} from '@/types';
 
 /**
  * Tudo o que fala com o banco em nome do ORGANIZADOR (logado, sob RLS).
@@ -555,45 +569,6 @@ export async function openEvent(groupId: string): Promise<CloudEvent | null> {
   return data && toEvent(data);
 }
 
-/** Marca o próximo jogo. O link mostra um jogo por vez: os abertos fecham. */
-export async function createEvent(
-  groupId: string,
-  startsAt: Date,
-  title: string,
-  slots: number | null,
-  location: string,
-): Promise<CloudEvent> {
-  const { error: e1 } = await db()
-    .from('events')
-    .update({ closed: true })
-    .eq('group_id', groupId)
-    .eq('closed', false);
-  if (e1) throw e1;
-  const { data, error } = await db()
-    .from('events')
-    .insert({
-      group_id: groupId,
-      starts_at: startsAt.toISOString(),
-      title: title.trim() || null,
-      slots,
-      location: location.trim() || null,
-    })
-    .select(EVENT_COLS)
-    .single();
-  if (error) throw error;
-  return toEvent(data);
-}
-
-/**
- * Põe o Jogo do aparelho nos links: sobe o elenco (o link precisa mostrar os
- * nomes de hoje) e cria o evento, que fecha o anterior. Quem chama liga o
- * `Jogo.remoteId` ao id devolvido.
- */
-export async function publicarJogo(groupId: string, jogo: Jogo): Promise<CloudEvent> {
-  await syncAmador(groupId);
-  return createEvent(groupId, new Date(`${jogo.date}T${jogo.time}`), '', jogo.vagas, jogo.place);
-}
-
 /**
  * Leva as respostas do ORGANIZADOR para a nuvem, para o link mostrar quem ele
  * confirmou — e, principalmente, para o link saber que aquelas vagas já estão
@@ -601,33 +576,24 @@ export async function publicarJogo(groupId: string, jogo: Jogo): Promise<CloudEv
  * furava a fila.
  *
  * `answered_at` vai com a hora do toque: é o que ordena a fila no link, e ela
- * tem de bater com o `seq` do aparelho. "Sem resposta" apaga a linha.
+ * tem de bater com o `seq` do aparelho.
  */
 export async function enviarRespostas(
   eventId: string,
   itens: { remoteId: string; status: ConfirmacaoStatus; at: string }[],
 ): Promise<void> {
-  const gravar = itens
-    .filter((i) => i.status !== 'sem-resposta')
-    .map((i) => ({
-      event_id: eventId,
-      player_id: i.remoteId,
-      status: i.status === 'confirmado' ? 'vou' : 'nao_vou',
-      answered_at: i.at,
-    }));
+  // "Sem resposta" é gravado, não apagado (migração 013): é o que deixa os
+  // outros aparelhos saberem que o organizador desmarcou alguém
+  const gravar = itens.map((i) => ({
+    event_id: eventId,
+    player_id: i.remoteId,
+    status: i.status === 'confirmado' ? 'vou' : i.status === 'recusado' ? 'nao_vou' : 'sem_resposta',
+    answered_at: i.at,
+  }));
   if (gravar.length > 0) {
     const { error } = await db()
       .from('attendance')
       .upsert(gravar, { onConflict: 'event_id,player_id' });
-    if (error) throw error;
-  }
-  const apagar = itens.filter((i) => i.status === 'sem-resposta').map((i) => i.remoteId);
-  if (apagar.length > 0) {
-    const { error } = await db()
-      .from('attendance')
-      .delete()
-      .eq('event_id', eventId)
-      .in('player_id', apagar);
     if (error) throw error;
   }
 }
@@ -842,4 +808,481 @@ export async function guestUpdateAthlete(
     p_weight: weightKg,
   });
   if (error) throw error;
+}
+
+// ── Base única — fase 2: jogos e sorteios (migração 013) ────
+
+/** O sorteio como vai para a nuvem: jogadores por id da NUVEM */
+interface SorteioNuvem {
+  id: string;
+  createdAt: string;
+  sport: DrawResult['sport'];
+  settings: DrawResult['settings'];
+  balanceScore: number;
+  teams: { id: string; name: string; color: TeamColor; totalSkill: number; avgSkill: number; players: string[] }[];
+  bench: string[];
+}
+
+function sorteioParaNuvem(s: DrawResult | undefined): SorteioNuvem | null {
+  if (!s) return null;
+  const ids = (list: Player[]) => list.flatMap((p) => (p.remoteId ? [p.remoteId] : []));
+  return {
+    id: s.id,
+    createdAt: s.createdAt,
+    sport: s.sport,
+    settings: s.settings,
+    balanceScore: s.balanceScore,
+    teams: s.teams.map((t) => ({
+      id: t.id,
+      name: t.name,
+      color: t.color,
+      totalSkill: t.totalSkill,
+      avgSkill: t.avgSkill,
+      players: ids(t.players),
+    })),
+    bench: ids(s.bench),
+  };
+}
+
+/** O sorteio da nuvem com os jogadores DESTE aparelho (quem não está aqui fica de fora) */
+function sorteioDaNuvem(s: SorteioNuvem | null, jogoId: string, eventId: string): DrawResult | undefined {
+  if (!s) return undefined;
+  const porRemoto = new Map(
+    useAppStore
+      .getState()
+      .players.filter((p) => p.remoteId)
+      .map((p) => [p.remoteId!, p]),
+  );
+  const locais = (ids: string[]) => ids.flatMap((id) => (porRemoto.has(id) ? [porRemoto.get(id)!] : []));
+  return {
+    id: s.id,
+    createdAt: s.createdAt,
+    sport: s.sport,
+    settings: s.settings,
+    balanceScore: s.balanceScore,
+    teams: s.teams.map((t) => ({ ...t, players: locais(t.players) })),
+    bench: locais(s.bench),
+    jogoId,
+    eventId,
+  };
+}
+
+const EVENT_SYNC_COLS =
+  'id, title, starts_at, location, slots, status, list_closed, teams, sorteio, updated_at, synced_at, created_at';
+
+interface LinhaJogo {
+  id: string;
+  title: string | null;
+  starts_at: string;
+  location: string | null;
+  slots: number | null;
+  status: string | null;
+  list_closed: boolean | null;
+  teams: unknown;
+  sorteio: SorteioNuvem | null;
+  updated_at: string;
+  synced_at: string;
+  created_at: string;
+}
+
+const statusDaNuvem = (s: string | null): Jogo['status'] =>
+  s === 'encerrado' ? 'encerrado' : s === 'cancelado' ? 'cancelado' : 'aberto';
+
+/** A linha da nuvem nos campos do jogo local (sem id local nem confirmações) */
+function doEvento(r: LinhaJogo, jogoId: string) {
+  const d = new Date(r.starts_at);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    place: r.location ?? '',
+    vagas: r.slots,
+    status: statusDaNuvem(r.status),
+    remoteId: r.id,
+    listaFechada: Boolean(r.list_closed),
+    timesPublicados: r.teams != null,
+    sorteio: sorteioDaNuvem(r.sorteio, jogoId, r.id),
+    updatedAt: r.updated_at,
+    enviadoEm: r.updated_at,
+  };
+}
+
+const jogoNaoEnviado = (j: Jogo) => !j.remoteId || j.enviadoEm !== j.updatedAt;
+
+/**
+ * Jogos, sorteios e respostas iguais em todos os aparelhos. Vale a edição mais
+ * recente (`salvar_jogos`, migração 013). Roda depois dos atletas — as
+ * respostas e o sorteio falam de jogadores pelo id da nuvem.
+ *
+ * Ordem: LÊ antes de enviar. Um jogo migrado do antigo `present` que ainda
+ * não tem id da nuvem precisa se ligar ao evento que já existe, não criar
+ * outro — foi o que a "adoção" fazia na tela; agora é aqui, uma vez só.
+ */
+export async function sincronizarJogos(groupId: string): Promise<void> {
+  prepararJogosLegado();
+  await receberJogos(groupId);
+  await enviarJogos(groupId);
+  await sincronizarRespostas();
+}
+
+/** Jogo de antes da base única, já na nuvem, segue a nuvem; os outros sobem */
+function prepararJogosLegado() {
+  const agora = new Date().toISOString();
+  useJogoStore.setState((s) => ({
+    jogos: s.jogos.map((j) =>
+      j.updatedAt ? j : j.remoteId ? { ...j, updatedAt: LEGADO, enviadoEm: LEGADO } : { ...j, updatedAt: agora },
+    ),
+  }));
+}
+
+async function receberJogos(groupId: string) {
+  for (;;) {
+    const desde = useJogoStore.getState().leituraJogos ?? LEGADO;
+    const { data, error } = await db()
+      .from('events')
+      .select(EVENT_SYNC_COLS)
+      .eq('group_id', groupId)
+      .gt('synced_at', desde)
+      .order('synced_at')
+      .limit(500);
+    if (error) throw error;
+    const linhas = (data ?? []) as unknown as LinhaJogo[];
+    if (linhas.length === 0) return;
+    mesclarJogos(linhas);
+    useJogoStore.setState({ leituraJogos: linhas[linhas.length - 1].synced_at });
+    if (linhas.length < 500) return;
+  }
+}
+
+function mesclarJogos(linhas: LinhaJogo[]) {
+  const { sport } = useAppStore.getState();
+  useJogoStore.setState((s) => {
+    const jogos = [...s.jogos];
+    for (const r of linhas) {
+      let i = jogos.findIndex((j) => j.remoteId === r.id);
+      // Adoção: o jogo migrado do `present` se liga ao evento aberto que já existe
+      if (i < 0 && statusDaNuvem(r.status) === 'aberto') {
+        i = jogos.findIndex((j) => j.migrado && !j.remoteId);
+      }
+      if (i < 0) {
+        const id = novoIdLocal();
+        // O evento não guarda o esporte; o sorteio, quando há, sabe qual foi
+        jogos.push({ id, sport: r.sorteio?.sport ?? sport, confirmations: [], createdAt: r.created_at, ...doEvento(r, id) });
+        continue;
+      }
+      const local = jogos[i];
+      const localMaisNovo =
+        local.remoteId === r.id && jogoNaoEnviado(local) && (local.updatedAt ?? LEGADO) >= r.updated_at;
+      // Espelhos da nuvem valem sempre; os dados do jogo, só se a nuvem é mais nova
+      const espelho = { listaFechada: Boolean(r.list_closed), timesPublicados: r.teams != null, remoteId: r.id };
+      jogos[i] = localMaisNovo || local.updatedAt === r.updated_at
+        ? { ...local, ...espelho }
+        : { ...local, ...doEvento(r, local.id) };
+    }
+    return { jogos };
+  });
+}
+
+async function enviarJogos(groupId: string) {
+  // O id da nuvem nasce aqui. O migrado que não achou evento para adotar
+  // (receberJogos roda antes) também sobe, como jogo novo
+  useJogoStore.setState((s) => ({
+    jogos: s.jogos.map((j) => (j.remoteId ? j : { ...j, remoteId: crypto.randomUUID(), migrado: false })),
+  }));
+  const vivos = useJogoStore.getState().jogos.filter(jogoNaoEnviado);
+  if (vivos.length === 0) return;
+
+  const rows = vivos.map((j) => ({
+    id: j.remoteId!,
+    title: null,
+    starts_at: new Date(`${j.date}T${j.time}`).toISOString(),
+    location: j.place || null,
+    slots: j.vagas,
+    status: j.status === 'aberto' ? 'programado' : j.status,
+    sorteio: sorteioParaNuvem(j.sorteio),
+    updated_at: j.updatedAt,
+  }));
+  const { error } = await db().rpc('salvar_jogos', { p_group: groupId, p_rows: rows });
+  if (error) throw error;
+
+  const enviado = new Map(vivos.map((j) => [j.id, j.updatedAt]));
+  useJogoStore.setState((s) => ({
+    jogos: s.jogos.map((j) => (enviado.get(j.id) === j.updatedAt ? { ...j, enviadoEm: j.updatedAt } : j)),
+  }));
+
+  // Relê o que mandou: a recusa de uma edição mais velha é silenciosa
+  const ids = vivos.map((j) => j.remoteId!);
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error: e2 } = await db()
+      .from('events')
+      .select(EVENT_SYNC_COLS)
+      .in('id', ids.slice(i, i + 100));
+    if (e2) throw e2;
+    mesclarJogos((data ?? []) as unknown as LinhaJogo[]);
+  }
+}
+
+/**
+ * Respostas dos jogos ainda em jogo (programados, ou do último dia): traz as
+ * dos links e dos outros aparelhos, e leva as deste aparelho. "Sem resposta"
+ * é gravado, não apagado — é o que deixa os outros aparelhos saberem que o
+ * organizador desmarcou alguém.
+ */
+async function sincronizarRespostas() {
+  const limite = Date.now() - 24 * 3600 * 1000;
+  const ativos = useJogoStore
+    .getState()
+    .jogos.filter((j) => j.remoteId && (j.status === 'aberto' || inicioDo(j) >= limite));
+  const localDe = () =>
+    new Map(
+      useAppStore
+        .getState()
+        .players.filter((p) => p.remoteId)
+        .map((p) => [p.remoteId!, p.id]),
+    );
+
+  for (const j of ativos) {
+    const { data, error } = await db()
+      .from('attendance')
+      .select('player_id, status, answered_at')
+      .eq('event_id', j.remoteId!);
+    if (error) throw error;
+    const mapa = localDe();
+    useJogoStore.getState().importarDoLink(
+      j.id,
+      (data ?? []).flatMap((a) => {
+        const playerId = mapa.get(a.player_id);
+        if (!playerId) return [];
+        const status: ConfirmacaoStatus =
+          a.status === 'vou' ? 'confirmado' : a.status === 'nao_vou' ? 'recusado' : 'sem-resposta';
+        return [{ playerId, status, at: a.answered_at }];
+      }),
+    );
+
+    const atual = useJogoStore.getState().jogos.find((x) => x.id === j.id);
+    const itens = atual ? pendentesDeEnvio(atual) : [];
+    if (itens.length === 0) continue;
+    const remotoDe = new Map(useAppStore.getState().players.map((p) => [p.id, p.remoteId]));
+    const envio = itens.flatMap((c) => {
+      const remoteId = remotoDe.get(c.playerId);
+      return remoteId ? [{ remoteId, status: c.status, at: c.at }] : [];
+    });
+    await enviarRespostas(j.remoteId!, envio);
+    useJogoStore.getState().marcarEnviados(j.id, itens.map((c) => ({ playerId: c.playerId, at: c.at })));
+  }
+}
+
+// ── Base única — fase 2: partidas (migração 013) ────────────
+
+/**
+ * Troca os ids de jogador de uma partida — de local para nuvem na subida, e
+ * de volta na descida. Jogador sem par do outro lado sai da partida: é quem
+ * não está no elenco daquele lado, e um id solto não diria nada a ninguém.
+ */
+function trocarJogadores(m: Match, de: Map<string, string>): Match {
+  const um = (id: string | undefined) => (id ? de.get(id) : undefined);
+  const lista = (ids: string[]) => ids.flatMap((id) => (de.has(id) ? [de.get(id)!] : []));
+  const scorers: Record<string, number> = {};
+  for (const [id, n] of Object.entries(m.scorers)) {
+    const novo = um(id);
+    if (novo) scorers[novo] = n;
+  }
+  return {
+    ...m,
+    teams: m.teams.map((t) => ({ ...t, playerIds: lista(t.playerIds) })),
+    attendance: lista(m.attendance),
+    scorers,
+    games: m.games.map((g) => ({
+      ...g,
+      rallies: g.rallies?.map((r) => {
+        const { playerId, ...resto } = r;
+        const novo = um(playerId);
+        return novo ? { ...resto, playerId: novo } : resto;
+      }),
+      lineup: g.lineup && {
+        ...g.lineup,
+        court: Object.fromEntries(
+          Object.entries(g.lineup.court).flatMap(([pos, id]) =>
+            id && de.has(id) ? [[pos, de.get(id)!]] : [],
+          ),
+        ),
+        subs: g.lineup.subs.flatMap((sub) =>
+          de.has(sub.outId) && de.has(sub.inId)
+            ? [{ ...sub, outId: de.get(sub.outId)!, inId: de.get(sub.inId)! }]
+            : [],
+        ),
+      },
+    })),
+  };
+}
+
+const MATCH_SYNC_COLS = 'id, sport, played_at, event_id, dados, updated_at, synced_at, deleted_at';
+
+interface LinhaPartida {
+  id: string;
+  sport: SportId;
+  played_at: string;
+  event_id: string | null;
+  dados: Match | null;
+  updated_at: string;
+  synced_at: string;
+  deleted_at: string | null;
+}
+
+/** Só o amador: o profissional segue no modelo antigo, o aparelho é a fonte */
+const partidaDoAmador = (m: Match) => m.mode !== 'profissional';
+const partidaNaoEnviada = (m: Match) => !m.remoteId || m.enviadoEm !== m.updatedAt;
+
+/**
+ * Partidas encerradas iguais em todos os aparelhos. A partida sobe inteira em
+ * `matches.dados`, com os ids de jogador da nuvem; vale a edição mais recente
+ * (`salvar_partidas`). Roda depois dos jogos — a partida aponta para o jogo
+ * pelo id da nuvem (`event_id`).
+ *
+ * A partida AO VIVO não sobe: ela muda a cada ponto, e só um aparelho marca o
+ * placar. Ela aparece nos outros quando termina.
+ */
+export async function sincronizarPartidas(groupId: string): Promise<void> {
+  // Partida de antes da base única nunca esteve na nuvem: sobe como nova
+  const agora = new Date().toISOString();
+  useMatchStore.setState((s) => ({
+    matches: s.matches.map((m) => (partidaDoAmador(m) && !m.updatedAt ? { ...m, updatedAt: agora } : m)),
+  }));
+  await receberPartidas(groupId);
+  await enviarPartidas(groupId);
+}
+
+async function receberPartidas(groupId: string) {
+  for (;;) {
+    const desde = useMatchStore.getState().leituraPartidas ?? LEGADO;
+    const { data, error } = await db()
+      .from('matches')
+      .select(MATCH_SYNC_COLS)
+      .eq('group_id', groupId)
+      .gt('synced_at', desde)
+      .order('synced_at')
+      .limit(200);
+    if (error) throw error;
+    const linhas = (data ?? []) as unknown as LinhaPartida[];
+    if (linhas.length === 0) return;
+    mesclarPartidas(linhas);
+    useMatchStore.setState({ leituraPartidas: linhas[linhas.length - 1].synced_at });
+    if (linhas.length < 200) return;
+  }
+}
+
+function mesclarPartidas(linhas: LinhaPartida[]) {
+  const localDe = new Map(
+    useAppStore
+      .getState()
+      .players.filter((p) => p.remoteId)
+      .map((p) => [p.remoteId!, p.id]),
+  );
+  const jogoDe = new Map(
+    useJogoStore
+      .getState()
+      .jogos.filter((j) => j.remoteId)
+      .map((j) => [j.remoteId!, j.id]),
+  );
+  useMatchStore.setState((s) => {
+    const matches = [...s.matches];
+    const esperandoExclusao = new Set(s.excluidas.map((e) => e.remoteId));
+    for (const r of linhas) {
+      if (esperandoExclusao.has(r.id)) continue;
+      const i = matches.findIndex((m) => m.remoteId === r.id);
+      const local = i >= 0 ? matches[i] : undefined;
+      const localMaisNovo =
+        local !== undefined && partidaNaoEnviada(local) && (local.updatedAt ?? LEGADO) >= r.updated_at;
+      if (localMaisNovo || local?.updatedAt === r.updated_at) {
+        // Já está aqui; só confirma que chegou
+        if (local && local.updatedAt === r.updated_at) matches[i] = { ...local, enviadoEm: r.updated_at };
+        continue;
+      }
+
+      if (r.deleted_at || !r.dados) {
+        if (local) matches.splice(i, 1);
+        continue;
+      }
+      const jogoId = r.event_id ? jogoDe.get(r.event_id) : undefined;
+      const { jogoId: _semJogo, ...dados } = trocarJogadores(r.dados, localDe);
+      const partida: Match = {
+        ...dados,
+        // O id local de quem criou vale só lá; aqui a partida ganha o seu
+        id: local?.id ?? novoIdLocal(),
+        mode: 'amador',
+        remoteId: r.id,
+        updatedAt: r.updated_at,
+        enviadoEm: r.updated_at,
+        ...(jogoId ? { jogoId } : {}),
+      };
+      if (local) matches[i] = partida;
+      else matches.push(partida);
+    }
+    matches.sort((a, b) => b.date.localeCompare(a.date));
+    return { matches };
+  });
+}
+
+async function enviarPartidas(groupId: string) {
+  useMatchStore.setState((s) => ({
+    matches: s.matches.map((m) =>
+      partidaDoAmador(m) && !m.remoteId ? { ...m, remoteId: crypto.randomUUID() } : m,
+    ),
+  }));
+  const { matches, excluidas } = useMatchStore.getState();
+  const vivas = matches.filter((m) => partidaDoAmador(m) && partidaNaoEnviada(m));
+  if (vivas.length === 0 && excluidas.length === 0) return;
+
+  const remotoDe = new Map(
+    useAppStore
+      .getState()
+      .players.filter((p) => p.remoteId)
+      .map((p) => [p.id, p.remoteId!]),
+  );
+  const eventoDe = new Map(useJogoStore.getState().jogos.map((j) => [j.id, j.remoteId]));
+  const rows = [
+    ...vivas.map((m) => {
+      const { remoteId: _r, enviadoEm: _e, jogoId, ...dados } = trocarJogadores(m, remotoDe);
+      return {
+        id: m.remoteId!,
+        sport: m.sport,
+        played_at: m.date,
+        event_id: (jogoId && eventoDe.get(jogoId)) || null,
+        dados,
+        deleted_at: null,
+        updated_at: m.updatedAt,
+      };
+    }),
+    ...excluidas.map((e) => ({
+      id: e.remoteId,
+      sport: e.sport,
+      played_at: e.date,
+      event_id: null,
+      dados: null,
+      deleted_at: e.at,
+      updated_at: e.at,
+    })),
+  ];
+  for (let i = 0; i < rows.length; i += 50) {
+    const { error } = await db().rpc('salvar_partidas', { p_group: groupId, p_rows: rows.slice(i, i + 50) });
+    if (error) throw error;
+  }
+
+  const enviada = new Map(vivas.map((m) => [m.id, m.updatedAt]));
+  const exclusoesEnviadas = new Set(excluidas.map((e) => e.remoteId + e.at));
+  useMatchStore.setState((s) => ({
+    matches: s.matches.map((m) => (enviada.get(m.id) === m.updatedAt ? { ...m, enviadoEm: m.updatedAt } : m)),
+    excluidas: s.excluidas.filter((e) => !exclusoesEnviadas.has(e.remoteId + e.at)),
+  }));
+
+  // Relê o que mandou: a recusa de uma edição mais velha é silenciosa
+  const ids = vivas.map((m) => m.remoteId!);
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await db()
+      .from('matches')
+      .select(MATCH_SYNC_COLS)
+      .in('id', ids.slice(i, i + 100));
+    if (error) throw error;
+    mesclarPartidas((data ?? []) as unknown as LinhaPartida[]);
+  }
 }

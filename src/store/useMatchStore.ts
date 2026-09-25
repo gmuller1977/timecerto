@@ -25,6 +25,8 @@ export interface LiveMatch {
   finished: boolean;
   /** Modo profissional: o time da casa entrou com escalação */
   pro?: ProSetup;
+  /** Jogo (id LOCAL) a que a partida pertence */
+  jogoId?: string;
 }
 
 /** O que vale para a partida inteira; o que muda por set fica em `Game.lineup` */
@@ -34,9 +36,21 @@ export interface ProSetup {
   liberoId?: string;
 }
 
+/** Partida apagada que já estava na nuvem: a exclusão ainda precisa subir */
+export interface PartidaExcluida {
+  remoteId: string;
+  sport: SportId;
+  date: string;
+  at: string;
+}
+
 interface MatchState {
   live: LiveMatch | null;
   matches: Match[];
+  /** Exclusões esperando a nuvem (base única, migração 013) */
+  excluidas: PartidaExcluida[];
+  /** Até onde este aparelho já leu as partidas da nuvem (synced_at do servidor) */
+  leituraPartidas?: string;
 
   startMatch: (input: {
     sport: SportId;
@@ -44,6 +58,8 @@ interface MatchState {
     scout?: Partial<ScoutSettings>;
     /** Escalação do time da casa — teams[0] */
     lineup?: { system: RotationSystem; court: Court; liberoId?: string };
+    /** Jogo a que a partida pertence (amador) */
+    jogoId?: string;
   }) => void;
   updateScout: (patch: Partial<ScoutSettings>) => void;
   addRally: (input: {
@@ -100,11 +116,13 @@ export const useMatchStore = create<MatchState>()(
     (set, get) => ({
       live: null,
       matches: [],
+      excluidas: [],
 
-      startMatch: ({ sport, teams, scout, lineup }) =>
+      startMatch: ({ sport, teams, scout, lineup, jogoId }) =>
         set({
           live: {
             id: uid(),
+            ...(jogoId ? { jogoId } : {}),
             sport,
             date: new Date().toISOString(),
             teams,
@@ -322,6 +340,8 @@ export const useMatchStore = create<MatchState>()(
           scorers,
           attendance: live.teams.flatMap((t) => t.playerIds),
           mode: live.pro ? 'profissional' : 'amador',
+          ...(live.jogoId ? { jogoId: live.jogoId } : {}),
+          updatedAt: new Date().toISOString(),
         };
 
         set((s) => ({
@@ -332,12 +352,26 @@ export const useMatchStore = create<MatchState>()(
 
       discardMatch: () => set({ live: null }),
 
+      // Apagar é uma edição como as outras: a lápide leva a exclusão aos outros aparelhos
       removeMatch: (id) =>
-        set((s) => ({ matches: s.matches.filter((m) => m.id !== id) })),
+        set((s) => {
+          const m = s.matches.find((x) => x.id === id);
+          return {
+            matches: s.matches.filter((x) => x.id !== id),
+            excluidas: m?.remoteId
+              ? [...s.excluidas, { remoteId: m.remoteId, sport: m.sport, date: m.date, at: new Date().toISOString() }]
+              : s.excluidas,
+          };
+        }),
     }),
     {
       name: 'timecerto:matches:v1',
-      partialize: (s) => ({ live: s.live, matches: s.matches }),
+      partialize: (s) => ({
+        live: s.live,
+        matches: s.matches,
+        excluidas: s.excluidas,
+        leituraPartidas: s.leituraPartidas,
+      }),
     },
   ),
 );
