@@ -689,7 +689,9 @@ O esquema está em `supabase/schema.sql` com RLS por grupo e papéis
   do app, conta Business, mensagem iniciada pelo app só com modelo aprovado
   e opt-in de quem recebe, cobrança por mensagem conforme a categoria.
   Automação de conta pessoal (bibliotecas não oficiais) viola os termos do
-  WhatsApp e arrisca banir o número — descartado. Nada decidido.
+  WhatsApp e arrisca banir o número — descartado. **Decidido em 26/09/2026:
+  fica a notificação no celular**; o WhatsApp oficial só volta à mesa se, na
+  prática, o "abriu vaga" ficar sem resposta com frequência.
 
 O ponto mais delicado dessa fase: **o scout não pode parar por falta de
 internet.** Ginásio tem sinal ruim. Qualquer sincronização precisa ser
