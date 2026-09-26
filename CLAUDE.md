@@ -672,6 +672,25 @@ resultados), login por WhatsApp, financeiro do grupo, ranking.
 O esquema está em `supabase/schema.sql` com RLS por grupo e papéis
 (dono/organizador/jogador).
 
+### Pendências anotadas (26/09/2026)
+
+- **Testar os avisos no celular num aparelho de verdade.** A configuração
+  foi toda feita em 25/09 (migração 016, segredos VAPID, Edge Function
+  `enviar-aviso` — endereço automático `clever-resp…` —, webhook
+  `avisar-celular` e `VITE_VAPID_PUBLIC_KEY` na Vercel, conferida no build
+  publicado). Falta o teste ponta a ponta: um Android ativa "Me avise pelo
+  celular" no link e o administrador manda "Avisar pelo celular". Se não
+  chegar: `avisos.enviado_em` vazio = webhook; `resultado` com falhas = ver
+  os logs da função.
+- **Ideia do Guilherme, só para avaliar: avisos direto no WhatsApp**, em vez
+  de (ou além de) notificação do navegador — um "agente" que manda as
+  atualizações e talvez receba "vou / não vou" pela conversa. O caminho
+  oficial é a WhatsApp Business Platform (Cloud API da Meta): número próprio
+  do app, conta Business, mensagem iniciada pelo app só com modelo aprovado
+  e opt-in de quem recebe, cobrança por mensagem conforme a categoria.
+  Automação de conta pessoal (bibliotecas não oficiais) viola os termos do
+  WhatsApp e arrisca banir o número — descartado. Nada decidido.
+
 O ponto mais delicado dessa fase: **o scout não pode parar por falta de
 internet.** Ginásio tem sinal ruim. Qualquer sincronização precisa ser
 otimista, com fila local e reconciliação depois — nunca bloquear o registro
