@@ -10,11 +10,53 @@ const naoEnviado = (x: { remoteId?: string; enviadoEm?: string; updatedAt?: stri
   !x.remoteId || x.enviadoEm !== x.updatedAt;
 
 // O componente é montado uma vez só (App.tsx): o estado da rodada mora aqui.
-// O id do grupo, depois de achado. Sem grupo, procura de novo na próxima:
-// ele pode ter sido criado (ou o convite aceito) nesse meio-tempo
-let grupo: string | null = null;
 let rodando = false;
 let deNovo = false;
+
+/*
+ * O grupo que este aparelho sincronizou por último, GUARDADO no aparelho —
+ * sobrevive a fechar o app. É o que permite perceber que o acesso acabou.
+ *
+ * Bug relatado pelo Guilherme em 29/09/2026: um administrador removido
+ * continuava vendo jogos e atletas. O banco já recusava tudo a ele, mas o
+ * app funciona sem internet e guarda uma cópia no aparelho — e a rodada
+ * guardava o id do grupo na memória e nunca mais conferia se ainda podia.
+ */
+const MARCA = 'timecerto:grupo-nuvem';
+
+function lerMarca(): string | null {
+  try {
+    return localStorage.getItem(MARCA);
+  } catch {
+    return null;
+  }
+}
+
+function gravarMarca(id: string | null) {
+  try {
+    if (id) localStorage.setItem(MARCA, id);
+    else localStorage.removeItem(MARCA);
+  } catch {
+    /* sem armazenamento: só não detecta a perda de acesso entre aberturas */
+  }
+}
+
+/**
+ * Perdeu o acesso ao grupo (foi removido de administrador, ou entrou outra
+ * conta neste aparelho): apaga a cópia local da pelada — atletas, jogos,
+ * sorteios e partidas do modo amador. O modo profissional é do aparelho e
+ * não tem nada a ver com o grupo, então fica.
+ */
+function limparCopiaDoGrupo() {
+  useAppStore.setState({ players: [], excluidos: [], lastResult: null, history: [], leituraNuvem: undefined });
+  useJogoStore.setState({ jogos: [], leituraJogos: undefined });
+  useMatchStore.setState((m) => ({
+    matches: m.matches.filter((x) => x.mode === 'profissional'),
+    excluidas: [],
+    leituraPartidas: undefined,
+    live: m.live && !m.live.pro ? null : m.live,
+  }));
+}
 
 async function rodar(): Promise<void> {
   if (!navigator.onLine) return;
@@ -25,8 +67,23 @@ async function rodar(): Promise<void> {
   }
   rodando = true;
   try {
-    if (!grupo) grupo = (await findMyGroup('amador'))?.id ?? null;
+    // Confere a CADA rodada: o acesso pode acabar a qualquer momento. Erro de
+    // rede cai no catch lá embaixo, sem limpar nada — só a resposta do banco
+    // dizendo "não é mais seu" limpa
+    const grupo = (await findMyGroup('amador'))?.id ?? null;
+    const anterior = lerMarca();
+    // Sem marca — aparelho de antes desta correção —, a pista é a cópia já ter
+    // passado pela nuvem (`enviadoEm`; o `remoteId` não serve, o jogo nasce
+    // com ele) e a conta não ter grupo nenhum
+    const veioDaNuvem =
+      useAppStore.getState().players.some((x) => x.enviadoEm) || useJogoStore.getState().jogos.some((j) => j.enviadoEm);
+    if ((anterior && anterior !== grupo) || (!anterior && !grupo && veioDaNuvem)) {
+      console.warn('sem acesso ao grupo sincronizado antes: limpando a cópia do aparelho');
+      limparCopiaDoGrupo();
+      gravarMarca(null);
+    }
     if (grupo) {
+      gravarMarca(grupo);
       await syncAmador(grupo);
       await sincronizarJogos(grupo);
       await sincronizarPartidas(grupo);
@@ -67,11 +124,7 @@ export function SincronizacaoNuvem() {
   const ativo = ready && Boolean(session);
 
   useEffect(() => {
-    if (!ativo) {
-      // Saiu da conta: a próxima entrada pode ser de outro grupo
-      grupo = null;
-      return;
-    }
+    if (!ativo) return;
     rodar();
     const aoVoltar = () => {
       if (!document.hidden) rodar();

@@ -299,6 +299,21 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.
 
+### Perder o acesso limpa o aparelho
+
+Bug de 29/09/2026: o administrador removido continuava vendo jogos e atletas.
+O banco já recusava tudo, mas o app guarda uma cópia no aparelho para
+funcionar sem internet, e a sincronização achava o grupo uma vez e nunca mais
+conferia.
+
+Hoje `SincronizacaoNuvem` confere o grupo a CADA rodada e guarda no aparelho
+(`timecerto:grupo-nuvem`) qual sincronizou. Se a conta não tem mais aquele
+grupo, apaga a cópia do modo amador — atletas, jogos, sorteios, partidas; o
+profissional é do aparelho e fica. Aparelho de antes da correção, sem a marca:
+limpa quando a conta não tem grupo nenhum e a cópia já passou pela nuvem
+(`enviadoEm`, e não `remoteId`, que o jogo ganha ao nascer). Erro de rede
+nunca limpa: só a resposta do banco.
+
 ### Avisos no celular (web push)
 
 Feito em 25/09/2026, migração 016, com o escopo decidido pelo Guilherme. Quem
