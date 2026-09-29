@@ -6,6 +6,7 @@ import { useAuth } from '@/store/useAuth';
 import {
   createGroup,
   findMyGroup,
+  guestLink,
   registerLink,
   shareOnWhatsApp,
   syncAmador,
@@ -14,9 +15,14 @@ import {
 import { explain, ShareRow } from '@/components/cloud/partes';
 
 /**
- * O "Convidar" de Atletas: o link de CADASTRO, que traz gente nova para o
- * grupo. É uma ação, não uma tela (docs/telas-amador.md). Os convites do jogo
- * da semana — mensalistas e convidados — ficam no cartão da aba Jogo.
+ * O "Convidar" de Atletas: traz gente nova para o grupo. É uma ação, não uma
+ * tela (docs/telas-amador.md).
+ *
+ * Duas portas (pedido do Guilherme, 29/09/2026): o MENSALISTA recebe o link
+ * de cadastro, que fica pendente até a aprovação; o CONVIDADO recebe o link
+ * da lista de convidados — ele não se cadastra antes, entra direto no jogo
+ * aberto, atrás dos mensalistas. Os convites do jogo da semana continuam no
+ * cartão da aba Jogo.
  *
  * Carregada sob demanda no primeiro toque: é ela que traz o Supabase.
  */
@@ -28,6 +34,7 @@ export function ConvidarSheet({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('Pelada');
   const [busy, setBusy] = useState(false);
+  const [quem, setQuem] = useState<'mensalista' | 'convidado'>('mensalista');
 
   useEffect(() => {
     if (!session) return;
@@ -91,31 +98,80 @@ export function ConvidarSheet({ onClose }: { onClose: () => void }) {
         </Button>
       </>
     );
-  } else if (!group.registerCode) {
-    body = (
-      <p className="text-sm text-ink-400">
-        O link de cadastro aparece depois da atualização do banco (migração 006).
-      </p>
-    );
   } else {
-    const link = registerLink(group.registerCode);
-    body = (
-      <>
-        <p className="text-sm leading-relaxed text-ink-400">
-          Cada um preenche nome, apelido, nascimento, telefone, posição e nível. O
-          cadastro fica aguardando a sua aprovação no topo de Atletas.
-        </p>
-        <ShareRow
-          label="Enviar link de cadastro"
-          link={link}
-          onShare={() =>
-            shareOnWhatsApp(
-              `📋 Cadastro de mensalistas — ${group.name}\n\nPreencha uma vez: nome, nascimento, telefone, posição e nível.\n${link}`,
-            )
-          }
-        />
-      </>
+    const escolha = (
+      <div className="mb-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Quem você vai convidar">
+        {(['mensalista', 'convidado'] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={quem === k}
+            onClick={() => setQuem(k)}
+            className={`rounded-xl border px-3 py-2.5 text-sm font-semibold ${quem === k ? 'border-brand-500 bg-brand-500/10 text-brand-300' : 'border-ink-800 bg-ink-950 text-ink-300'}`}
+          >
+            {k === 'mensalista' ? 'Mensalista' : 'Convidado'}
+          </button>
+        ))}
+      </div>
     );
+    if (quem === 'convidado') {
+      const link = group.guestCode ? guestLink(group.guestCode) : null;
+      body = (
+        <>
+          {escolha}
+          <p className="text-sm leading-relaxed text-ink-400">
+            O convidado não precisa se cadastrar antes: pelo link ele coloca o nome na lista do jogo aberto.
+            Mensalistas têm prioridade; se sobrar vaga, ele entra por ordem de chegada.
+          </p>
+          {link ? (
+            <ShareRow
+              label="Enviar link de convidado"
+              link={link}
+              onShare={() =>
+                shareOnWhatsApp(
+                  `⚡ ${group.name}
+
+Quer jogar com a gente? Coloque seu nome na lista de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.
+${link}`,
+                )
+              }
+            />
+          ) : (
+            <p className="mt-3 text-sm text-ink-400">O link de convidados ainda não existe para este grupo.</p>
+          )}
+        </>
+      );
+    } else if (!group.registerCode) {
+      body = (
+        <>
+          {escolha}
+          <p className="text-sm text-ink-400">
+            O link de cadastro aparece depois da atualização do banco (migração 006).
+          </p>
+        </>
+      );
+    } else {
+      const link = registerLink(group.registerCode);
+      body = (
+        <>
+          {escolha}
+          <p className="text-sm leading-relaxed text-ink-400">
+            Cada um preenche nome, apelido, nascimento, telefone, posição e nível. O
+            cadastro fica aguardando a sua aprovação no topo de Atletas.
+          </p>
+          <ShareRow
+            label="Enviar link de cadastro"
+            link={link}
+            onShare={() =>
+              shareOnWhatsApp(
+                `📋 Cadastro de mensalistas — ${group.name}\n\nPreencha uma vez: nome, nascimento, telefone, posição e nível.\n${link}`,
+              )
+            }
+          />
+        </>
+      );
+    }
   }
 
   return (
