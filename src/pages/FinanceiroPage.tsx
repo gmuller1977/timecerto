@@ -188,6 +188,7 @@ function Conteudo({
   );
   const mesAtual = mes === hoje().slice(0, 7);
   const nome = (id: string) => dados.jogadores.get(id)?.nome ?? 'Jogador';
+  const [novaCobranca, setNovaCobranca] = useState(false);
 
   return (
     <>
@@ -250,11 +251,30 @@ function Conteudo({
         </p>
       </section>
 
-      {/* Quem deve */}
+      {/*
+        Cobranças (pedido do Guilherme, 29/09/2026): o título com "+ Nova
+        cobrança" ao lado, no mesmo modelo das despesas. A lista continua com
+        TUDO o que está em aberto, de qualquer mês — filtrar pelo mês faria uma
+        dívida antiga sumir da tela sem ter sido paga.
+      */}
       <section className="mt-6">
-        <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
-          Quem deve ({devedores.length})
-        </p>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">
+            Cobranças do mês ({devedores.length})
+          </p>
+          {!novaCobranca && (
+            <button
+              onClick={() => setNovaCobranca(true)}
+              className="flex items-center gap-1 text-xs font-medium text-brand-300"
+            >
+              <Plus size={14} />
+              Nova cobrança
+            </button>
+          )}
+        </div>
+        {novaCobranca && (
+          <CobrancaAvulsa dados={dados} recarregar={recarregar} onFechar={() => setNovaCobranca(false)} />
+        )}
         {devedores.length > 0 && <CobrarVarios devedores={devedores} grupo={grupo} dados={dados} nome={nome} />}
         <div className="flex flex-col gap-2">
           {devedores.map((s) => (
@@ -278,7 +298,6 @@ function Conteudo({
       <ComCredito saldos={saldos} dados={dados} nome={nome} recarregar={recarregar} />
       <Recebimentos mes={mes} dados={dados} nome={nome} recarregar={recarregar} />
       <Despesas mes={mes} grupo={grupo} dados={dados} recarregar={recarregar} />
-      <CobrancaAvulsa dados={dados} recarregar={recarregar} />
     </>
   );
 }
@@ -857,8 +876,15 @@ function Despesas({
 
 // ── Cobrança avulsa ──
 
-function CobrancaAvulsa({ dados, recarregar }: { dados: DadosFinanceiros; recarregar: () => void }) {
-  const [aberto, setAberto] = useState(false);
+function CobrancaAvulsa({
+  dados,
+  recarregar,
+  onFechar,
+}: {
+  dados: DadosFinanceiros;
+  recarregar: () => void;
+  onFechar: () => void;
+}) {
   const [quem, setQuem] = useState('');
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState('');
@@ -879,10 +905,7 @@ function CobrancaAvulsa({ dados, recarregar }: { dados: DadosFinanceiros; recarr
     setErro(null);
     try {
       await lancarAvulsa(quem, descricao, cents, vence);
-      setAberto(false);
-      setDescricao('');
-      setValor('');
-      setQuem('');
+      onFechar();
       recarregar();
     } catch (err) {
       setErro(explain(err));
@@ -890,19 +913,8 @@ function CobrancaAvulsa({ dados, recarregar }: { dados: DadosFinanceiros; recarr
     setBusy(false);
   }
 
-  if (!aberto) {
-    return (
-      <button
-        onClick={() => setAberto(true)}
-        className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 py-3 text-sm font-medium text-ink-300"
-      >
-        <Plus size={16} />
-        Cobrança avulsa (camisa, churrasco…)
-      </button>
-    );
-  }
   return (
-    <form onSubmit={salvar} className="mt-6 flex flex-col gap-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+    <form onSubmit={salvar} className="mb-2 flex flex-col gap-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
       <p className="text-[15px] font-semibold text-ink-50">Cobrança avulsa</p>
       <select
         value={quem}
@@ -947,7 +959,7 @@ function CobrancaAvulsa({ dados, recarregar }: { dados: DadosFinanceiros; recarr
       </div>
       {erro && <p className="text-sm text-red-300">{erro}</p>}
       <div className="flex gap-2">
-        <Button type="button" size="sm" variant="secondary" onClick={() => setAberto(false)}>
+        <Button type="button" size="sm" variant="secondary" onClick={() => onFechar()}>
           Cancelar
         </Button>
         <Button type="submit" size="sm" className="flex-1" disabled={busy}>
