@@ -1443,6 +1443,8 @@ export interface JogadorDoFinanceiro {
   nome: string;
   kind: PlayerKind;
   phone: string | null;
+  /** Ativo, aprovado e não excluído — só esses entram em cobrança nova */
+  ativo: boolean;
 }
 
 export interface DadosFinanceiros {
@@ -1496,7 +1498,7 @@ export async function salvarConfigFinanceiro(groupId: string, c: ConfigFinanceir
 export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> {
   const [config, jog, cob, pag, desp] = await Promise.all([
     lerConfigFinanceiro(groupId),
-    db().from('players').select('id, name, nickname, kind, phone').eq('group_id', groupId),
+    db().from('players').select('id, name, nickname, kind, phone, active, pending, deleted_at').eq('group_id', groupId),
     db()
       .from('cobrancas')
       .select('id, player_id, tipo, descricao, valor_cents, vence_em, cancelada_em, criada_em')
@@ -1513,7 +1515,13 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
     jogadores: new Map(
       (jog.data ?? []).map((p) => [
         p.id,
-        { id: p.id, nome: (p.nickname as string | null)?.trim() || p.name, kind: p.kind ?? 'mensalista', phone: p.phone },
+        {
+          id: p.id,
+          nome: (p.nickname as string | null)?.trim() || p.name,
+          kind: p.kind ?? 'mensalista',
+          phone: p.phone,
+          ativo: Boolean(p.active) && !p.pending && !p.deleted_at,
+        },
       ]),
     ),
     cobrancas: (cob.data ?? []).map((c) => ({

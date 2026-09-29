@@ -846,7 +846,8 @@ function CobrancaAvulsa({ dados, recarregar }: { dados: DadosFinanceiros; recarr
   const [vence, setVence] = useState(hoje());
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const jogadores = [...dados.jogadores.values()].sort((a, b) => a.nome.localeCompare(b.nome));
+  // Só quem está no elenco hoje: excluídos e inativos continuam com nome nas dívidas antigas, mas não recebem cobrança nova
+  const jogadores = [...dados.jogadores.values()].filter((j) => j.ativo).sort((a, b) => a.nome.localeCompare(b.nome));
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
