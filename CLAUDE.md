@@ -274,6 +274,20 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
 - Pendência de antes do app entra como **cobrança avulsa**, com vencimento no
   passado.
 
+**Cobrança no WhatsApp** (29/09/2026):
+
+- **O Pix vai numa segunda mensagem, sozinho.** No WhatsApp não dá para
+  copiar um pedaço de mensagem, e o link `wa.me` só preenche UMA mensagem —
+  por isso são dois toques: "Cobrar" e depois "2ª mensagem: o código Pix".
+- **A data das linhas é a da cobrança, não o vencimento**, na mensagem
+  individual e na do grupo (`dataDaCobranca`).
+- **Histórico de cobranças enviadas** (migração 020, tabela `lembretes`): uma
+  linha cada vez que o WhatsApp é ABERTO para cobrar — o app não sabe se a
+  pessoa apertou Enviar. Na nuvem, para um administrador ver o que o outro
+  cobrou. O "Cobrar um por um" deixa de fora quem recebeu cobrança
+  INDIVIDUAL há menos de 3 dias (com "incluir"); a do grupo não conta, porque
+  o caminho comum é cobrar no grupo e depois mandar o Pix de cada um.
+
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.
 

@@ -11,6 +11,7 @@ import {
   lancarAvulsa,
   lancarDespesa,
   lerFinanceiro,
+  registrarLembretes,
   registrarPagamento,
   type CloudGroup,
   type DadosFinanceiros,
@@ -45,6 +46,12 @@ const moverMes = (mes: string, delta: number) => {
 /** AAAA-MM-DD → DD/MM */
 const dm = (data: string) => `${data.slice(8, 10)}/${data.slice(5, 7)}`;
 
+/** O dia, no fuso do aparelho, de um instante ISO ("2026-09-29T02:00Z" é dia 28 no Brasil) */
+function diaLocal(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 /**
  * A data DA COBRANÇA, não o vencimento (pedido do Guilherme, 29/09/2026): a
  * mensalidade, o dia em que foi lançada; a diária, o dia do jogo; a avulsa, a
@@ -52,8 +59,7 @@ const dm = (data: string) => `${data.slice(8, 10)}/${data.slice(5, 7)}`;
  */
 function dataDaCobranca(c: Cobranca): string {
   if (c.tipo !== 'mensalidade') return c.venceEm;
-  const d = new Date(c.criadaEm);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return diaLocal(c.criadaEm);
 }
 
 /**
@@ -107,6 +113,55 @@ function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => stri
     : `Ainda falta acertar: ${devedores.map((d) => nome(d.playerId)).join(', ')}.`;
   const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
   return `⚡ ${grupo.name} · pendências\n${lista}${pix}\n\nQuem já pagou, desconsidere. 🙏`;
+}
+
+// ── Histórico de cobranças enviadas (migração 020) ──
+
+/** Quem foi cobrado individualmente há menos disso sai do "um por um" */
+const INTERVALO_DE_COBRANCA_DIAS = 3;
+
+/** Dias de calendário entre a data (ISO) e hoje, no fuso do aparelho */
+function diasDesde(iso: string): number {
+  const d = new Date(iso);
+  const inicio = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const agora = new Date();
+  const hojeInicio = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).getTime();
+  return Math.round((hojeInicio - inicio) / 86_400_000);
+}
+
+function haQuanto(iso: string): string {
+  const n = diasDesde(iso);
+  return n <= 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`;
+}
+
+function lembretesDe(dados: DadosFinanceiros, playerId: string) {
+  return dados.lembretes.filter((l) => l.playerId === playerId);
+}
+
+/** Cobrado no WhatsApp dele nos últimos dias — cobrar de novo fica chato */
+function cobradoHaPouco(dados: DadosFinanceiros, playerId: string): boolean {
+  return lembretesDe(dados, playerId).some(
+    (l) => l.canal === 'individual' && diasDesde(l.enviadoEm) < INTERVALO_DE_COBRANCA_DIAS,
+  );
+}
+
+/**
+ * Anota a cobrança sem atrapalhar quem cobra: o WhatsApp já abriu, e perder
+ * a anotação é menos grave que travar o envio.
+ */
+function anotar(
+  grupo: CloudGroup,
+  canal: 'individual' | 'grupo',
+  saldos: SaldoDoJogador[],
+  recarregar: () => void,
+) {
+  registrarLembretes(
+    grupo.id,
+    canal,
+    saldos.map((s) => ({ playerId: s.playerId, valorCents: s.saldoCents })),
+  )
+    .then(recarregar)
+    .catch((e) => console.warn('anotar a cobrança', e));
 }
 
 function abrirWhatsApp(texto: string, phone?: string | null) {
@@ -291,7 +346,9 @@ function Conteudo({
         {novaCobranca && (
           <CobrancaAvulsa dados={dados} recarregar={recarregar} onFechar={() => setNovaCobranca(false)} />
         )}
-        {devedores.length > 0 && <CobrarVarios devedores={devedores} grupo={grupo} dados={dados} nome={nome} />}
+        {devedores.length > 0 && (
+          <CobrarVarios devedores={devedores} grupo={grupo} dados={dados} nome={nome} recarregar={recarregar} />
+        )}
         <div className="flex flex-col gap-2">
           {devedores.map((s) => (
             <Devedor
@@ -331,17 +388,21 @@ function CobrarVarios({
   grupo,
   dados,
   nome,
+  recarregar,
 }: {
   devedores: SaldoDoJogador[];
   grupo: CloudGroup;
   dados: DadosFinanceiros;
   nome: (id: string) => string;
+  recarregar: () => void;
 }) {
   const [modo, setModo] = useState<'grupo' | 'fila' | null>(null);
   const [valores, setValores] = useState(true);
   // A fila congela quem devia ao começar: pagar no meio não bagunça a ordem
   const [fila, setFila] = useState<SaldoDoJogador[]>([]);
   const [i, setI] = useState(0);
+  // Cobrados no WhatsApp deles há menos de 3 dias: ficam fora da fila, mas dá para incluir
+  const [deFora, setDeFora] = useState<SaldoDoJogador[]>([]);
   // Código Pix que ainda falta mandar para a pessoa atual (2ª mensagem)
   const [pixPendente, setPixPendente] = useState<string | null>(null);
 
@@ -357,7 +418,8 @@ function CobrarVarios({
           variant="secondary"
           disabled={devedores.length < 2}
           onClick={() => {
-            setFila(devedores);
+            setFila(devedores.filter((d) => !cobradoHaPouco(dados, d.playerId)));
+            setDeFora(devedores.filter((d) => cobradoHaPouco(dados, d.playerId)));
             setI(0);
             setModo('fila');
           }}
@@ -393,7 +455,13 @@ function CobrarVarios({
         <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
           O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.
         </p>
-        <Button className="mt-3 w-full" onClick={() => abrirWhatsApp(texto)}>
+        <Button
+          className="mt-3 w-full"
+          onClick={() => {
+            abrirWhatsApp(texto);
+            anotar(grupo, 'grupo', devedores, recarregar);
+          }}
+        >
           <MessageCircle size={16} />
           Abrir o WhatsApp
         </Button>
@@ -401,14 +469,36 @@ function CobrarVarios({
     );
   }
 
+  const incluirDeFora = () => {
+    setFila([...fila, ...deFora]);
+    setDeFora([]);
+  };
+  const avisoDeFora = deFora.length > 0 && (
+    <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+      {deFora.length === 1
+        ? `${nome(deFora[0].playerId)} já recebeu cobrança nos últimos ${INTERVALO_DE_COBRANCA_DIAS} dias e ficou de fora.`
+        : `${deFora.length} pessoas já receberam cobrança nos últimos ${INTERVALO_DE_COBRANCA_DIAS} dias e ficaram de fora.`}{' '}
+      <button onClick={incluirDeFora} className="text-brand-300 underline">
+        incluir
+      </button>
+    </p>
+  );
+
   const atual = fila[i];
   if (!atual) {
     return (
-      <div className="mb-2 flex items-center gap-2 rounded-2xl border border-brand-500/30 bg-brand-500/10 px-4 py-3">
-        <span className="min-w-0 flex-1 text-sm text-brand-100">Cobrança enviada para todos da lista.</span>
-        <button onClick={() => setModo(null)} className="text-xs text-ink-400 underline">
-          fechar
-        </button>
+      <div className="mb-2 rounded-2xl border border-brand-500/30 bg-brand-500/10 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 text-sm text-brand-100">
+            {fila.length === 0
+              ? `Todos já receberam cobrança nos últimos ${INTERVALO_DE_COBRANCA_DIAS} dias.`
+              : 'Cobrança enviada para todos da lista.'}
+          </span>
+          <button onClick={() => setModo(null)} className="text-xs text-ink-400 underline">
+            fechar
+          </button>
+        </div>
+        {avisoDeFora}
       </div>
     );
   }
@@ -429,6 +519,7 @@ function CobrarVarios({
       {!jogador?.phone && (
         <p className="mt-0.5 text-[11px] text-ink-500">Sem telefone no cadastro: o WhatsApp abre para escolher o contato.</p>
       )}
+      {avisoDeFora}
       <div className="mt-3 flex gap-2">
         <Button
           size="sm"
@@ -460,6 +551,7 @@ function CobrarVarios({
             onClick={() => {
               const m = mensagemDeCobranca(atual, nome(atual.playerId), grupo, dados);
               abrirWhatsApp(m.texto, jogador?.phone);
+              anotar(grupo, 'individual', [atual], recarregar);
               if (m.pix) setPixPendente(m.pix);
               else setI(i + 1);
             }}
@@ -501,9 +593,13 @@ function Devedor({
 
   const [pixPendente, setPixPendente] = useState<string | null>(null);
 
+  const enviados = lembretesDe(dados, saldo.playerId);
+  const ultimo = enviados[0];
+
   function cobrar() {
     const m = mensagemDeCobranca(saldo, nome, grupo, dados);
     abrirWhatsApp(m.texto, jogador?.phone);
+    anotar(grupo, 'individual', [saldo], recarregar);
     setPixPendente(m.pix);
   }
 
@@ -547,6 +643,12 @@ function Devedor({
               : `${saldo.abertas.length} cobranças`}
             {atrasada && ' · atrasada'}
           </span>
+          {ultimo && (
+            <span className="block truncate text-[11px] text-ink-500">
+              Cobrado {haQuanto(ultimo.enviadoEm)}
+              {ultimo.canal === 'grupo' && ' no grupo'}
+            </span>
+          )}
         </span>
         <span className="shrink-0 text-base font-bold tabular-nums text-ink-50">{formatBRL(saldo.saldoCents)}</span>
         <ChevronDown size={16} className={cn('shrink-0 text-ink-500 transition-transform', aberto && 'rotate-180')} />
@@ -573,6 +675,18 @@ function Devedor({
               </button>
             </li>
           ))}
+          {enviados.length > 0 && (
+            <li className="mt-1 border-t border-ink-800 pt-2 text-[11px] leading-relaxed text-ink-500">
+              <span className="font-semibold text-ink-400">Cobranças enviadas</span>
+              {enviados.slice(0, 5).map((l) => (
+                <span key={l.enviadoEm + l.canal} className="block">
+                  {dm(diaLocal(l.enviadoEm))} · {l.canal === 'grupo' ? 'no grupo' : 'individual'} ·{' '}
+                  {formatBRL(l.valorCents)}
+                </span>
+              ))}
+              {enviados.length > 5 && <span className="block">e mais {enviados.length - 5}</span>}
+            </li>
+          )}
         </ul>
       )}
 

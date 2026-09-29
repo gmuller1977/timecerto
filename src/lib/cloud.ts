@@ -1447,12 +1447,25 @@ export interface JogadorDoFinanceiro {
   ativo: boolean;
 }
 
+/**
+ * Uma vez em que o administrador abriu o WhatsApp para cobrar alguém
+ * (migração 020). O app não sabe se ele apertou Enviar — só que abriu.
+ */
+export interface Lembrete {
+  playerId: string;
+  canal: 'individual' | 'grupo';
+  valorCents: number;
+  enviadoEm: string;
+}
+
 export interface DadosFinanceiros {
   config: ConfigFinanceiro;
   jogadores: Map<string, JogadorDoFinanceiro>;
   cobrancas: Cobranca[];
   pagamentos: Pagamento[];
   despesas: Despesa[];
+  /** Do mais recente para o mais antigo */
+  lembretes: Lembrete[];
 }
 
 const CONFIG_COLS =
@@ -1496,7 +1509,7 @@ export async function salvarConfigFinanceiro(groupId: string, c: ConfigFinanceir
 }
 
 export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> {
-  const [config, jog, cob, pag, desp] = await Promise.all([
+  const [config, jog, cob, pag, desp, lem] = await Promise.all([
     lerConfigFinanceiro(groupId),
     db().from('players').select('id, name, nickname, kind, phone, active, pending, deleted_at').eq('group_id', groupId),
     db()
@@ -1508,8 +1521,13 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
       .select('id, player_id, valor_cents, metodo, pago_em, estorno_de, criado_em')
       .eq('group_id', groupId),
     db().from('despesas').select('id, descricao, valor_cents, gasto_em, estorno_de, criado_em').eq('group_id', groupId),
+    db()
+      .from('lembretes')
+      .select('player_id, canal, valor_cents, enviado_em')
+      .eq('group_id', groupId)
+      .order('enviado_em', { ascending: false }),
   ]);
-  for (const r of [jog, cob, pag, desp]) if (r.error) throw r.error;
+  for (const r of [jog, cob, pag, desp, lem]) if (r.error) throw r.error;
   return {
     config,
     jogadores: new Map(
@@ -1551,7 +1569,26 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
       estornoDe: d.estorno_de,
       criadoEm: d.criado_em,
     })),
+    lembretes: (lem.data ?? []).map((l) => ({
+      playerId: l.player_id,
+      canal: l.canal,
+      valorCents: l.valor_cents,
+      enviadoEm: l.enviado_em,
+    })),
   };
+}
+
+/** Anota que o WhatsApp foi aberto para cobrar essas pessoas (migração 020) */
+export async function registrarLembretes(
+  groupId: string,
+  canal: Lembrete['canal'],
+  itens: { playerId: string; valorCents: number }[],
+): Promise<void> {
+  if (itens.length === 0) return;
+  const { error } = await db()
+    .from('lembretes')
+    .insert(itens.map((i) => ({ group_id: groupId, player_id: i.playerId, canal, valor_cents: i.valorCents })));
+  if (error) throw error;
 }
 
 /**
