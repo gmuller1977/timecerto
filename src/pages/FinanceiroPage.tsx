@@ -44,6 +44,41 @@ const moverMes = (mes: string, delta: number) => {
 /** AAAA-MM-DD → DD/MM */
 const dm = (data: string) => `${data.slice(8, 10)}/${data.slice(5, 7)}`;
 
+/** A cobrança de UMA pessoa: o que deve, e o Pix já com o valor dela */
+function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGroup, dados: DadosFinanceiros): string {
+  const c = dados.config;
+  const hojeStr = hoje();
+  const linhas = saldo.abertas.map(
+    (a) =>
+      `• ${a.cobranca.descricao} — ${formatBRL(a.faltaCents)}${a.cobranca.venceEm < hojeStr ? ` (venceu ${dm(a.cobranca.venceEm)})` : ` (vence ${dm(a.cobranca.venceEm)})`}`,
+  );
+  const pix =
+    c.pixChave && c.pixNome && c.pixCidade
+      ? `\n\nPix copia e cola (já com o valor):\n${pixCopiaECola({ chave: c.pixChave, nome: c.pixNome, cidade: c.pixCidade, valorCents: saldo.saldoCents })}`
+      : c.pixChave
+        ? `\n\nPix: ${c.pixChave}`
+        : '';
+  return `Oi, ${nome}! Passando para lembrar do ${grupo.name}:\n${linhas.join('\n')}\nTotal: ${formatBRL(saldo.saldoCents)}${pix}`;
+}
+
+/**
+ * A cobrança no grupo da pelada: uma mensagem só, com todos. O Pix vai SEM
+ * valor — cada um deve um valor diferente. Com `valores` desligado, só os
+ * nomes: quem cobra decide, a cada vez, se expõe quanto cada um deve.
+ */
+function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => string, grupo: CloudGroup, dados: DadosFinanceiros, valores: boolean): string {
+  const lista = valores
+    ? devedores.map((d) => `• ${nome(d.playerId)} — ${formatBRL(d.saldoCents)}`).join('\n')
+    : `Ainda falta acertar: ${devedores.map((d) => nome(d.playerId)).join(', ')}.`;
+  const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
+  return `⚡ ${grupo.name} · pendências\n${lista}${pix}\n\nQuem já pagou, desconsidere. 🙏`;
+}
+
+function abrirWhatsApp(texto: string, phone?: string | null) {
+  const destino = phone ? whatsappTo(phone) : 'https://wa.me/';
+  window.open(`${destino}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+}
+
 /**
  * Aba Financeiro (migração 017, desenho aprovado pelo Guilherme em
  * 29/09/2026): quem deve, quanto entrou, quanto saiu. Sempre na nuvem — é
@@ -201,6 +236,7 @@ function Conteudo({
         <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
           Quem deve ({devedores.length})
         </p>
+        {devedores.length > 0 && <CobrarVarios devedores={devedores} grupo={grupo} dados={dados} nome={nome} />}
         <div className="flex flex-col gap-2">
           {devedores.map((s) => (
             <Devedor
@@ -224,6 +260,135 @@ function Conteudo({
       <Despesas mes={mes} grupo={grupo} dados={dados} recarregar={recarregar} />
       <CobrancaAvulsa dados={dados} recarregar={recarregar} />
     </>
+  );
+}
+
+// ── Cobrar vários: no grupo, ou um por um ──
+
+/**
+ * Pedido do Guilherme em 29/09/2026, "os dois": uma mensagem no grupo da
+ * pelada, ou a cobrança individual de cada um em sequência. O WhatsApp não
+ * manda para várias conversas de uma vez, e o navegador só abre o WhatsApp
+ * com um toque — por isso o "um por um" é um toque por pessoa.
+ */
+function CobrarVarios({
+  devedores,
+  grupo,
+  dados,
+  nome,
+}: {
+  devedores: SaldoDoJogador[];
+  grupo: CloudGroup;
+  dados: DadosFinanceiros;
+  nome: (id: string) => string;
+}) {
+  const [modo, setModo] = useState<'grupo' | 'fila' | null>(null);
+  const [valores, setValores] = useState(true);
+  // A fila congela quem devia ao começar: pagar no meio não bagunça a ordem
+  const [fila, setFila] = useState<SaldoDoJogador[]>([]);
+  const [i, setI] = useState(0);
+
+  if (modo === null) {
+    return (
+      <div className="mb-2 grid grid-cols-2 gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setModo('grupo')}>
+          <MessageCircle size={15} />
+          Cobrar no grupo
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={devedores.length < 2}
+          onClick={() => {
+            setFila(devedores);
+            setI(0);
+            setModo('fila');
+          }}
+        >
+          Cobrar um por um
+        </Button>
+      </div>
+    );
+  }
+
+  if (modo === 'grupo') {
+    const texto = mensagemDoGrupo(devedores, nome, grupo, dados, valores);
+    return (
+      <div className="mb-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[15px] font-semibold text-ink-50">Cobrar no grupo</p>
+          <button onClick={() => setModo(null)} className="p-1 text-ink-500" aria-label="Fechar">
+            <X size={16} />
+          </button>
+        </div>
+        <label className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-sm text-ink-300">Mostrar os valores</span>
+          <input
+            type="checkbox"
+            checked={valores}
+            onChange={(e) => setValores(e.target.checked)}
+            className="size-5 accent-brand-500"
+          />
+        </label>
+        <p className="mt-3 whitespace-pre-wrap rounded-xl bg-ink-950 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
+          {texto}
+        </p>
+        <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+          O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.
+        </p>
+        <Button className="mt-3 w-full" onClick={() => abrirWhatsApp(texto)}>
+          <MessageCircle size={16} />
+          Abrir o WhatsApp
+        </Button>
+      </div>
+    );
+  }
+
+  const atual = fila[i];
+  if (!atual) {
+    return (
+      <div className="mb-2 flex items-center gap-2 rounded-2xl border border-brand-500/30 bg-brand-500/10 px-4 py-3">
+        <span className="min-w-0 flex-1 text-sm text-brand-100">Cobrança enviada para todos da lista.</span>
+        <button onClick={() => setModo(null)} className="text-xs text-ink-400 underline">
+          fechar
+        </button>
+      </div>
+    );
+  }
+  const jogador = dados.jogadores.get(atual.playerId);
+  return (
+    <div className="mb-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-ink-400">
+          Cobrando {i + 1} de {fila.length}
+        </p>
+        <button onClick={() => setModo(null)} className="text-xs text-ink-500 underline">
+          parar
+        </button>
+      </div>
+      <p className="mt-1 text-[15px] font-semibold text-ink-50">
+        {nome(atual.playerId)} · {formatBRL(atual.saldoCents)}
+      </p>
+      {!jogador?.phone && (
+        <p className="mt-0.5 text-[11px] text-ink-500">Sem telefone no cadastro: o WhatsApp abre para escolher o contato.</p>
+      )}
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setI(i + 1)}>
+          Pular
+        </Button>
+        <Button
+          size="sm"
+          className="flex-1"
+          onClick={() => {
+            abrirWhatsApp(mensagemDeCobranca(atual, nome(atual.playerId), grupo, dados), jogador?.phone);
+            setI(i + 1);
+          }}
+        >
+          <MessageCircle size={15} />
+          Cobrar {nome(atual.playerId)}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -254,20 +419,7 @@ function Devedor({
   const atrasada = saldo.abertas.some((a) => a.cobranca.venceEm < hojeStr);
 
   function cobrar() {
-    const c = dados.config;
-    const linhas = saldo.abertas.map(
-      (a) =>
-        `• ${a.cobranca.descricao} — ${formatBRL(a.faltaCents)}${a.cobranca.venceEm < hojeStr ? ` (venceu ${dm(a.cobranca.venceEm)})` : ` (vence ${dm(a.cobranca.venceEm)})`}`,
-    );
-    const pix =
-      c.pixChave && c.pixNome && c.pixCidade
-        ? `\n\nPix copia e cola (já com o valor):\n${pixCopiaECola({ chave: c.pixChave, nome: c.pixNome, cidade: c.pixCidade, valorCents: saldo.saldoCents })}`
-        : c.pixChave
-          ? `\n\nPix: ${c.pixChave}`
-          : '';
-    const texto = `Oi, ${nome}! Passando para lembrar do ${grupo.name}:\n${linhas.join('\n')}\nTotal: ${formatBRL(saldo.saldoCents)}${pix}`;
-    const destino = jogador?.phone ? whatsappTo(jogador.phone) : 'https://wa.me/';
-    window.open(`${destino}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+    abrirWhatsApp(mensagemDeCobranca(saldo, nome, grupo, dados), jogador?.phone);
   }
 
   async function receber(e: React.FormEvent) {
