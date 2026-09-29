@@ -70,10 +70,9 @@ function mensagemDeCobranca(
   dados: DadosFinanceiros,
 ): { texto: string; pix: string | null } {
   const c = dados.config;
-  const hojeStr = hoje();
+  // Mesmo formato do grupo: descrição — data da cobrança — o que falta (pedido do Guilherme, 29/09/2026)
   const linhas = saldo.abertas.map(
-    (a) =>
-      `• ${a.cobranca.descricao} — ${formatBRL(a.faltaCents)}${a.cobranca.venceEm < hojeStr ? ` (venceu ${dm(a.cobranca.venceEm)})` : ` (vence ${dm(a.cobranca.venceEm)})`}`,
+    (a) => `• ${a.cobranca.descricao} — ${dm(dataDaCobranca(a.cobranca))} — ${formatBRL(a.faltaCents)}`,
   );
   const pix =
     c.pixChave && c.pixNome && c.pixCidade
