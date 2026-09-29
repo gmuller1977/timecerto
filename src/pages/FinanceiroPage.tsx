@@ -56,8 +56,19 @@ function dataDaCobranca(c: Cobranca): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** A cobrança de UMA pessoa: o que deve, e o Pix já com o valor dela */
-function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGroup, dados: DadosFinanceiros): string {
+/**
+ * A cobrança de UMA pessoa: o que deve, e o Pix já com o valor dela.
+ *
+ * O código Pix vai numa SEGUNDA mensagem, sozinho (pedido do Guilherme,
+ * 29/09/2026): no WhatsApp não dá para copiar só um pedaço de uma mensagem —
+ * quem copiava levava o texto junto, e o banco recusava o código.
+ */
+function mensagemDeCobranca(
+  saldo: SaldoDoJogador,
+  nome: string,
+  grupo: CloudGroup,
+  dados: DadosFinanceiros,
+): { texto: string; pix: string | null } {
   const c = dados.config;
   const hojeStr = hoje();
   const linhas = saldo.abertas.map(
@@ -66,11 +77,17 @@ function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGro
   );
   const pix =
     c.pixChave && c.pixNome && c.pixCidade
-      ? `\n\nPix copia e cola (já com o valor):\n${pixCopiaECola({ chave: c.pixChave, nome: c.pixNome, cidade: c.pixCidade, valorCents: saldo.saldoCents })}`
-      : c.pixChave
-        ? `\n\nPix: ${c.pixChave}`
-        : '';
-  return `Oi, ${nome}! Passando para lembrar do ${grupo.name}:\n${linhas.join('\n')}\nTotal: ${formatBRL(saldo.saldoCents)}${pix}`;
+      ? pixCopiaECola({ chave: c.pixChave, nome: c.pixNome, cidade: c.pixCidade, valorCents: saldo.saldoCents })
+      : null;
+  const rodape = pix
+    ? '\n\nO Pix copia e cola (já com o valor) vai na próxima mensagem 👇'
+    : c.pixChave
+      ? `\n\nPix: ${c.pixChave}`
+      : '';
+  return {
+    texto: `Oi, ${nome}! Passando para lembrar do ${grupo.name}:\n${linhas.join('\n')}\nTotal: ${formatBRL(saldo.saldoCents)}${rodape}`,
+    pix,
+  };
 }
 
 /**
@@ -326,6 +343,8 @@ function CobrarVarios({
   // A fila congela quem devia ao começar: pagar no meio não bagunça a ordem
   const [fila, setFila] = useState<SaldoDoJogador[]>([]);
   const [i, setI] = useState(0);
+  // Código Pix que ainda falta mandar para a pessoa atual (2ª mensagem)
+  const [pixPendente, setPixPendente] = useState<string | null>(null);
 
   if (modo === null) {
     return (
@@ -412,20 +431,44 @@ function CobrarVarios({
         <p className="mt-0.5 text-[11px] text-ink-500">Sem telefone no cadastro: o WhatsApp abre para escolher o contato.</p>
       )}
       <div className="mt-3 flex gap-2">
-        <Button size="sm" variant="secondary" onClick={() => setI(i + 1)}>
-          Pular
-        </Button>
         <Button
           size="sm"
-          className="flex-1"
+          variant="secondary"
           onClick={() => {
-            abrirWhatsApp(mensagemDeCobranca(atual, nome(atual.playerId), grupo, dados), jogador?.phone);
+            setPixPendente(null);
             setI(i + 1);
           }}
         >
-          <MessageCircle size={15} />
-          Cobrar {nome(atual.playerId)}
+          Pular
         </Button>
+        {pixPendente ? (
+          <Button
+            size="sm"
+            className="flex-1"
+            onClick={() => {
+              abrirWhatsApp(pixPendente, jogador?.phone);
+              setPixPendente(null);
+              setI(i + 1);
+            }}
+          >
+            <MessageCircle size={15} />
+            2ª mensagem: o código Pix
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            className="flex-1"
+            onClick={() => {
+              const m = mensagemDeCobranca(atual, nome(atual.playerId), grupo, dados);
+              abrirWhatsApp(m.texto, jogador?.phone);
+              if (m.pix) setPixPendente(m.pix);
+              else setI(i + 1);
+            }}
+          >
+            <MessageCircle size={15} />
+            Cobrar {nome(atual.playerId)}
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -457,8 +500,12 @@ function Devedor({
   const hojeStr = hoje();
   const atrasada = saldo.abertas.some((a) => a.cobranca.venceEm < hojeStr);
 
+  const [pixPendente, setPixPendente] = useState<string | null>(null);
+
   function cobrar() {
-    abrirWhatsApp(mensagemDeCobranca(saldo, nome, grupo, dados), jogador?.phone);
+    const m = mensagemDeCobranca(saldo, nome, grupo, dados);
+    abrirWhatsApp(m.texto, jogador?.phone);
+    setPixPendente(m.pix);
   }
 
   async function receber(e: React.FormEvent) {
@@ -580,6 +627,28 @@ function Devedor({
             </Button>
           </div>
         </form>
+      ) : pixPendente ? (
+        <div className="mt-3 border-t border-ink-800 pt-3">
+          <p className="text-xs leading-relaxed text-ink-400">
+            Agora o código Pix, sozinho numa mensagem, para {nome} copiar e colar no banco.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setPixPendente(null)}>
+              Não mandar
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => {
+                abrirWhatsApp(pixPendente, jogador?.phone);
+                setPixPendente(null);
+              }}
+            >
+              <MessageCircle size={15} />
+              2ª mensagem: o código Pix
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Button size="sm" variant="secondary" onClick={cobrar}>
