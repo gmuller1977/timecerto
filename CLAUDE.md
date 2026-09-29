@@ -253,6 +253,27 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
   mês na tela (`emCaixa` em `lib/financeiro.ts`). O que aconteceu antes da
   data já está no saldo inicial e não entra. Aceita negativo.
 
+**Cobrança do convidado** (migração 019, pedido do Guilherme em 29/09/2026):
+
+- **Cada jogo nasce com ou sem cobrança** (`events.cobra_diaria`,
+  interruptor no formulário do jogo). Amistoso e treino saem sem.
+- **Em Ajustes, antecipada ou depois do jogo** (`groups.diaria_antecipada`).
+  Depois do jogo é o fluxo de antes (`LancarDiarias` ao encerrar).
+- **Antecipada**: a diária nasce quando o convidado GANHA A VAGA, nunca na
+  fila ou na espera — o banco faz, num gatilho (`sincronizar_diarias`), com a
+  regra de vaga repetida em SQL (`convidados_com_vaga`, espelho de
+  `distribuirVagas`). Perdeu a vaga antes do jogo: a diária é cancelada pelo
+  sistema (`cancelada_por` nulo); voltou a ter vaga: a MESMA é reativada.
+  Cancelamento à mão nunca é desfeito; jogo encerrado não muda mais. O link
+  mostra o preço e o Pix copia e cola na hora, e nenhuma dívida.
+- **Pagou e desistiu**: o dinheiro vira crédito. O administrador decide em
+  Financeiro › Com crédito: deixa (a próxima diária já aparece paga) ou
+  devolve (estorno do pagamento).
+- **Dívida não impede confirmar**: na lista do jogo aparece "deve R$ 25" ao
+  lado do nome, e o administrador decide.
+- Pendência de antes do app entra como **cobrança avulsa**, com vencimento no
+  passado.
+
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.
 
