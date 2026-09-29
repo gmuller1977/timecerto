@@ -67,8 +67,15 @@ function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGro
  * nomes: quem cobra decide, a cada vez, se expõe quanto cada um deve.
  */
 function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => string, grupo: CloudGroup, dados: DadosFinanceiros, valores: boolean): string {
+  // Uma linha por cobrança em aberto: nome — descrição — vencimento — o que falta (pedido do Guilherme, 29/09/2026)
   const lista = valores
-    ? devedores.map((d) => `• ${nome(d.playerId)} — ${formatBRL(d.saldoCents)}`).join('\n')
+    ? devedores
+        .flatMap((d) =>
+          d.abertas.map(
+            (a) => `• ${nome(d.playerId)} — ${a.cobranca.descricao} — ${dm(a.cobranca.venceEm)} — ${formatBRL(a.faltaCents)}`,
+          ),
+        )
+        .join('\n')
     : `Ainda falta acertar: ${devedores.map((d) => nome(d.playerId)).join(', ')}.`;
   const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
   return `⚡ ${grupo.name} · pendências\n${lista}${pix}\n\nQuem já pagou, desconsidere. 🙏`;
