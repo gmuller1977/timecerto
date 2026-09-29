@@ -287,12 +287,14 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
   cobrou. O "Cobrar um por um" deixa de fora quem recebeu cobrança
   INDIVIDUAL há menos de 3 dias (com "incluir"); a do grupo não conta, porque
   o caminho comum é cobrar no grupo e depois mandar o Pix de cada um.
-- **Confirmação de baixa**: ao registrar um pagamento, aparece a mensagem
+- **Confirmação de baixa**: ao registrar um pagamento, aparece NO PRÓPRIO CARTÃO a mensagem
   pronta com o que ele quitou, o que foi pago em parte e o que ainda falta
   (`mensagemDeRecibo`, na mesma ordem das mais antigas primeiro de
-  `saldosPorJogador`). O estado fica no `Conteudo`, não no `Devedor`: quem
-  quita tudo sai da lista e o cartão desmonta junto. Não abre o WhatsApp
-  sozinho — depois de um `await` o navegador bloqueia a janela.
+  `saldosPorJogador`). O estado fica no `Conteudo`, não no `Devedor`, porque
+  quem quita tudo sai de `devedores` ao recarregar. Não abre o WhatsApp
+  sozinho — depois de um `await` o navegador bloqueia a janela. Quem quitou
+  tudo continua na lista, no mesmo lugar e marcado "Quitado", até enviar ou
+  fechar (primeira versão mostrava no topo da lista, e sumia da vista).
 
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.

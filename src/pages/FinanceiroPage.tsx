@@ -154,6 +154,18 @@ function mensagemDeRecibo(
   return `${partes.join('\n\n')}\n\n— ${grupo.name}`;
 }
 
+/** A confirmação de baixa esperando ser enviada, no cartão de quem pagou */
+interface Recibo {
+  playerId: string;
+  /** Como estava antes do pagamento: quem quitou tudo continua na lista com isto */
+  saldoAntes: SaldoDoJogador;
+  /** Posição na lista, para o cartão de quem quitou não pular de lugar */
+  indice: number;
+  nome: string;
+  phone: string | null;
+  texto: string;
+}
+
 // ── Histórico de cobranças enviadas (migração 020) ──
 
 /** Quem foi cobrado individualmente há menos disso sai do "um por um" */
@@ -300,10 +312,17 @@ function Conteudo({
   const nome = (id: string) => dados.jogadores.get(id)?.nome ?? 'Jogador';
   const [novaCobranca, setNovaCobranca] = useState(false);
   /*
-   * Confirmação de baixa pendente. Mora aqui, e não no Devedor: quem quitou
-   * tudo sai da lista ao recarregar, e o cartão dele desmonta junto.
+   * Confirmação de baixa pendente (pedido do Guilherme, 29/09/2026): aparece
+   * no próprio cartão, logo depois de "Registrar pagamento". Mora aqui, e não
+   * no Devedor, porque quem quitou tudo sai de `devedores` ao recarregar — o
+   * cartão dele fica na lista, no mesmo lugar, até enviar ou fechar.
    */
-  const [recibo, setRecibo] = useState<{ nome: string; phone: string | null; texto: string } | null>(null);
+  const [recibo, setRecibo] = useState<Recibo | null>(null);
+  const quitou = recibo !== null && !devedores.some((d) => d.playerId === recibo.playerId);
+  const lista =
+    recibo && quitou
+      ? [...devedores.slice(0, recibo.indice), recibo.saldoAntes, ...devedores.slice(recibo.indice)]
+      : devedores;
 
   return (
     <>
@@ -387,39 +406,6 @@ function Conteudo({
             </button>
           )}
         </div>
-        {recibo && (
-          <div className="mb-2 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-4">
-            <div className="flex items-start gap-2">
-              <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-brand-300" />
-              <p className="min-w-0 flex-1 text-sm text-brand-100">
-                Pagamento de {recibo.nome} registrado. Mande a confirmação para {recibo.nome} saber que foi baixado.
-              </p>
-              <button onClick={() => setRecibo(null)} className="shrink-0 p-1 text-ink-400" aria-label="Fechar">
-                <X size={16} />
-              </button>
-            </div>
-            <p className="mt-2 whitespace-pre-wrap rounded-xl bg-ink-950 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
-              {recibo.texto}
-            </p>
-            {!recibo.phone && (
-              <p className="mt-2 text-[11px] leading-relaxed text-amber-300">
-                {recibo.nome} está sem telefone no cadastro: o WhatsApp abre para você escolher o contato. Cadastre o
-                telefone em Atletas para a confirmação ir direto para a conversa com {recibo.nome}.
-              </p>
-            )}
-            <Button
-              size="sm"
-              className="mt-3 w-full"
-              onClick={() => {
-                abrirWhatsApp(recibo.texto, recibo.phone);
-                setRecibo(null);
-              }}
-            >
-              <MessageCircle size={15} />
-              Enviar a confirmação para {recibo.nome}
-            </Button>
-          </div>
-        )}
         {novaCobranca && (
           <CobrancaAvulsa dados={dados} recarregar={recarregar} onFechar={() => setNovaCobranca(false)} />
         )}
@@ -427,7 +413,7 @@ function Conteudo({
           <CobrarVarios devedores={devedores} grupo={grupo} dados={dados} nome={nome} recarregar={recarregar} />
         )}
         <div className="flex flex-col gap-2">
-          {devedores.map((s) => (
+          {lista.map((s) => (
             <Devedor
               key={s.playerId}
               saldo={s}
@@ -435,10 +421,13 @@ function Conteudo({
               grupo={grupo}
               dados={dados}
               recarregar={recarregar}
-              onRecebido={setRecibo}
+              recibo={recibo?.playerId === s.playerId ? recibo : null}
+              quitado={quitou && recibo?.playerId === s.playerId}
+              onRecebido={(r) => setRecibo({ ...r, indice: Math.max(0, devedores.findIndex((d) => d.playerId === r.playerId)) })}
+              onFecharRecibo={() => setRecibo(null)}
             />
           ))}
-          {devedores.length === 0 && (
+          {lista.length === 0 && (
             <p className="rounded-2xl border border-dashed border-ink-800 px-4 py-4 text-center text-sm text-ink-400">
               Ninguém devendo. 🎉
             </p>
@@ -651,15 +640,23 @@ function Devedor({
   grupo,
   dados,
   recarregar,
+  recibo,
+  quitado,
   onRecebido,
+  onFecharRecibo,
 }: {
   saldo: SaldoDoJogador;
   jogador: JogadorDoFinanceiro | undefined;
   grupo: CloudGroup;
   dados: DadosFinanceiros;
   recarregar: () => void;
+  /** A confirmação de baixa deste cartão, esperando ser enviada */
+  recibo: Recibo | null;
+  /** Pagou tudo: o cartão só continua na lista por causa da confirmação */
+  quitado: boolean;
   /** Depois de registrar: a confirmação de baixa, para mandar no WhatsApp */
-  onRecebido: (r: { nome: string; phone: string | null; texto: string }) => void;
+  onRecebido: (r: Omit<Recibo, 'indice'>) => void;
+  onFecharRecibo: () => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const [recebendo, setRecebendo] = useState(false);
@@ -697,6 +694,8 @@ function Devedor({
       await registrarPagamento(grupo.id, { playerId: saldo.playerId, valorCents: cents, metodo, pagoEm: data });
       setRecebendo(false);
       onRecebido({
+        playerId: saldo.playerId,
+        saldoAntes: saldo,
         nome,
         phone: jogador?.phone ?? null,
         texto: mensagemDeRecibo(saldo, nome, grupo, { valorCents: cents, metodo, pagoEm: data }),
@@ -736,7 +735,14 @@ function Devedor({
             </span>
           )}
         </span>
-        <span className="shrink-0 text-base font-bold tabular-nums text-ink-50">{formatBRL(saldo.saldoCents)}</span>
+        {quitado ? (
+          <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-300">
+            <CheckCircle2 size={16} />
+            Quitado
+          </span>
+        ) : (
+          <span className="shrink-0 text-base font-bold tabular-nums text-ink-50">{formatBRL(saldo.saldoCents)}</span>
+        )}
         <ChevronDown size={16} className={cn('shrink-0 text-ink-500 transition-transform', aberto && 'rotate-180')} />
       </button>
 
@@ -776,7 +782,41 @@ function Devedor({
         </ul>
       )}
 
-      {recebendo ? (
+      {recibo ? (
+        <div className="mt-3 border-t border-ink-800 pt-3">
+          <div className="flex items-start gap-2">
+            <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-brand-300" />
+            <p className="min-w-0 flex-1 text-sm text-brand-100">
+              Pagamento registrado. Mande a confirmação para {nome} saber que foi baixado.
+            </p>
+          </div>
+          <p className="mt-2 whitespace-pre-wrap rounded-xl bg-ink-950 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
+            {recibo.texto}
+          </p>
+          {!recibo.phone && (
+            <p className="mt-2 text-[11px] leading-relaxed text-amber-300">
+              {nome} está sem telefone no cadastro: o WhatsApp abre para você escolher o contato. Cadastre o telefone
+              em Atletas para a confirmação ir direto para a conversa com {nome}.
+            </p>
+          )}
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" variant="secondary" onClick={onFecharRecibo}>
+              Não enviar
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => {
+                abrirWhatsApp(recibo.texto, recibo.phone);
+                onFecharRecibo();
+              }}
+            >
+              <MessageCircle size={15} />
+              Enviar para {nome}
+            </Button>
+          </div>
+        </div>
+      ) : recebendo ? (
         <form onSubmit={receber} className="mt-3 flex flex-col gap-2 border-t border-ink-800 pt-3">
           <div className="flex gap-2">
             <label className="min-w-0 flex-1">
