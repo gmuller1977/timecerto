@@ -401,6 +401,12 @@ function Conteudo({
             <p className="mt-2 whitespace-pre-wrap rounded-xl bg-ink-950 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
               {recibo.texto}
             </p>
+            {!recibo.phone && (
+              <p className="mt-2 text-[11px] leading-relaxed text-amber-300">
+                {recibo.nome} está sem telefone no cadastro: o WhatsApp abre para você escolher o contato. Cadastre o
+                telefone em Atletas para a confirmação ir direto para a conversa com {recibo.nome}.
+              </p>
+            )}
             <Button
               size="sm"
               className="mt-3 w-full"
@@ -410,7 +416,7 @@ function Conteudo({
               }}
             >
               <MessageCircle size={15} />
-              Enviar a confirmação
+              Enviar a confirmação para {recibo.nome}
             </Button>
           </div>
         )}
