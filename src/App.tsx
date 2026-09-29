@@ -35,6 +35,9 @@ const AdminInvitePage = lazy(() =>
 const Administradores = lazy(() =>
   import('@/components/cloud/Administradores').then((m) => ({ default: m.Administradores })),
 );
+const SairDaConta = lazy(() =>
+  import('@/components/cloud/SairDaConta').then((m) => ({ default: m.SairDaConta })),
+);
 const NomeDoGrupo = lazy(() =>
   import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })),
 );
@@ -151,16 +154,12 @@ export default function App() {
                         <AvisosDoAdmin />
                       </Suspense>
                     )}
-                    {/* Conta e Modo ainda não têm seção própria (etapa 4). Até lá,
-                        são atalhos: a conta era o "Sair" da antiga tela Convites,
-                        e as raízes de aba não têm seta para voltar ao menu */}
-                    <Link
-                      to="/entrar"
-                      className="mt-3 flex items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-[15px] font-medium text-ink-100"
-                    >
-                      Conta
-                      <span className="text-xs text-ink-500">Entrar · Sair</span>
-                    </Link>
+                    {/* Com o login obrigatório, a conta só tem uma ação: sair.
+                        Trocar de modo é atalho — as raízes de aba não têm seta
+                        para voltar ao menu */}
+                    <Suspense fallback={null}>
+                      <SairDaConta />
+                    </Suspense>
                     <Link
                       to="/"
                       className="mt-3 flex items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-[15px] font-medium text-ink-100"

@@ -126,9 +126,13 @@ export function GuestGroupPage() {
     .filter((p) => sit(p.id)?.tipo === 'fila')
     .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
   const comVaga = convidados.filter((p) => sit(p.id)?.tipo === 'vaga');
-  // Lista fechada: quem foi chamado e quem espera, mensalista ou convidado
-  const chamados = data.players.filter((p) => sit(p.id)?.tipo === 'chamado');
+  // Lista fechada: quem foi chamado e quem espera. No link dos mensalistas,
+  // eles já estão na "Lista de espera" da lista de escolha — aqui ficam só
+  // os convidados, para ninguém aparecer duas vezes
+  const naSecaoDeEspera = (p: (typeof data.players)[number]) => viaConvidados || p.kind === 'convidado';
+  const chamados = data.players.filter((p) => sit(p.id)?.tipo === 'chamado' && naSecaoDeEspera(p));
   const espera = data.players
+    .filter(naSecaoDeEspera)
     .filter((p) => sit(p.id)?.tipo === 'espera')
     .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
 
@@ -323,36 +327,51 @@ export function GuestGroupPage() {
       {/* Mensalistas: no link deles é a lista de escolha; no de convidados, só o total */}
       {!viaConvidados ? (
         <section className="mt-4">
-          <div className="flex flex-col gap-1.5">
-            {mensalistas.map((p) => (
-              <button
-                key={p.id}
-                disabled={Boolean(mine)}
-                onClick={() => {
-                  writeMe(code, p.id);
-                  setMe(p.id);
-                }}
-                className={cn(
-                  'flex items-center gap-3 rounded-xl border px-3 py-3 text-left',
-                  p.id === me ? 'border-brand-500/60 bg-brand-500/10' : 'border-ink-800 bg-ink-900',
-                  !mine && 'active:scale-[0.99]',
-                )}
-              >
-                <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">{p.name}</span>
-                {p.position && (
-                  <span className="shrink-0 text-xs text-ink-500">
-                    {getPositionLabel(data.group.sport as SportId, p.position)}
-                  </span>
-                )}
-                <span className="w-5 shrink-0">
-                  {p.status === 'vou' && <Check size={17} className="text-brand-400" />}
-                  {p.status === 'nao_vou' && <X size={17} className="text-ink-500" />}
-                  {p.status === 'espera' && <Hourglass size={16} className="text-ink-400" />}
-                  {p.status === 'chamado' && <BellRing size={16} className="text-amber-300" />}
-                </span>
-              </button>
-            ))}
-          </div>
+          {/*
+            Separados pela resposta (pedido do Guilherme em 29/09/2026): quem
+            ainda não respondeu fica no alto, que é onde a pessoa procura o
+            próprio nome; quem já confirmou, embaixo. Sem jogo marcado não há
+            resposta, e a lista fica inteira em "A confirmar".
+          */}
+          {gruposDeMensalistas(mensalistas).map((g) => (
+            <div key={g.titulo} className="mb-4">
+              <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
+                {g.titulo} ({g.jogadores.length})
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {g.jogadores.map((p) => (
+                  <button
+                    key={p.id}
+                    disabled={Boolean(mine)}
+                    onClick={() => {
+                      writeMe(code, p.id);
+                      setMe(p.id);
+                    }}
+                    className={cn(
+                      'flex items-center gap-3 rounded-xl border px-3 py-3 text-left',
+                      p.id === me ? 'border-brand-500/60 bg-brand-500/10' : 'border-ink-800 bg-ink-900',
+                      !mine && 'active:scale-[0.99]',
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">{p.name}</span>
+                    {p.position && (
+                      <span className="shrink-0 text-xs text-ink-500">
+                        {getPositionLabel(data.group.sport as SportId, p.position)}
+                      </span>
+                    )}
+                    <span className="w-5 shrink-0">
+                      {p.status === 'vou' && <Check size={17} className="text-brand-400" />}
+                      {p.status === 'nao_vou' && <X size={17} className="text-ink-500" />}
+                      {p.status === 'espera' && (
+                        <span className="text-xs font-semibold text-ink-300">{posicao(sit(p.id))}º</span>
+                      )}
+                      {p.status === 'chamado' && <BellRing size={16} className="text-amber-300" />}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
           {mensalistas.length === 0 && (
             <p className="text-sm text-ink-500">O organizador ainda não cadastrou os mensalistas.</p>
           )}
@@ -414,7 +433,7 @@ export function GuestGroupPage() {
       {event && fechada && (chamados.length > 0 || espera.length > 0) && (
         <section className="mt-6">
           <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
-            Fila de espera
+            {viaConvidados ? 'Fila de espera' : 'Convidados na fila de espera'}
           </p>
           <div className="flex flex-col gap-1.5">
             {chamados.map((p) => (
@@ -453,6 +472,23 @@ export function GuestGroupPage() {
       )}
     </Frame>
   );
+}
+
+type Mensalista = GuestGroup['players'][number];
+
+/**
+ * A lista de escolha do link dos mensalistas em quatro grupos (pedido do
+ * Guilherme em 29/09/2026): a confirmar, confirmados, lista de espera e não
+ * vão. Grupo vazio não aparece. Dentro de cada um, a ordem do link (alfabética).
+ */
+function gruposDeMensalistas(lista: Mensalista[]): { titulo: string; jogadores: Mensalista[] }[] {
+  const de = (f: (p: Mensalista) => boolean) => lista.filter(f);
+  return [
+    { titulo: 'A confirmar', jogadores: de((p) => !p.status || p.status === 'pulado') },
+    { titulo: 'Confirmados', jogadores: de((p) => p.status === 'vou') },
+    { titulo: 'Lista de espera', jogadores: de((p) => p.status === 'espera' || p.status === 'chamado') },
+    { titulo: 'Não vão', jogadores: de((p) => p.status === 'nao_vou') },
+  ].filter((g) => g.jogadores.length > 0);
 }
 
 function posicao(s: Situacao | undefined): number {
