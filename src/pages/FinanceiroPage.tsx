@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Plus, RotateCcw, Wallet, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Plus, RotateCcw, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import {
@@ -113,6 +113,45 @@ function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => stri
     : `Ainda falta acertar: ${devedores.map((d) => nome(d.playerId)).join(', ')}.`;
   const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
   return `⚡ ${grupo.name} · pendências\n${lista}${pix}\n\nQuem já pagou, desconsidere. 🙏`;
+}
+
+/**
+ * A confirmação de baixa (pedido do Guilherme, 29/09/2026): o que o
+ * pagamento quitou e o que ainda fica. O pagamento abate as cobranças mais
+ * antigas primeiro — a mesma regra de `saldosPorJogador` —, então a conta
+ * é feita sobre as abertas de ANTES do pagamento, na mesma ordem.
+ */
+function mensagemDeRecibo(
+  saldo: SaldoDoJogador,
+  nome: string,
+  grupo: CloudGroup,
+  pago: { valorCents: number; metodo: 'pix' | 'dinheiro'; pagoEm: string },
+): string {
+  let resto = pago.valorCents;
+  const quitadas: string[] = [];
+  let parcial: string | null = null;
+  for (const a of saldo.abertas) {
+    if (resto <= 0) break;
+    const abate = Math.min(resto, a.faltaCents);
+    const linha = `• ${a.cobranca.descricao} — ${dm(dataDaCobranca(a.cobranca))}`;
+    if (abate === a.faltaCents) quitadas.push(`${linha} — ${formatBRL(abate)}`);
+    else parcial = `${linha} — ${formatBRL(abate)} de ${formatBRL(a.faltaCents)}`;
+    resto -= abate;
+  }
+  const falta = saldo.saldoCents - pago.valorCents;
+  const partes = [
+    `Oi, ${nome}! Recebemos seu pagamento de ${formatBRL(pago.valorCents)} (${pago.metodo === 'pix' ? 'Pix' : 'dinheiro'}, ${dm(pago.pagoEm)}). ✅`,
+  ];
+  if (quitadas.length) partes.push(`Quitado:\n${quitadas.join('\n')}`);
+  if (parcial) partes.push(`Pago em parte:\n${parcial}`);
+  partes.push(
+    falta > 0
+      ? `Ainda fica em aberto: ${formatBRL(falta)}.`
+      : falta < 0
+        ? `Ficaram ${formatBRL(-falta)} de crédito para a próxima. Está tudo em dia. Obrigado! 🙏`
+        : 'Está tudo em dia. Obrigado! 🙏',
+  );
+  return `${partes.join('\n\n')}\n\n— ${grupo.name}`;
 }
 
 // ── Histórico de cobranças enviadas (migração 020) ──
@@ -260,6 +299,11 @@ function Conteudo({
   const mesAtual = mes === hoje().slice(0, 7);
   const nome = (id: string) => dados.jogadores.get(id)?.nome ?? 'Jogador';
   const [novaCobranca, setNovaCobranca] = useState(false);
+  /*
+   * Confirmação de baixa pendente. Mora aqui, e não no Devedor: quem quitou
+   * tudo sai da lista ao recarregar, e o cartão dele desmonta junto.
+   */
+  const [recibo, setRecibo] = useState<{ nome: string; phone: string | null; texto: string } | null>(null);
 
   return (
     <>
@@ -343,6 +387,33 @@ function Conteudo({
             </button>
           )}
         </div>
+        {recibo && (
+          <div className="mb-2 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-4">
+            <div className="flex items-start gap-2">
+              <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-brand-300" />
+              <p className="min-w-0 flex-1 text-sm text-brand-100">
+                Pagamento de {recibo.nome} registrado. Mande a confirmação para {recibo.nome} saber que foi baixado.
+              </p>
+              <button onClick={() => setRecibo(null)} className="shrink-0 p-1 text-ink-400" aria-label="Fechar">
+                <X size={16} />
+              </button>
+            </div>
+            <p className="mt-2 whitespace-pre-wrap rounded-xl bg-ink-950 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
+              {recibo.texto}
+            </p>
+            <Button
+              size="sm"
+              className="mt-3 w-full"
+              onClick={() => {
+                abrirWhatsApp(recibo.texto, recibo.phone);
+                setRecibo(null);
+              }}
+            >
+              <MessageCircle size={15} />
+              Enviar a confirmação
+            </Button>
+          </div>
+        )}
         {novaCobranca && (
           <CobrancaAvulsa dados={dados} recarregar={recarregar} onFechar={() => setNovaCobranca(false)} />
         )}
@@ -358,6 +429,7 @@ function Conteudo({
               grupo={grupo}
               dados={dados}
               recarregar={recarregar}
+              onRecebido={setRecibo}
             />
           ))}
           {devedores.length === 0 && (
@@ -573,12 +645,15 @@ function Devedor({
   grupo,
   dados,
   recarregar,
+  onRecebido,
 }: {
   saldo: SaldoDoJogador;
   jogador: JogadorDoFinanceiro | undefined;
   grupo: CloudGroup;
   dados: DadosFinanceiros;
   recarregar: () => void;
+  /** Depois de registrar: a confirmação de baixa, para mandar no WhatsApp */
+  onRecebido: (r: { nome: string; phone: string | null; texto: string }) => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const [recebendo, setRecebendo] = useState(false);
@@ -615,6 +690,11 @@ function Devedor({
     try {
       await registrarPagamento(grupo.id, { playerId: saldo.playerId, valorCents: cents, metodo, pagoEm: data });
       setRecebendo(false);
+      onRecebido({
+        nome,
+        phone: jogador?.phone ?? null,
+        texto: mensagemDeRecibo(saldo, nome, grupo, { valorCents: cents, metodo, pagoEm: data }),
+      });
       recarregar();
     } catch (err) {
       setErro(explain(err));
