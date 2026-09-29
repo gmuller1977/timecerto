@@ -11,6 +11,7 @@ import {
 } from '@/lib/cloud';
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos } from '@/lib/juntar';
+import { textoDaLista } from '@/lib/listaDoJogo';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
@@ -180,10 +181,41 @@ export function GuestGroupPage() {
     .filter((p) => sit(p.id)?.tipo === 'espera')
     .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
 
+  /*
+   * A lista para o grupo do WhatsApp (lib/listaDoJogo.ts): mensalistas na
+   * ordem em que confirmaram, depois os convidados com vaga; a fila, ou a
+   * lista de espera; e o link deste convite.
+   */
+  const porChegada = (a: (typeof data.players)[number], b: (typeof data.players)[number]) =>
+    (a.answeredAt ?? '').localeCompare(b.answeredAt ?? '');
+  const tipoDe = (id: string) => sit(id)?.tipo;
+  const listaParaOGrupo = event
+    ? textoDaLista({
+        grupo: data.group.name,
+        inicio: new Date(event.startsAt),
+        local: event.location,
+        vagas: event.slots,
+        confirmados: [
+          ...mensalistas.filter((p) => tipoDe(p.id) === 'confirmado').sort(porChegada),
+          ...comVaga.slice().sort(porChegada),
+        ].map((p) => ({ nome: p.name, convidado: p.kind === 'convidado' })),
+        fila: fila.map((p) => p.name),
+        espera: [
+          ...data.players.filter((p) => tipoDe(p.id) === 'chamado').map((p) => `${p.name} (chamado)`),
+          ...data.players
+            .filter((p) => tipoDe(p.id) === 'espera')
+            .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)))
+            .map((p) => p.name),
+        ],
+        link: `${location.origin}${location.pathname}#/${viaConvidados ? 'v' : 'c'}/${code.toUpperCase()}`,
+      })
+    : '';
+
   // No link de convidados, "eu" só pode ser um convidado; no dos mensalistas, um mensalista
   const mine = data.players.find(
     (p) => p.id === me && (viaConvidados ? p.kind === 'convidado' : p.kind === 'mensalista'),
   );
+  const naLista = Boolean(mine && ['confirmado', 'vaga', 'fila', 'espera', 'chamado'].includes(tipoDe(mine.id) ?? ''));
 
   async function answer(status: 'vou' | 'nao_vou') {
     if (!event || !mine) return;
@@ -433,6 +465,27 @@ export function GuestGroupPage() {
                     setMe(null);
                   }}
                 />
+                {/*
+                  Pedido do Guilherme em 29/09/2026: junto da confirmação, o
+                  convite para mandar a lista atualizada no grupo. O app não
+                  posta sozinho no grupo; a mensagem sai pronta, a pessoa envia.
+                */}
+                {naLista && listaParaOGrupo && (
+                  <div className="mt-3 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-4">
+                    <p className="text-sm font-semibold text-brand-100">Seu nome está na lista!</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-brand-100/80">
+                      Agora mande a lista atualizada no grupo da pelada, para todo mundo ver quem vai.
+                    </p>
+                    <button
+                      onClick={() =>
+                        window.open(`https://wa.me/?text=${encodeURIComponent(listaParaOGrupo)}`, '_blank', 'noopener')
+                      }
+                      className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
+                    >
+                      Mandar a lista atualizada no grupo
+                    </button>
+                  </div>
+                )}
                 <AvisoDoAtleta code={code} playerId={mine.id} />
               </>
             ) : viaConvidados ? (

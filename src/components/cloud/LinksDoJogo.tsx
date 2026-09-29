@@ -7,6 +7,7 @@ import { useJogoStore } from '@/store/useJogoStore';
 import { useAppStore } from '@/store/useAppStore';
 import { vagasDoJogo } from '@/lib/vagas';
 import { haQuantoChamado } from '@/lib/jogo';
+import { textoDaLista } from '@/lib/listaDoJogo';
 import { nomeDeExibicao } from '@/lib/nome';
 import { whatsappTo } from '@/lib/phone';
 import {
@@ -67,8 +68,42 @@ export function LinksDoJogo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | nul
   return <ComGrupo jogo={jogo} proximo={proximo} />;
 }
 
+/**
+ * A lista do jogo para o grupo do WhatsApp, com o mesmo texto que o atleta
+ * manda pelo link (lib/listaDoJogo.ts). Ordem: mensalistas na ordem em que
+ * confirmaram, depois os convidados com vaga; a fila ou a lista de espera.
+ */
+function listaDoJogo(jogo: Jogo, players: Player[], group: CloudGroup): string {
+  const dist = vagasDoJogo(jogo, players);
+  const tipo = (p: Player) => dist.situacao.get(p.id)?.tipo;
+  const seq = new Map(jogo.confirmations.map((c) => [c.playerId, c.seq]));
+  const porChegada = (a: Player, b: Player) => (seq.get(a.id) ?? 0) - (seq.get(b.id) ?? 0);
+  const posicao = (p: Player) => {
+    const s = dist.situacao.get(p.id);
+    return s && 'posicao' in s ? s.posicao : 0;
+  };
+  const ativos = players.filter((p) => !p.pending);
+  return textoDaLista({
+    grupo: group.name,
+    inicio: new Date(`${jogo.date}T${jogo.time}`),
+    local: jogo.place,
+    vagas: jogo.vagas,
+    confirmados: [
+      ...ativos.filter((p) => tipo(p) === 'confirmado').sort(porChegada),
+      ...ativos.filter((p) => tipo(p) === 'vaga').sort(porChegada),
+    ].map((p) => ({ nome: nomeDeExibicao(p), convidado: p.kind === 'convidado' })),
+    fila: ativos.filter((p) => tipo(p) === 'fila').sort((a, b) => posicao(a) - posicao(b)).map(nomeDeExibicao),
+    espera: [
+      ...ativos.filter((p) => tipo(p) === 'chamado').map((p) => `${nomeDeExibicao(p)} (chamado)`),
+      ...ativos.filter((p) => tipo(p) === 'espera').sort((a, b) => posicao(a) - posicao(b)).map(nomeDeExibicao),
+    ],
+    link: groupLink(group.code),
+  });
+}
+
 function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
   const atualizarJogo = useJogoStore((s) => s.atualizarJogo);
+  const players = useAppStore((s) => s.players);
   const [group, setGroup] = useState<CloudGroup | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('Pelada');
@@ -263,6 +298,14 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
                   <span className="text-[13px] leading-tight">Convidar convidados</span>
                 </Button>
               </div>
+              <Button
+                variant="secondary"
+                className="mt-2 w-full"
+                onClick={() => shareOnWhatsApp(listaDoJogo(jogo, players, group))}
+              >
+                <MessageCircle size={17} />
+                Mandar a lista no grupo
+              </Button>
               <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
                 As respostas dos links entram na lista de confirmados e atualizam sozinhas.
               </p>
