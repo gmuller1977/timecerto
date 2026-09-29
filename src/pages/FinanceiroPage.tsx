@@ -18,6 +18,8 @@ import {
 } from '@/lib/cloud';
 import {
   centavosParaCampo,
+  emCaixa,
+  fimDoMes,
   pixCopiaECola,
   quemDeve,
   reaisParaCentavos,
@@ -120,6 +122,17 @@ function Conteudo({
   const devedores = useMemo(() => quemDeve(saldos), [saldos]);
   const resumo = useMemo(() => resumoDoMes(mes, dados.pagamentos, dados.despesas, saldos), [mes, dados, saldos]);
   const semConfig = !dados.config.mensalidadeCents && !dados.config.diariaCents;
+  const caixa = useMemo(
+    () =>
+      emCaixa(
+        fimDoMes(mes),
+        { cents: dados.config.caixaInicialCents, em: dados.config.caixaInicialEm },
+        dados.pagamentos,
+        dados.despesas,
+      ),
+    [mes, dados],
+  );
+  const mesAtual = mes === hoje().slice(0, 7);
   const nome = (id: string) => dados.jogadores.get(id)?.nome ?? 'Jogador';
 
   return (
@@ -148,18 +161,29 @@ function Conteudo({
         </button>
       </div>
       <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
-        <p className="text-xs text-ink-500">Saldo do mês</p>
-        <p className={cn('text-3xl font-bold tabular-nums', resumo.saldoCents < 0 ? 'text-red-300' : 'text-ink-50')}>
-          {formatBRL(resumo.saldoCents)}
+        <p className="text-xs text-ink-500">{mesAtual ? 'Em caixa' : 'Em caixa no fim do mês'}</p>
+        <p className={cn('text-3xl font-bold tabular-nums', caixa < 0 ? 'text-red-300' : 'text-ink-50')}>
+          {formatBRL(caixa)}
         </p>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        {dados.config.caixaInicialCents == null && (
+          <Link to="/ajustes" className="text-[11px] text-ink-500 underline">
+            Sem saldo inicial: informe em Ajustes › Financeiro
+          </Link>
+        )}
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <div>
-            <p className="text-ink-500">Recebido</p>
+            <p className="text-ink-500">Recebido no mês</p>
             <p className="text-sm font-semibold tabular-nums text-brand-300">{formatBRL(resumo.recebidoCents)}</p>
           </div>
           <div>
-            <p className="text-ink-500">Despesas</p>
+            <p className="text-ink-500">Despesas no mês</p>
             <p className="text-sm font-semibold tabular-nums text-ink-200">{formatBRL(resumo.despesasCents)}</p>
+          </div>
+          <div>
+            <p className="text-ink-500">Saldo do mês</p>
+            <p className={cn('text-sm font-semibold tabular-nums', resumo.saldoCents < 0 ? 'text-red-300' : 'text-ink-200')}>
+              {formatBRL(resumo.saldoCents)}
+            </p>
           </div>
           <div>
             <p className="text-ink-500">A receber</p>
@@ -167,7 +191,8 @@ function Conteudo({
           </div>
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-          Saldo = recebido menos despesas neste mês. "A receber" é tudo o que está em aberto, de qualquer mês.
+          Em caixa = saldo inicial + tudo o que entrou − tudo o que saiu. "A receber" é o que está em aberto, de
+          qualquer mês.
         </p>
       </section>
 

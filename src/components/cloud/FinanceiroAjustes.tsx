@@ -3,7 +3,8 @@ import { Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { findMyGroup, lerConfigFinanceiro, salvarConfigFinanceiro, type ConfigFinanceiro } from '@/lib/cloud';
-import { centavosParaCampo, reaisParaCentavos } from '@/lib/financeiro';
+import { centavosParaCampo, reaisComSinalParaCentavos, reaisParaCentavos } from '@/lib/financeiro';
+import { hoje } from '@/lib/jogo';
 import { formatBRL } from '@/lib/utils';
 import { explain } from '@/components/cloud/partes';
 
@@ -18,7 +19,16 @@ export function FinanceiroAjustes() {
   const [grupo, setGrupo] = useState<string | null | undefined>(undefined);
   const [config, setConfig] = useState<ConfigFinanceiro | null>(null);
   const [editando, setEditando] = useState(false);
-  const [f, setF] = useState({ mensalidade: '', dia: '', diaria: '', chave: '', nome: '', cidade: '' });
+  const [f, setF] = useState({
+    mensalidade: '',
+    dia: '',
+    diaria: '',
+    chave: '',
+    nome: '',
+    cidade: '',
+    caixa: '',
+    caixaEm: '',
+  });
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -54,6 +64,8 @@ export function FinanceiroAjustes() {
       chave: config.pixChave ?? '',
       nome: config.pixNome ?? '',
       cidade: config.pixCidade ?? '',
+      caixa: centavosParaCampo(config.caixaInicialCents),
+      caixaEm: config.caixaInicialEm ?? hoje(),
     });
     setErro(null);
     setEditando(true);
@@ -73,6 +85,15 @@ export function FinanceiroAjustes() {
       setErro('Com mensalidade, escolha o dia do vencimento, de 1 a 28.');
       return;
     }
+    const caixa = f.caixa.trim() ? reaisComSinalParaCentavos(f.caixa) : null;
+    if (f.caixa.trim() && caixa == null) {
+      setErro('Saldo inicial inválido. Use, por exemplo, 350,00 — ou -150,00 se o grupo começa devendo.');
+      return;
+    }
+    if (caixa != null && !f.caixaEm) {
+      setErro('Diga em que dia o caixa tinha esse saldo.');
+      return;
+    }
     if (f.chave.trim() && (!f.nome.trim() || !f.cidade.trim())) {
       setErro('O Pix copia e cola precisa do nome e da cidade de quem recebe, como aparecem no banco.');
       return;
@@ -84,6 +105,8 @@ export function FinanceiroAjustes() {
       pixChave: f.chave.trim() || null,
       pixNome: f.nome.trim() || null,
       pixCidade: f.cidade.trim() || null,
+      caixaInicialCents: caixa,
+      caixaInicialEm: caixa == null ? null : f.caixaEm,
     };
     setBusy(true);
     setErro(null);
@@ -107,7 +130,9 @@ export function FinanceiroAjustes() {
         <p className="min-w-0 flex-1 text-[15px] font-semibold text-ink-50">Financeiro</p>
         {!editando && (
           <button onClick={abrir} className="rounded-lg border border-ink-800 px-2.5 py-1.5 text-xs text-ink-300">
-            {config.mensalidadeCents || config.diariaCents || config.pixChave ? 'Editar' : 'Configurar'}
+            {config.mensalidadeCents || config.diariaCents || config.pixChave || config.caixaInicialCents != null
+              ? 'Editar'
+              : 'Configurar'}
           </button>
         )}
       </div>
@@ -146,6 +171,33 @@ export function FinanceiroAjustes() {
               className={input}
             />
           </label>
+          <div className="border-t border-ink-800 pt-3">
+            <p className="text-xs leading-relaxed text-ink-500">
+              Quanto o grupo tinha em caixa quando começou a usar o app. O Financeiro soma o que
+              entrar e desconta o que sair a partir desse dia.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <label className="min-w-0 flex-[3]">
+                <span className={rotulo}>Saldo inicial do caixa (R$)</span>
+                <input
+                  value={f.caixa}
+                  onChange={(e) => setF({ ...f, caixa: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="Ex.: 350,00"
+                  className={input}
+                />
+              </label>
+              <label className="min-w-0 flex-[2]">
+                <span className={rotulo}>em</span>
+                <input
+                  type="date"
+                  value={f.caixaEm}
+                  onChange={(e) => setF({ ...f, caixaEm: e.target.value })}
+                  className={`${input} [color-scheme:dark]`}
+                />
+              </label>
+            </div>
+          </div>
           <div className="border-t border-ink-800 pt-3">
             <p className="text-xs leading-relaxed text-ink-500">
               O Pix vai na mensagem de cobrança, já com o valor. O dinheiro cai direto na sua conta — o app
@@ -211,6 +263,14 @@ export function FinanceiroAjustes() {
             Diária do convidado:{' '}
             <strong className="text-ink-100">
               {config.diariaCents ? formatBRL(config.diariaCents) : 'não configurada'}
+            </strong>
+          </p>
+          <p>
+            Saldo inicial do caixa:{' '}
+            <strong className="text-ink-100">
+              {config.caixaInicialCents != null && config.caixaInicialEm
+                ? `${formatBRL(config.caixaInicialCents)} em ${config.caixaInicialEm.slice(8, 10)}/${config.caixaInicialEm.slice(5, 7)}/${config.caixaInicialEm.slice(0, 4)}`
+                : 'não informado'}
             </strong>
           </p>
           <p>

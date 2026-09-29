@@ -58,6 +58,14 @@ export function reaisParaCentavos(texto: string): number | null {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
+/** Como `reaisParaCentavos`, aceitando sinal: "-150,00" → -15000 */
+export function reaisComSinalParaCentavos(texto: string): number | null {
+  const t = texto.trim();
+  const negativo = t.startsWith('-');
+  const c = reaisParaCentavos(negativo ? t.slice(1) : t);
+  return c == null ? null : negativo ? -c : c;
+}
+
 /** 8000 → "80,00" — para preencher um campo de valor */
 export function centavosParaCampo(cents: number | null | undefined): string {
   if (cents == null) return '';
@@ -140,6 +148,33 @@ export function resumoDoMes(
   const despesasCents = despesas.filter((d) => noMes(d.gastoEm)).reduce((s, d) => s + d.valorCents, 0);
   const aReceberCents = [...saldos.values()].reduce((s, x) => s + Math.max(0, x.saldoCents), 0);
   return { recebidoCents, despesasCents, saldoCents: recebidoCents - despesasCents, aReceberCents };
+}
+
+// ── Em caixa ──
+
+/**
+ * Quanto há em caixa ao fim do dia `ate` (AAAA-MM-DD): o saldo inicial mais
+ * o que entrou menos o que saiu, a partir da data do saldo inicial (migração
+ * 018). O que aconteceu antes dessa data já está no saldo inicial e não entra.
+ * Sem saldo inicial, conta desde o começo, a partir de zero.
+ */
+export function emCaixa(
+  ate: string,
+  inicial: { cents: number | null; em: string | null },
+  pagamentos: Pagamento[],
+  despesas: Despesa[],
+): number {
+  const desde = inicial.em ?? '';
+  const dentro = (d: string) => d >= desde && d <= ate;
+  const entrou = pagamentos.filter((p) => dentro(p.pagoEm)).reduce((s, p) => s + p.valorCents, 0);
+  const saiu = despesas.filter((d) => dentro(d.gastoEm)).reduce((s, d) => s + d.valorCents, 0);
+  return (inicial.cents ?? 0) + entrou - saiu;
+}
+
+/** Último dia do mês 'AAAA-MM', como AAAA-MM-DD */
+export function fimDoMes(mes: string): string {
+  const d = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 0);
+  return `${mes}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // ── Pix copia e cola (BR Code estático, padrão do Banco Central) ──

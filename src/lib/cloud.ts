@@ -1417,6 +1417,9 @@ export interface ConfigFinanceiro {
   pixChave: string | null;
   pixNome: string | null;
   pixCidade: string | null;
+  /** Migração 018: quanto o grupo tinha em caixa, e desde quando (AAAA-MM-DD) */
+  caixaInicialCents: number | null;
+  caixaInicialEm: string | null;
 }
 
 export interface JogadorDoFinanceiro {
@@ -1434,7 +1437,8 @@ export interface DadosFinanceiros {
   despesas: Despesa[];
 }
 
-const CONFIG_COLS = 'mensalidade_cents, mensalidade_dia, diaria_cents, pix_chave, pix_nome, pix_cidade';
+const CONFIG_COLS =
+  'mensalidade_cents, mensalidade_dia, diaria_cents, pix_chave, pix_nome, pix_cidade, caixa_inicial_cents, caixa_inicial_em';
 
 export async function lerConfigFinanceiro(groupId: string): Promise<ConfigFinanceiro> {
   const { data, error } = await db().from('groups').select(CONFIG_COLS).eq('id', groupId).single();
@@ -1446,6 +1450,8 @@ export async function lerConfigFinanceiro(groupId: string): Promise<ConfigFinanc
     pixChave: data.pix_chave,
     pixNome: data.pix_nome,
     pixCidade: data.pix_cidade,
+    caixaInicialCents: data.caixa_inicial_cents,
+    caixaInicialEm: data.caixa_inicial_em,
   };
 }
 
@@ -1460,6 +1466,8 @@ export async function salvarConfigFinanceiro(groupId: string, c: ConfigFinanceir
       pix_chave: c.pixChave?.trim() || null,
       pix_nome: c.pixNome?.trim() || null,
       pix_cidade: c.pixCidade?.trim() || null,
+      caixa_inicial_cents: c.caixaInicialCents,
+      caixa_inicial_em: c.caixaInicialCents == null ? null : c.caixaInicialEm,
     })
     .eq('id', groupId)
     .select('id');

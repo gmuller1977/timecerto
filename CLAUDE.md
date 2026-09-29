@@ -247,6 +247,11 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
   administradores precisam ver o mesmo número. Sem internet, a aba avisa.
 - Datas de mensalidade e diária no horário de Brasília.
 - As tabelas antigas `payments` e `expenses`, nunca usadas, ficaram paradas.
+- **Em caixa** (migração 018, pedido do Guilherme em 29/09/2026): saldo
+  inicial do caixa e a data dele, em Ajustes. O número grande do Financeiro é
+  saldo inicial + o que entrou − o que saiu, a partir dessa data, até o fim do
+  mês na tela (`emCaixa` em `lib/financeiro.ts`). O que aconteceu antes da
+  data já está no saldo inicial e não entra. Aceita negativo.
 
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.
