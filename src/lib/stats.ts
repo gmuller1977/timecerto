@@ -1,5 +1,6 @@
 import type { Match, Player, PlayerStats, SkillLevel, SportId } from '@/types';
 import { SPORTS } from '@/lib/sports';
+import { nomeDeExibicao } from '@/lib/nome';
 
 /** Resultado de um confronto do ponto de vista de um time */
 type Outcome = 'V' | 'E' | 'D';
@@ -95,7 +96,8 @@ export function computeStats(
 
   return {
     playerId: player.id,
-    name: player.name,
+    // Apelido quando existe — na pelada é o nome de verdade (lib/nome.ts)
+    name: nomeDeExibicao(player),
     appearances,
     games,
     wins,
