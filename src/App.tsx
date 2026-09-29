@@ -35,6 +35,9 @@ const AdminInvitePage = lazy(() =>
 const Administradores = lazy(() =>
   import('@/components/cloud/Administradores').then((m) => ({ default: m.Administradores })),
 );
+const NomeDoGrupo = lazy(() =>
+  import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })),
+);
 const AvisosDoAdmin = lazy(() =>
   import('@/components/cloud/Avisos').then((m) => ({ default: m.AvisosDoAdmin })),
 );
@@ -143,6 +146,7 @@ export default function App() {
                   >
                     {hasSavedSession() && (
                       <Suspense fallback={null}>
+                        <NomeDoGrupo />
                         <Administradores />
                         <AvisosDoAdmin />
                       </Suspense>

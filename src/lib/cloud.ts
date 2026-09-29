@@ -247,6 +247,20 @@ export async function createGroup(mode: AppMode, name: string): Promise<CloudGro
 }
 
 /**
+ * Troca o nome do grupo — é o que aparece no alto dos links e nos avisos.
+ * Dono e administradores podem (política `groups_manage`). Sem permissão a
+ * nuvem não dá erro, só não muda nada: por isso confere se a linha voltou.
+ */
+export async function renomearGrupo(groupId: string, nome: string): Promise<string> {
+  const limpo = nome.trim().replace(/\s+/g, ' ');
+  if (limpo.length < 2 || limpo.length > 40) throw new Error('O nome precisa ter entre 2 e 40 letras.');
+  const { data, error } = await db().from('groups').update({ name: limpo }).eq('id', groupId).select('name');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Só o dono ou um administrador do grupo pode trocar o nome.');
+  return data[0].name as string;
+}
+
+/**
  * Base única do elenco amador (fase 1): envia o que ESTE aparelho editou e
  * traz o que os outros editaram. Vale a edição mais recente (`updatedAt`), e
  * quem decide é o servidor (`salvar_jogadores`, migração 010) — um aparelho
