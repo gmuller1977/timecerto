@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, LogOut } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
+import { ArrowLeft } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { oauthError, useAuth } from '@/store/useAuth';
 
@@ -21,7 +20,6 @@ export function LoginPage() {
   const session = useAuth((s) => s.session);
   const ready = useAuth((s) => s.ready);
   const signInWithGoogle = useAuth((s) => s.signInWithGoogle);
-  const signOut = useAuth((s) => s.signOut);
 
   const [busy, setBusy] = useState(false);
   // O jogador que instalou o site na tela de início (é o que o iPhone exige
@@ -42,51 +40,13 @@ export function LoginPage() {
     );
   }
   if (!ready) return null;
-  // Veio de uma tela que pediu login: devolve para ela
-  if (session && volta) return <Navigate to={volta} replace />;
-
-  if (session) {
-    const meta = session.user.user_metadata as { full_name?: string; avatar_url?: string };
-    return (
-      <Shell onBack={() => navigate('/')}>
-        <div className="flex items-center gap-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-          {meta.avatar_url && (
-            <img
-              src={meta.avatar_url}
-              alt=""
-              referrerPolicy="no-referrer"
-              className="size-11 shrink-0 rounded-full"
-            />
-          )}
-          <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-ink-50">
-              {meta.full_name ?? 'Conectado'}
-            </p>
-            <p className="truncate text-xs text-ink-400">{session.user.email}</p>
-          </div>
-        </div>
-        <p className="mt-3 text-sm leading-relaxed text-ink-400">
-          No Amador, o jogo da semana e os convites ficam na aba Jogo, e o link de
-          cadastro em Atletas › Convidar. No Profissional, toque em Convidar.
-        </p>
-        <Button
-          variant="secondary"
-          size="lg"
-          className="mt-5 w-full"
-          onClick={async () => {
-            await signOut();
-            navigate('/', { replace: true });
-          }}
-        >
-          <LogOut size={18} />
-          Sair da conta
-        </Button>
-        <p className="mt-3 text-center text-xs leading-relaxed text-ink-500">
-          Sair não apaga nada: jogadores e partidas continuam neste aparelho.
-        </p>
-      </Shell>
-    );
-  }
+  /*
+   * Já entrou: segue para o app. Havia aqui uma tela da conta, com foto,
+   * e-mail e "Sair da conta" — sem finalidade, e o Guilherme pediu para tirar
+   * em 29/09/2026: sair da conta fica em Ajustes. Veio de uma tela que pediu
+   * login: devolve para ela.
+   */
+  if (session) return <Navigate to={volta ?? '/'} replace />;
 
   async function google() {
     setBusy(true);
