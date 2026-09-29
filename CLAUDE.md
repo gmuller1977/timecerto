@@ -212,6 +212,45 @@ aceitar, voltar depois de pulado, vaga sobrando e reabrir.
 
 **Fase 2 — avisos no celular: feita**, ver a seção seguinte.
 
+### Financeiro (fase 1)
+
+Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
+
+- **Mensalista paga valor fixo por mês**, com dia de vencimento (1 a 28,
+  para caber em todo mês). A cobrança nasce sozinha na sincronização do
+  administrador (`gerar_mensalidades`), uma vez por mês — a chave única
+  `(grupo, jogador, tipo, referência)` segura dois administradores juntos.
+  Mês em que ninguém abriu o app não é gerado depois.
+- **Convidado paga diária pelo jogo em que entrou.** Ao encerrar o jogo, a
+  página mostra os convidados que jogaram, já marcados (`LancarDiarias`);
+  o administrador desmarca quem faltou e confirma. Depois, "Lançar a diária
+  dos convidados" continua na página do jogo encerrado.
+- **Despesa só sai do caixa**: ninguém é cobrado por ela.
+- **Pagamento é do jogador, não de uma cobrança**: abate as mais antigas
+  primeiro (`saldosPorJogador` em `lib/financeiro.ts`). Assim o banco não
+  precisa ligar pagamento a cobrança, e pagar "por conta" funciona.
+- **Nada se apaga.** As tabelas não têm permissão de editar nem de apagar.
+  Pagamento e despesa errados ganham ESTORNO (linha negativa com
+  `estorno_de`, uma vez só); cobrança indevida é CANCELADA, com quem e
+  quando. Cobrança só nasce pelas funções; pagamento e despesa podem ser
+  gravados direto, mas só positivos e do próprio grupo. Apagar de vez um
+  atleta com histórico é recusado.
+- **Só dono e administradores veem** (`can_manage_group`). Os links dos
+  atletas não enxergam nada do financeiro.
+- **Cobrar** abre o WhatsApp da pessoa (direto no número, se houver) com o
+  que ela deve e o **Pix copia e cola já com o valor** — BR Code estático
+  gerado no app (`pixCopiaECola`), conferido byte a byte contra o exemplo
+  oficial do manual do Banco Central. Nome até 25 letras e cidade até 15,
+  sem acento. Nenhuma integração com banco: o dinheiro cai direto no Pix do
+  organizador.
+- **Sempre na nuvem, sem cópia no aparelho**: é usado em casa, e os
+  administradores precisam ver o mesmo número. Sem internet, a aba avisa.
+- Datas de mensalidade e diária no horário de Brasília.
+- As tabelas antigas `payments` e `expenses`, nunca usadas, ficaram paradas.
+
+**Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
+financeiro na ficha do jogador, relatório para exportar.
+
 ### Avisos no celular (web push)
 
 Feito em 25/09/2026, migração 016, com o escopo decidido pelo Guilherme. Quem
@@ -383,7 +422,7 @@ O foco atual é o **modo amador**; o profissional espera. Ordem combinada:
 1. Mensalistas e convidados — **feito**
 2. Do convite ao sorteio: fechar a lista, sortear só quem tem vaga, times no link — **feito**
 3. Partidas na nuvem: histórico em outro aparelho — **feito** (migração 013); falta resultados e estatística no link
-4. Financeiro: mensalidade, avulso, Pix, quem pagou
+4. Financeiro: mensalidade, avulso, Pix, quem pagou — **fase 1 feita** (migração 017)
 5. Acabamento: co-organizador, offline no ginásio (service worker), avisos
 
 Todo acesso do convidado passa pelas funções `guest_*` do esquema, que

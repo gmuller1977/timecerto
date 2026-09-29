@@ -39,6 +39,9 @@ import type { Jogo, Player } from '@/types';
 const LinksDoJogo = lazy(() =>
   import('@/components/cloud/LinksDoJogo').then((m) => ({ default: m.LinksDoJogo })),
 );
+const LancarDiarias = lazy(() =>
+  import('@/components/cloud/LancarDiarias').then((m) => ({ default: m.LancarDiarias })),
+);
 
 type Aba = 'confirmados' | 'times' | 'partidas' | 'estatistica';
 const ABAS: { id: Aba; label: string }[] = [
@@ -101,6 +104,7 @@ function Pagina({
   const matches = useMatchStore((s) => s.matches);
   const startMatch = useMatchStore((s) => s.startMatch);
   const [editando, setEditando] = useState(false);
+  const [diarias, setDiarias] = useState(false);
   const sportDoApp = useAppStore((s) => s.sport);
   const setSport = useAppStore((s) => s.setSport);
 
@@ -167,7 +171,11 @@ function Pagina({
         : status === 'encerrado'
           ? 'Encerrar este jogo? Ele sai dos links e fica em Anteriores, com times e partidas.'
           : 'Reabrir este jogo? Ele volta para os próximos jogos.';
-    if (window.confirm(pergunta)) editarJogo(jogo.id, { status });
+    if (!window.confirm(pergunta)) return;
+    editarJogo(jogo.id, { status });
+    setEditando(false);
+    // Encerrou: a diária dos convidados que jogaram, com um toque (migração 017)
+    if (status === 'encerrado' && jogo.remoteId && comSessao) setDiarias(true);
   }
 
   const rodape =
@@ -255,9 +263,21 @@ function Pagina({
         </section>
       )}
       {jogo.status !== 'aberto' && (
-        <button onClick={() => mudarStatus('aberto')} className="mt-2 self-start text-xs text-brand-400 underline">
-          Reabrir este jogo
-        </button>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          <button onClick={() => mudarStatus('aberto')} className="text-xs text-brand-400 underline">
+            Reabrir este jogo
+          </button>
+          {jogo.status === 'encerrado' && jogo.remoteId && comSessao && !diarias && (
+            <button onClick={() => setDiarias(true)} className="text-xs text-brand-400 underline">
+              Lançar a diária dos convidados
+            </button>
+          )}
+        </div>
+      )}
+      {diarias && (
+        <Suspense fallback={null}>
+          <LancarDiarias jogo={jogo} players={players} onFechar={() => setDiarias(false)} />
+        </Suspense>
       )}
 
       {/* Abas do jogo */}

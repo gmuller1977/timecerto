@@ -35,6 +35,12 @@ const AdminInvitePage = lazy(() =>
 const Administradores = lazy(() =>
   import('@/components/cloud/Administradores').then((m) => ({ default: m.Administradores })),
 );
+const FinanceiroPage = lazy(() =>
+  import('@/pages/FinanceiroPage').then((m) => ({ default: m.FinanceiroPage })),
+);
+const FinanceiroAjustes = lazy(() =>
+  import('@/components/cloud/FinanceiroAjustes').then((m) => ({ default: m.FinanceiroAjustes })),
+);
 const SairDaConta = lazy(() =>
   import('@/components/cloud/SairDaConta').then((m) => ({ default: m.SairDaConta })),
 );
@@ -134,10 +140,9 @@ export default function App() {
               <Route
                 path="/financeiro"
                 element={
-                  <EmBrevePage
-                    title="Financeiro"
-                    text="Mensalidade dos mensalistas, diária dos convidados, despesas do grupo e quem ainda deve."
-                  />
+                  <Suspense fallback={null}>
+                    <FinanceiroPage />
+                  </Suspense>
                 }
               />
               <Route
@@ -145,11 +150,12 @@ export default function App() {
                 element={
                   <EmBrevePage
                     title="Ajustes"
-                    text="Esporte, local, horário, vagas, valores e os padrões do sorteio. Por enquanto, o esporte continua na aba Jogo."
+                    text="Nome do grupo, financeiro, administradores e avisos. Local, horário e vagas padrão, e os padrões do sorteio, chegam aqui depois."
                   >
                     {hasSavedSession() && (
                       <Suspense fallback={null}>
                         <NomeDoGrupo />
+                        <FinanceiroAjustes />
                         <Administradores />
                         <AvisosDoAdmin />
                       </Suspense>

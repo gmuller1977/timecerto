@@ -6,6 +6,7 @@ import { useMatchStore } from '@/store/useMatchStore';
 import { inicioDo, pendentesDeEnvio } from '@/lib/jogo';
 import { uid as novoIdLocal } from '@/lib/utils';
 import type { InscricaoDeAviso } from '@/lib/avisos';
+import type { Cobranca, Despesa, Pagamento } from '@/lib/financeiro';
 import type {
   AppMode,
   ConfirmacaoStatus,
@@ -1402,5 +1403,198 @@ export async function avisarInscritos(groupId: string, texto: string): Promise<n
  */
 export async function anunciarJogo(groupId: string): Promise<void> {
   const { error } = await db().rpc('anunciar_jogo', { p_group: groupId });
+  if (error) throw error;
+}
+
+// ── Financeiro (migração 017) ───────────────────────────────
+// Sempre na nuvem, sem cópia no aparelho: o financeiro é usado em casa, e os
+// administradores precisam ver o mesmo número. Só dono e administradores leem.
+
+export interface ConfigFinanceiro {
+  mensalidadeCents: number | null;
+  mensalidadeDia: number | null;
+  diariaCents: number | null;
+  pixChave: string | null;
+  pixNome: string | null;
+  pixCidade: string | null;
+}
+
+export interface JogadorDoFinanceiro {
+  id: string;
+  nome: string;
+  kind: PlayerKind;
+  phone: string | null;
+}
+
+export interface DadosFinanceiros {
+  config: ConfigFinanceiro;
+  jogadores: Map<string, JogadorDoFinanceiro>;
+  cobrancas: Cobranca[];
+  pagamentos: Pagamento[];
+  despesas: Despesa[];
+}
+
+const CONFIG_COLS = 'mensalidade_cents, mensalidade_dia, diaria_cents, pix_chave, pix_nome, pix_cidade';
+
+export async function lerConfigFinanceiro(groupId: string): Promise<ConfigFinanceiro> {
+  const { data, error } = await db().from('groups').select(CONFIG_COLS).eq('id', groupId).single();
+  if (error) throw error;
+  return {
+    mensalidadeCents: data.mensalidade_cents,
+    mensalidadeDia: data.mensalidade_dia,
+    diariaCents: data.diaria_cents,
+    pixChave: data.pix_chave,
+    pixNome: data.pix_nome,
+    pixCidade: data.pix_cidade,
+  };
+}
+
+/** Grava a configuração. Sem permissão a nuvem não muda nada: confere a linha */
+export async function salvarConfigFinanceiro(groupId: string, c: ConfigFinanceiro): Promise<void> {
+  const { data, error } = await db()
+    .from('groups')
+    .update({
+      mensalidade_cents: c.mensalidadeCents,
+      mensalidade_dia: c.mensalidadeDia,
+      diaria_cents: c.diariaCents,
+      pix_chave: c.pixChave?.trim() || null,
+      pix_nome: c.pixNome?.trim() || null,
+      pix_cidade: c.pixCidade?.trim() || null,
+    })
+    .eq('id', groupId)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Só o dono ou um administrador do grupo pode mudar o financeiro.');
+}
+
+export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> {
+  const [config, jog, cob, pag, desp] = await Promise.all([
+    lerConfigFinanceiro(groupId),
+    db().from('players').select('id, name, nickname, kind, phone').eq('group_id', groupId),
+    db()
+      .from('cobrancas')
+      .select('id, player_id, tipo, descricao, valor_cents, vence_em, cancelada_em, criada_em')
+      .eq('group_id', groupId),
+    db()
+      .from('pagamentos')
+      .select('id, player_id, valor_cents, metodo, pago_em, estorno_de, criado_em')
+      .eq('group_id', groupId),
+    db().from('despesas').select('id, descricao, valor_cents, gasto_em, estorno_de, criado_em').eq('group_id', groupId),
+  ]);
+  for (const r of [jog, cob, pag, desp]) if (r.error) throw r.error;
+  return {
+    config,
+    jogadores: new Map(
+      (jog.data ?? []).map((p) => [
+        p.id,
+        { id: p.id, nome: (p.nickname as string | null)?.trim() || p.name, kind: p.kind ?? 'mensalista', phone: p.phone },
+      ]),
+    ),
+    cobrancas: (cob.data ?? []).map((c) => ({
+      id: c.id,
+      playerId: c.player_id,
+      tipo: c.tipo,
+      descricao: c.descricao,
+      valorCents: c.valor_cents,
+      venceEm: c.vence_em,
+      canceladaEm: c.cancelada_em,
+      criadaEm: c.criada_em,
+    })),
+    pagamentos: (pag.data ?? []).map((p) => ({
+      id: p.id,
+      playerId: p.player_id,
+      valorCents: p.valor_cents,
+      metodo: p.metodo,
+      pagoEm: p.pago_em,
+      estornoDe: p.estorno_de,
+      criadoEm: p.criado_em,
+    })),
+    despesas: (desp.data ?? []).map((d) => ({
+      id: d.id,
+      descricao: d.descricao,
+      valorCents: d.valor_cents,
+      gastoEm: d.gasto_em,
+      estornoDe: d.estorno_de,
+      criadoEm: d.criado_em,
+    })),
+  };
+}
+
+/** Mensalidades do mês corrente, uma vez só. Devolve quantas nasceram */
+export async function gerarMensalidades(groupId: string): Promise<number> {
+  const { data, error } = await db().rpc('gerar_mensalidades', { p_group: groupId });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** Diária dos convidados de um jogo (ids da NUVEM). Devolve quantas nasceram */
+export async function lancarDiarias(eventId: string, playerIds: string[], valorCents: number): Promise<number> {
+  const { data, error } = await db().rpc('lancar_diarias', {
+    p_event: eventId,
+    p_players: playerIds,
+    p_valor_cents: valorCents,
+  });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** Quem já tem a diária deste jogo lançada (ids da nuvem) */
+export async function diariasLancadas(eventId: string): Promise<Set<string>> {
+  const { data, error } = await db()
+    .from('cobrancas')
+    .select('player_id')
+    .eq('tipo', 'diaria')
+    .eq('referencia', eventId)
+    .is('cancelada_em', null);
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.player_id as string));
+}
+
+export async function lancarAvulsa(playerId: string, descricao: string, valorCents: number, venceEm: string | null) {
+  const { error } = await db().rpc('lancar_avulsa', {
+    p_player: playerId,
+    p_descricao: descricao,
+    p_valor_cents: valorCents,
+    p_vence_em: venceEm,
+  });
+  if (error) throw error;
+}
+
+export async function cancelarCobranca(id: string) {
+  const { error } = await db().rpc('cancelar_cobranca', { p_cobranca: id });
+  if (error) throw error;
+}
+
+export async function registrarPagamento(
+  groupId: string,
+  p: { playerId: string; valorCents: number; metodo: 'pix' | 'dinheiro'; pagoEm: string },
+) {
+  const { error } = await db().from('pagamentos').insert({
+    group_id: groupId,
+    player_id: p.playerId,
+    valor_cents: p.valorCents,
+    metodo: p.metodo,
+    pago_em: p.pagoEm,
+  });
+  if (error) throw error;
+}
+
+export async function estornarPagamento(id: string) {
+  const { error } = await db().rpc('estornar_pagamento', { p_pagamento: id });
+  if (error) throw error;
+}
+
+export async function lancarDespesa(groupId: string, d: { descricao: string; valorCents: number; gastoEm: string }) {
+  const { error } = await db().from('despesas').insert({
+    group_id: groupId,
+    descricao: d.descricao.trim(),
+    valor_cents: d.valorCents,
+    gasto_em: d.gastoEm,
+  });
+  if (error) throw error;
+}
+
+export async function estornarDespesa(id: string) {
+  const { error } = await db().rpc('estornar_despesa', { p_despesa: id });
   if (error) throw error;
 }

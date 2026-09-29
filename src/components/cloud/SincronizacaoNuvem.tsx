@@ -3,7 +3,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useAuth } from '@/store/useAuth';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { anunciarJogo, findMyGroup, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
+import { anunciarJogo, findMyGroup, gerarMensalidades, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 
 const naoEnviado = (x: { remoteId?: string; enviadoEm?: string; updatedAt?: string }) =>
@@ -34,6 +34,8 @@ async function rodar(): Promise<void> {
       // nada muda no banco nessa hora, então quem anuncia é esta rodada.
       // Falhar aqui não pode travar a sincronização
       await anunciarJogo(grupo).catch((e) => console.warn('anunciar o próximo jogo', e));
+      // A mensalidade do mês nasce aqui, uma vez só (migração 017)
+      await gerarMensalidades(grupo).catch((e) => console.warn('gerar mensalidades', e));
     }
   } catch (e) {
     console.error('sincronizar com a nuvem', e);
