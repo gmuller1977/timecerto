@@ -126,6 +126,7 @@ export function GuestGroupPage() {
     .filter((p) => sit(p.id)?.tipo === 'fila')
     .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
   const comVaga = convidados.filter((p) => sit(p.id)?.tipo === 'vaga');
+  const naoVao = convidados.filter((p) => sit(p.id)?.tipo === 'nao_vou');
   // Lista fechada: quem foi chamado e quem espera. No link dos mensalistas,
   // eles já estão na "Lista de espera" da lista de escolha — aqui ficam só
   // os convidados, para ninguém aparecer duas vezes
@@ -178,18 +179,54 @@ export function GuestGroupPage() {
     setSaving(false);
   }
 
+  /*
+   * O que acontece se a pessoa se inscrever AGORA — dito antes de ela
+   * digitar, e não depois (pedido do Guilherme em 29/09/2026). É a placa na
+   * porta: com as vagas cheias, quem chega decide se quer esperar.
+   */
+  const seEntrarAgora: { texto: string; detalhe: string | null; cheio: boolean } | null = !event
+    ? null
+    : fechada
+      ? {
+          texto: `A lista já fechou: quem se inscrever agora entra na fila de espera, em ${dist.naEspera + 1}º.`,
+          detalhe: 'Se alguém sair, o primeiro da espera é chamado aqui para confirmar se ainda quer jogar.',
+          cheio: true,
+        }
+      : event.slots == null
+        ? { texto: 'Sem limite de vagas: quem se inscrever entra confirmado.', detalhe: null, cheio: false }
+        : (dist.livres ?? 0) > 0
+          ? {
+              texto:
+                dist.livres === 1
+                  ? 'Ainda há 1 vaga: quem se inscrever agora fica com ela.'
+                  : `Ainda há ${dist.livres} vagas: quem se inscrever agora entra com vaga.`,
+              detalhe: 'Mensalista que confirmar depois tem prioridade e pode passar na frente.',
+              cheio: false,
+            }
+          : {
+              texto: `As ${event.slots} vagas estão cheias: quem se inscrever agora entra em ${dist.naFila + 1}º na fila.`,
+              detalhe: 'Se alguém desistir, o primeiro da fila entra sozinho.',
+              cheio: true,
+            };
+
   const nameForm = (
     <form onSubmit={submitName} className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
       <p className="text-[15px] font-semibold text-ink-50">
         {viaConvidados ? 'Qual é o seu nome?' : 'Quem você vai levar?'}
       </p>
-      <p className="mt-1 text-xs leading-relaxed text-ink-500">
-        {fechada
-          ? 'A lista já fechou: entra na fila de espera. Se alguém sair, é chamado aqui para confirmar se ainda quer jogar.'
-          : event?.slots
-            ? 'Entra na fila de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.'
-            : 'Entra na lista de convidados, já confirmado.'}
-      </p>
+      {seEntrarAgora && (
+        <div
+          className={cn(
+            'mt-2 rounded-xl px-3 py-2.5',
+            seEntrarAgora.cheio ? 'bg-amber-500/10 text-amber-100' : 'bg-brand-500/10 text-brand-100',
+          )}
+        >
+          <p className="text-sm font-medium leading-snug">{seEntrarAgora.texto}</p>
+          {seEntrarAgora.detalhe && (
+            <p className="mt-1 text-xs leading-relaxed opacity-80">{seEntrarAgora.detalhe}</p>
+          )}
+        </div>
+      )}
       <input
         autoFocus
         value={newName}
@@ -311,7 +348,18 @@ export function GuestGroupPage() {
                 <AvisoDoAtleta code={code} playerId={mine.id} />
               </>
             ) : viaConvidados ? (
-              nameForm
+              <>
+                {convidados.length > 0 && (
+                  <JaJogou
+                    convidados={convidados}
+                    onEscolher={(id) => {
+                      writeMe(code, id);
+                      setMe(id);
+                    }}
+                  />
+                )}
+                {nameForm}
+              </>
             ) : (
               <>
                 <p className="text-[15px] font-semibold text-ink-50">Quem é você?</p>
@@ -408,32 +456,39 @@ export function GuestGroupPage() {
         )
       )}
 
-      {/* Convidados: quem tem vaga e a fila */}
-      {event && (comVaga.length > 0 || fila.length > 0) && (
-        <section className="mt-6">
-          <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
-            Convidados
-          </p>
-          <div className="flex flex-col gap-1.5">
-            {comVaga.map((p) => (
-              <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
-                <span className="text-xs font-medium text-brand-300">com vaga</span>
-              </GuestLine>
-            ))}
-            {fila.map((p) => (
-              <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
-                <span className="text-xs text-ink-400">{posicao(sit(p.id))}º na fila</span>
-              </GuestLine>
-            ))}
-          </div>
-        </section>
-      )}
+      {/*
+        Convidados separados como os mensalistas (pedido do Guilherme em
+        29/09/2026): confirmados, na fila e não vão. "Confirmados" aqui é quem
+        ganhou vaga — antes a linha dizia "com vaga", que não ficava claro. A
+        lista de espera da lista fechada vem logo abaixo.
+      */}
+      {event &&
+        [
+          { titulo: 'Convidados confirmados', lista: comVaga, fila: false },
+          { titulo: 'Convidados na fila', lista: fila, fila: true },
+          { titulo: 'Convidados que não vão', lista: naoVao, fila: false },
+        ]
+          .filter((g) => g.lista.length > 0)
+          .map((g) => (
+            <section key={g.titulo} className="mt-6">
+              <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
+                {g.titulo} ({g.lista.length})
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {g.lista.map((p) => (
+                  <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
+                    {g.fila && <span className="text-xs text-ink-400">{posicao(sit(p.id))}º na fila</span>}
+                  </GuestLine>
+                ))}
+              </div>
+            </section>
+          ))}
 
       {/* Lista fechada: a fila de espera, na ordem em que será chamada */}
       {event && fechada && (chamados.length > 0 || espera.length > 0) && (
         <section className="mt-6">
           <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
-            {viaConvidados ? 'Fila de espera' : 'Convidados na fila de espera'}
+            Convidados na lista de espera
           </p>
           <div className="flex flex-col gap-1.5">
             {chamados.map((p) => (
@@ -741,6 +796,72 @@ function Times({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Quem já jogou como convidado toca no próprio nome em vez de digitar de novo
+ * (pedido do Guilherme em 29/09/2026). Digitar criava "Bia" numa semana e
+ * "Beatriz" na outra, e o celular novo não lembrava de ninguém. Só o nome —
+ * o link já mostra os nomes; telefone e nível nunca saem daqui.
+ */
+function JaJogou({
+  convidados,
+  onEscolher,
+}: {
+  convidados: GuestGroup['players'];
+  onEscolher: (id: string) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState('');
+  const q = busca.trim().toLowerCase();
+  const lista = q ? convidados.filter((p) => p.name.toLowerCase().includes(q)) : convidados;
+
+  if (!aberto) {
+    return (
+      <button
+        onClick={() => setAberto(true)}
+        className="mb-3 flex w-full items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-left"
+      >
+        <span>
+          <span className="block text-[15px] font-semibold text-ink-50">Já jogou com a gente?</span>
+          <span className="block text-xs text-ink-500">Encontre o seu nome em vez de digitar</span>
+        </span>
+        <span className="shrink-0 text-sm font-medium text-brand-300">Encontrar</span>
+      </button>
+    );
+  }
+  return (
+    <div className="mb-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[15px] font-semibold text-ink-50">Toque no seu nome</p>
+        <button onClick={() => setAberto(false)} className="text-xs text-ink-500 underline">
+          fechar
+        </button>
+      </div>
+      {convidados.length > 8 && (
+        <input
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar nome"
+          aria-label="Buscar nome"
+          className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
+        />
+      )}
+      <div className="mt-3 flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+        {lista.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => onEscolher(p.id)}
+            className="rounded-xl border border-ink-800 bg-ink-950 px-3 py-3 text-left text-[15px] text-ink-50 active:scale-[0.99]"
+          >
+            {p.name}
+          </button>
+        ))}
+        {lista.length === 0 && <p className="py-2 text-sm text-ink-500">Nenhum nome encontrado.</p>}
+      </div>
+      <p className="mt-2 text-xs leading-relaxed text-ink-500">Não achou? Preencha abaixo, como na primeira vez.</p>
+    </div>
   );
 }
 
