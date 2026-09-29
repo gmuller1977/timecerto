@@ -207,6 +207,8 @@ export function GuestGroupPage() {
             .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)))
             .map((p) => p.name),
         ],
+        livres: dist.livres,
+        fechada,
         link: `${location.origin}${location.pathname}#/${viaConvidados ? 'v' : 'c'}/${code.toUpperCase()}`,
       })
     : '';

@@ -32,6 +32,10 @@ export function textoDaLista(p: {
   fila: string[];
   /** Lista fechada: quem espera ser chamado (e quem já foi) */
   espera: string[];
+  /** Vagas ainda livres; null = sem limite */
+  livres: number | null;
+  /** Lista fechada: só resta a lista de espera */
+  fechada: boolean;
   link?: string;
 }): string {
   const numerada = (nomes: string[]) => nomes.map((n, i) => `${i + 1}. ${n}`).join('\n');
@@ -44,6 +48,17 @@ export function textoDaLista(p: {
   ];
   if (p.fila.length) partes.push(`*Na fila*\n${numerada(p.fila)}`);
   if (p.espera.length) partes.push(`*Lista de espera*\n${numerada(p.espera)}`);
-  if (p.link) partes.push(`Confirme ou entre na lista: ${p.link}`);
+  // "Entre na lista" só quando as vagas acabaram (pedido do Guilherme,
+  // 29/09/2026); com vaga, o convite é para confirmar
+  if (p.link) {
+    const completa = p.fechada || p.livres === 0;
+    partes.push(
+      completa
+        ? `Vagas completas. Entre na lista de espera: ${p.link}`
+        : p.livres == null
+          ? `Confirme sua presença: ${p.link}`
+          : `Ainda há ${p.livres} ${p.livres === 1 ? 'vaga' : 'vagas'}. Confirme sua presença: ${p.link}`,
+    );
+  }
   return partes.join('\n\n');
 }

@@ -97,6 +97,8 @@ function listaDoJogo(jogo: Jogo, players: Player[], group: CloudGroup): string {
       ...ativos.filter((p) => tipo(p) === 'chamado').map((p) => `${nomeDeExibicao(p)} (chamado)`),
       ...ativos.filter((p) => tipo(p) === 'espera').sort((a, b) => posicao(a) - posicao(b)).map(nomeDeExibicao),
     ],
+    livres: dist.livres,
+    fechada: Boolean(jogo.listaFechada),
     link: groupLink(group.code),
   });
 }
