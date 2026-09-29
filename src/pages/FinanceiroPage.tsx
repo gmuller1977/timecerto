@@ -256,6 +256,7 @@ function Conteudo({
         </div>
       </section>
 
+      <ComCredito saldos={saldos} dados={dados} nome={nome} recarregar={recarregar} />
       <Recebimentos mes={mes} dados={dados} nome={nome} recarregar={recarregar} />
       <Despesas mes={mes} grupo={grupo} dados={dados} recarregar={recarregar} />
       <CobrancaAvulsa dados={dados} recarregar={recarregar} />
@@ -562,6 +563,75 @@ function Devedor({
       )}
       {!recebendo && erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
     </div>
+  );
+}
+
+// ── Com crédito ──
+
+/**
+ * Quem pagou mais do que deve — em geral, o convidado que pagou a diária
+ * antecipada e desistiu antes do jogo (migração 019). Decidido pelo
+ * Guilherme em 29/09/2026: o administrador escolhe entre deixar de crédito
+ * (não faz nada: a próxima diária já aparece paga) ou devolver (estorno).
+ */
+function ComCredito({
+  saldos,
+  dados,
+  nome,
+  recarregar,
+}: {
+  saldos: Map<string, SaldoDoJogador>;
+  dados: DadosFinanceiros;
+  nome: (id: string) => string;
+  recarregar: () => void;
+}) {
+  const [erro, setErro] = useState<string | null>(null);
+  const credores = [...saldos.values()].filter((s) => s.saldoCents < 0).sort((a, b) => a.saldoCents - b.saldoCents);
+  if (credores.length === 0) return null;
+  const estornados = new Set(dados.pagamentos.filter((p) => p.estornoDe).map((p) => p.estornoDe));
+
+  async function devolver(s: SaldoDoJogador) {
+    const credito = -s.saldoCents;
+    // Devolver = estornar o pagamento que gerou o crédito: o do mesmo valor, o mais recente
+    const pagamento = dados.pagamentos
+      .filter((p) => p.playerId === s.playerId && p.valorCents === credito && !p.estornoDe && !estornados.has(p.id))
+      .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))[0];
+    if (!pagamento) {
+      setErro(`Não achei um pagamento de ${formatBRL(credito)} de ${nome(s.playerId)} para estornar. Estorne o pagamento certo em "Recebido no mês".`);
+      return;
+    }
+    if (!window.confirm(`Devolver ${formatBRL(credito)} para ${nome(s.playerId)}? O pagamento é estornado e fica no histórico. Faça o Pix de volta pelo seu banco.`)) return;
+    try {
+      await estornarPagamento(pagamento.id);
+      recarregar();
+    } catch (err) {
+      setErro(explain(err));
+    }
+  }
+
+  return (
+    <section className="mt-6">
+      <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Com crédito ({credores.length})</p>
+      <div className="flex flex-col gap-2">
+        {credores.map((s) => (
+          <div key={s.playerId} className="rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink-50">{nome(s.playerId)}</span>
+              <span className="shrink-0 font-bold tabular-nums text-brand-300">{formatBRL(-s.saldoCents)}</span>
+            </div>
+            <p className="mt-0.5 text-xs leading-relaxed text-ink-500">
+              Pagou a mais — em geral, uma diária de jogo em que desistiu. Deixando de crédito, a próxima cobrança
+              dele já aparece paga.
+            </p>
+            <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={() => devolver(s)}>
+              <RotateCcw size={14} />
+              Devolver (estornar)
+            </Button>
+          </div>
+        ))}
+      </div>
+      {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
+    </section>
   );
 }
 

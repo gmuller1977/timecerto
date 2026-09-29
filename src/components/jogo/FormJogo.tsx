@@ -38,6 +38,8 @@ export function FormJogo({
   const [vagas, setVagas] = useState(() =>
     jogo ? (jogo.vagas == null ? '' : String(jogo.vagas)) : String(settings.teamSize * settings.numberOfTeams),
   );
+  // Migração 019: amistoso e treino saem sem cobrança de diária
+  const [cobraDiaria, setCobraDiaria] = useState(jogo ? jogo.cobraDiaria !== false : true);
   const [error, setError] = useState<string | null>(null);
   const travado = Boolean(jogo?.sorteio);
 
@@ -61,11 +63,11 @@ export function FormJogo({
       return;
     }
     if (jogo) {
-      const patch = { sport, date, time, place: place.trim(), vagas: n };
+      const patch = { sport, date, time, place: place.trim(), vagas: n, cobraDiaria };
       editarJogo(jogo.id, patch);
       onDone({ ...jogo, ...patch });
     } else {
-      onDone(criarJogo({ sport, date, time, place: place.trim(), vagas: n }));
+      onDone(criarJogo({ sport, date, time, place: place.trim(), vagas: n, cobraDiaria }));
     }
   }
 
@@ -141,6 +143,18 @@ export function FormJogo({
           inputMode="numeric"
           placeholder="Em branco, sem limite"
           className={`${input} mt-1`}
+        />
+      </label>
+      <label className="mt-1 flex items-center justify-between gap-3 rounded-xl bg-ink-800 px-3 py-3">
+        <span>
+          <span className="block text-[15px] text-ink-50">Cobrar diária dos convidados</span>
+          <span className="block text-[11px] text-ink-500">Desligue para amistoso ou treino</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={cobraDiaria}
+          onChange={(e) => setCobraDiaria(e.target.checked)}
+          className="size-5 shrink-0 accent-brand-500"
         />
       </label>
       {error && <p className="text-sm text-red-300">{error}</p>}

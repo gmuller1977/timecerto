@@ -53,6 +53,16 @@ export interface CloudEvent {
   listClosed: boolean;
   /** Sorteio publicado no link; null = ainda não publicado */
   teams: PublishedTeams | null;
+  /**
+   * Migração 019: com a diária antecipada e o jogo cobrando, o preço e o Pix
+   * do grupo, para quem ganha a vaga pagar na hora. Nenhuma dívida vem aqui.
+   */
+  cobrancaAntecipada?: {
+    diariaCents: number;
+    pixChave: string | null;
+    pixNome: string | null;
+    pixCidade: string | null;
+  } | null;
 }
 
 /**
@@ -906,7 +916,7 @@ function sorteioDaNuvem(s: SorteioNuvem | null, jogoId: string, eventId: string)
 }
 
 const EVENT_SYNC_COLS =
-  'id, title, starts_at, location, slots, sport, status, list_closed, teams, sorteio, updated_at, synced_at, created_at';
+  'id, title, starts_at, location, slots, sport, status, list_closed, teams, sorteio, cobra_diaria, updated_at, synced_at, created_at';
 
 interface LinhaJogo {
   id: string;
@@ -920,6 +930,8 @@ interface LinhaJogo {
   list_closed: boolean | null;
   teams: unknown;
   sorteio: SorteioNuvem | null;
+  /** Migração 019 */
+  cobra_diaria: boolean | null;
   updated_at: string;
   synced_at: string;
   created_at: string;
@@ -942,6 +954,7 @@ function doEvento(r: LinhaJogo, jogoId: string) {
     remoteId: r.id,
     listaFechada: Boolean(r.list_closed),
     timesPublicados: r.teams != null,
+    cobraDiaria: r.cobra_diaria !== false,
     sorteio: sorteioDaNuvem(r.sorteio, jogoId, r.id),
     updatedAt: r.updated_at,
     enviadoEm: r.updated_at,
@@ -1042,6 +1055,7 @@ async function enviarJogos(groupId: string) {
     sport: j.sport,
     status: j.status === 'aberto' ? 'programado' : j.status,
     sorteio: sorteioParaNuvem(j.sorteio),
+    cobra_diaria: j.cobraDiaria !== false,
     updated_at: j.updatedAt,
   }));
   const { error } = await db().rpc('salvar_jogos', { p_group: groupId, p_rows: rows });
@@ -1420,6 +1434,8 @@ export interface ConfigFinanceiro {
   /** Migração 018: quanto o grupo tinha em caixa, e desde quando (AAAA-MM-DD) */
   caixaInicialCents: number | null;
   caixaInicialEm: string | null;
+  /** Migração 019: diária do convidado cobrada ao ganhar a vaga, e não depois do jogo */
+  diariaAntecipada: boolean;
 }
 
 export interface JogadorDoFinanceiro {
@@ -1438,7 +1454,7 @@ export interface DadosFinanceiros {
 }
 
 const CONFIG_COLS =
-  'mensalidade_cents, mensalidade_dia, diaria_cents, pix_chave, pix_nome, pix_cidade, caixa_inicial_cents, caixa_inicial_em';
+  'mensalidade_cents, mensalidade_dia, diaria_cents, pix_chave, pix_nome, pix_cidade, caixa_inicial_cents, caixa_inicial_em, diaria_antecipada';
 
 export async function lerConfigFinanceiro(groupId: string): Promise<ConfigFinanceiro> {
   const { data, error } = await db().from('groups').select(CONFIG_COLS).eq('id', groupId).single();
@@ -1452,6 +1468,7 @@ export async function lerConfigFinanceiro(groupId: string): Promise<ConfigFinanc
     pixCidade: data.pix_cidade,
     caixaInicialCents: data.caixa_inicial_cents,
     caixaInicialEm: data.caixa_inicial_em,
+    diariaAntecipada: Boolean(data.diaria_antecipada),
   };
 }
 
@@ -1468,6 +1485,7 @@ export async function salvarConfigFinanceiro(groupId: string, c: ConfigFinanceir
       pix_cidade: c.pixCidade?.trim() || null,
       caixa_inicial_cents: c.caixaInicialCents,
       caixa_inicial_em: c.caixaInicialCents == null ? null : c.caixaInicialEm,
+      diaria_antecipada: c.diariaAntecipada,
     })
     .eq('id', groupId)
     .select('id');
@@ -1526,6 +1544,24 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
       criadoEm: d.criado_em,
     })),
   };
+}
+
+/**
+ * Diária antecipada (migração 019): acerta as cobranças de quem já tinha vaga
+ * nos jogos abertos — é o que vale quando o grupo acaba de ligar o modo. O
+ * resto o banco faz sozinho, a cada resposta.
+ */
+export async function sincronizarDiarias(groupId: string): Promise<void> {
+  const { error } = await db().rpc('sincronizar_diarias_do_grupo', { p_group: groupId });
+  if (error) throw error;
+}
+
+/** O que cada jogador deve (positivo) ou tem de crédito (negativo), por id da NUVEM */
+export async function saldosDoGrupo(groupId: string): Promise<Map<string, number>> {
+  const dados = await lerFinanceiro(groupId);
+  const { saldosPorJogador } = await import('@/lib/financeiro');
+  const saldos = saldosPorJogador(dados.cobrancas, dados.pagamentos);
+  return new Map([...saldos.values()].map((s) => [s.playerId, s.saldoCents]));
 }
 
 /** Mensalidades do mês corrente, uma vez só. Devolve quantas nasceram */

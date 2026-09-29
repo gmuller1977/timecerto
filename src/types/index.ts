@@ -121,6 +121,11 @@ export interface Jogo {
   listaFechada?: boolean;
   /** ESPELHO de `events.teams` preenchido: os times estão publicados no link */
   timesPublicados?: boolean;
+  /**
+   * O jogo cobra diária dos convidados (migração 019). Ausente = sim: é o
+   * que valia antes. Amistoso e treino saem com `false`.
+   */
+  cobraDiaria?: boolean;
   /** Nasceu da conversão do antigo `present` — ver lib/jogo.ts */
   migrado?: boolean;
   /** O sorteio deste jogo (o último feito) */

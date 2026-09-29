@@ -26,6 +26,7 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [feito, setFeito] = useState<number | null>(null);
+  const [antecipada, setAntecipada] = useState(false);
 
   useEffect(() => {
     if (!jogo.remoteId) return;
@@ -36,7 +37,9 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
         setLancadas(ja);
         if (g) {
           const c = await lerConfigFinanceiro(g.id);
-          if (vivo) setValor(centavosParaCampo(c.diariaCents));
+          if (!vivo) return;
+          setValor(centavosParaCampo(c.diariaCents));
+          setAntecipada(c.diariaAntecipada);
         }
       })
       .catch((e) => vivo && setErro(explain(e)));
@@ -68,7 +71,12 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
         <Wallet size={17} className="text-brand-400" />
         Diária dos convidados
       </p>
-      {convidados.length === 0 ? (
+      {antecipada ? (
+        <p className="mt-2 text-sm leading-relaxed text-ink-400">
+          A diária é antecipada: cada convidado foi cobrado quando ganhou a vaga, e quem desistiu antes do jogo
+          teve a cobrança cancelada sozinha. Está tudo em Financeiro › Quem deve.
+        </p>
+      ) : convidados.length === 0 ? (
         <p className="mt-2 text-sm text-ink-400">Nenhum convidado jogou este jogo.</p>
       ) : lancadas === null && !erro ? (
         <p className="mt-2 text-sm text-ink-500">Carregando…</p>
@@ -133,7 +141,7 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
         <Button type="button" size="sm" variant="secondary" onClick={onFechar}>
           {feito !== null || pendentes.length === 0 ? 'Fechar' : 'Agora não'}
         </Button>
-        {pendentes.length > 0 && (
+        {pendentes.length > 0 && !antecipada && (
           <Button size="sm" className="flex-1" disabled={busy || !cents} onClick={lancar}>
             {busy
               ? 'Lançando…'

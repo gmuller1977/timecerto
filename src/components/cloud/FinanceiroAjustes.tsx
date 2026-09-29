@@ -28,6 +28,7 @@ export function FinanceiroAjustes() {
     cidade: '',
     caixa: '',
     caixaEm: '',
+    antecipada: false,
   });
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -66,6 +67,7 @@ export function FinanceiroAjustes() {
       cidade: config.pixCidade ?? '',
       caixa: centavosParaCampo(config.caixaInicialCents),
       caixaEm: config.caixaInicialEm ?? hoje(),
+      antecipada: config.diariaAntecipada,
     });
     setErro(null);
     setEditando(true);
@@ -107,6 +109,7 @@ export function FinanceiroAjustes() {
       pixCidade: f.cidade.trim() || null,
       caixaInicialCents: caixa,
       caixaInicialEm: caixa == null ? null : f.caixaEm,
+      diariaAntecipada: f.antecipada,
     };
     setBusy(true);
     setErro(null);
@@ -171,6 +174,27 @@ export function FinanceiroAjustes() {
               className={input}
             />
           </label>
+          <div>
+            <span className={rotulo}>Quando cobrar a diária do convidado</span>
+            <div className="mt-1 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Quando cobrar a diária">
+              {[
+                { v: false, t: 'Depois do jogo', d: 'Ao encerrar, você confirma quem jogou' },
+                { v: true, t: 'Antecipada', d: 'Quando ele ganha a vaga, com o Pix no link' },
+              ].map((o) => (
+                <button
+                  key={o.t}
+                  type="button"
+                  role="radio"
+                  aria-checked={f.antecipada === o.v}
+                  onClick={() => setF({ ...f, antecipada: o.v })}
+                  className={`rounded-xl border px-3 py-2.5 text-left ${f.antecipada === o.v ? 'border-brand-500 bg-brand-500/10' : 'border-ink-800 bg-ink-950'}`}
+                >
+                  <span className={`block text-sm font-semibold ${f.antecipada === o.v ? 'text-brand-300' : 'text-ink-200'}`}>{o.t}</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-ink-500">{o.d}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="border-t border-ink-800 pt-3">
             <p className="text-xs leading-relaxed text-ink-500">
               Quanto o grupo tinha em caixa quando começou a usar o app. O Financeiro soma o que
@@ -264,6 +288,7 @@ export function FinanceiroAjustes() {
             <strong className="text-ink-100">
               {config.diariaCents ? formatBRL(config.diariaCents) : 'não configurada'}
             </strong>
+            {config.diariaCents ? (config.diariaAntecipada ? ', antecipada' : ', depois do jogo') : ''}
           </p>
           <p>
             Saldo inicial do caixa:{' '}

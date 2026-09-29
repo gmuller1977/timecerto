@@ -32,7 +32,7 @@ import { TEAM_COLOR_CLASSES, encaixarNoSorteio } from '@/lib/draw';
 import { computeAllStats, formatDate } from '@/lib/stats';
 import { SPORTS } from '@/lib/sports';
 import { setsWonBy } from '@/lib/volleyStats';
-import { cn, initials } from '@/lib/utils';
+import { cn, formatBRL, initials } from '@/lib/utils';
 import type { Jogo, Player } from '@/types';
 
 // A parte dos links traz o Supabase: só para quem tem sessão salva
@@ -118,6 +118,36 @@ function Pagina({
   }, [jogo.sport, sportDoApp, setSport]);
   const [busy, setBusy] = useState(false);
   const [comSessao] = useState(hasSavedSession);
+  /*
+   * O que cada um deve, por id LOCAL (migração 017) — para o administrador
+   * ver na lista do jogo "deve R$ 25" e decidir (pedido do Guilherme,
+   * 29/09/2026). Só com conta: o financeiro vem da nuvem.
+   */
+  const [dividas, setDividas] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    if (!comSessao) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const { findMyGroup, saldosDoGrupo } = await import('@/lib/cloud');
+        const g = await findMyGroup('amador');
+        if (!g) return;
+        const porRemoto = await saldosDoGrupo(g.id);
+        if (!vivo) return;
+        const local = new Map<string, number>();
+        for (const p of allPlayers) {
+          const v = p.remoteId ? porRemoto.get(p.remoteId) : undefined;
+          if (v && v > 0) local.set(p.id, v);
+        }
+        setDividas(local);
+      } catch (e) {
+        console.warn('dívidas do grupo', e);
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [comSessao, allPlayers, jogo.confirmations]);
 
   const dist = useMemo(() => vagasDoJogo(jogo, players), [jogo, players]);
   const jogam = players.filter((p) => joga(dist.situacao.get(p.id))).length;
@@ -175,7 +205,7 @@ function Pagina({
     editarJogo(jogo.id, { status });
     setEditando(false);
     // Encerrou: a diária dos convidados que jogaram, com um toque (migração 017)
-    if (status === 'encerrado' && jogo.remoteId && comSessao) setDiarias(true);
+    if (status === 'encerrado' && jogo.remoteId && comSessao && jogo.cobraDiaria !== false) setDiarias(true);
   }
 
   const rodape =
@@ -267,7 +297,7 @@ function Pagina({
           <button onClick={() => mudarStatus('aberto')} className="text-xs text-brand-400 underline">
             Reabrir este jogo
           </button>
-          {jogo.status === 'encerrado' && jogo.remoteId && comSessao && !diarias && (
+          {jogo.status === 'encerrado' && jogo.remoteId && comSessao && jogo.cobraDiaria !== false && !diarias && (
             <button onClick={() => setDiarias(true)} className="text-xs text-brand-400 underline">
               Lançar a diária dos convidados
             </button>
@@ -321,7 +351,7 @@ function Pagina({
                 </button>
               )
             ))}
-          <Confirmados jogo={jogo} players={players} dist={dist} />
+          <Confirmados jogo={jogo} players={players} dist={dist} dividas={dividas} />
         </>
       )}
 
@@ -408,10 +438,13 @@ function Confirmados({
   jogo,
   players,
   dist,
+  dividas,
 }: {
   jogo: Jogo;
   players: Player[];
   dist: ReturnType<typeof vagasDoJogo>;
+  /** Quanto cada um deve, por id local */
+  dividas: Map<string, number>;
 }) {
   const addPlayer = useAppStore((s) => s.addPlayer);
   const alternar = useJogoStore((s) => s.alternar);
@@ -492,11 +525,11 @@ function Confirmados({
         </div>
       )}
 
-      <Grupo titulo="Confirmados" players={grupos.vao} sit={sit} onToggle={onToggle} />
-      <Grupo titulo="Fila" players={grupos.fila} sit={sit} onToggle={onToggle} />
-      <Grupo titulo="Chamados da espera" players={grupos.chamados} sit={sit} onToggle={onToggle} />
-      <Grupo titulo="Fila de espera" players={grupos.espera} sit={sit} onToggle={onToggle} />
-      <Grupo titulo="Ausentes" players={grupos.ausentes} sit={sit} onToggle={onToggle} />
+      <Grupo titulo="Confirmados" players={grupos.vao} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo titulo="Fila" players={grupos.fila} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo titulo="Chamados da espera" players={grupos.chamados} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo titulo="Fila de espera" players={grupos.espera} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo titulo="Ausentes" players={grupos.ausentes} sit={sit} onToggle={onToggle} dividas={dividas} />
 
       {editavel &&
         (avulsoOpen ? (
@@ -540,11 +573,13 @@ function Grupo({
   players,
   sit,
   onToggle,
+  dividas,
 }: {
   titulo: string;
   players: Player[];
   sit: (p: Player) => Situacao | undefined;
   onToggle: (id: string) => void;
+  dividas: Map<string, number>;
 }) {
   if (players.length === 0) return null;
   return (
@@ -554,7 +589,7 @@ function Grupo({
       </p>
       <div className="flex flex-col gap-2">
         {players.map((p) => (
-          <PresenceRow key={p.id} player={p} situacao={sit(p)} onToggle={() => onToggle(p.id)} />
+          <PresenceRow key={p.id} player={p} situacao={sit(p)} onToggle={() => onToggle(p.id)} divida={dividas.get(p.id)} />
         ))}
       </div>
     </section>
@@ -562,7 +597,18 @@ function Grupo({
 }
 
 /** A linha inteira é o alvo: um toque alterna confirmado ↔ sem resposta */
-function PresenceRow({ player, situacao, onToggle }: { player: Player; situacao: Situacao | undefined; onToggle: () => void }) {
+function PresenceRow({
+  player,
+  situacao,
+  onToggle,
+  divida,
+}: {
+  player: Player;
+  situacao: Situacao | undefined;
+  onToggle: () => void;
+  /** Em centavos, quando deve algo */
+  divida?: number;
+}) {
   const convidado = player.kind === 'convidado';
   const vai = situacao?.tipo === 'confirmado' || situacao?.tipo === 'vaga';
   const naFila = situacao?.tipo === 'fila' || situacao?.tipo === 'espera';
@@ -603,6 +649,7 @@ function PresenceRow({ player, situacao, onToggle }: { player: Player; situacao:
       <span className={cn('min-w-0 flex-1 truncate text-[15px] font-medium', vai ? 'text-ink-50' : 'text-ink-400')}>
         {nomeDeExibicao(player)}
         {situacao?.tipo === 'nao_vou' && <span className="ml-2 text-xs font-normal text-ink-500">não vai</span>}
+        {divida ? <span className="block text-xs font-normal text-amber-300">deve {formatBRL(divida)}</span> : null}
         {situacao?.tipo === 'pulado' && (
           <span className="ml-2 text-xs font-normal text-ink-500">a vez passou</span>
         )}

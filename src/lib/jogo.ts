@@ -18,6 +18,7 @@ export function novoJogo(input: {
   time: string;
   place: string;
   vagas: number | null;
+  cobraDiaria?: boolean;
   remoteId?: string;
   migrado?: boolean;
 }): Jogo {

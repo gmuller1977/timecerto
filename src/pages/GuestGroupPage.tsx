@@ -7,11 +7,14 @@ import {
   guestJoin,
   guestSetAttendance,
   type GuestGroup,
+  type CloudEvent,
   type PublishedTeams,
 } from '@/lib/cloud';
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos } from '@/lib/juntar';
 import { textoDaLista } from '@/lib/listaDoJogo';
+import { pixCopiaECola } from '@/lib/financeiro';
+import { formatBRL } from '@/lib/utils';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
@@ -474,6 +477,14 @@ export function GuestGroupPage() {
                   convite para mandar a lista atualizada no grupo. O app não
                   posta sozinho no grupo; a mensagem sai pronta, a pessoa envia.
                 */}
+                {/*
+                  Diária antecipada (migração 019): o convidado que ganhou a
+                  vaga paga na hora. Só o preço e o Pix do grupo — nenhuma
+                  dívida de ninguém passa por este link.
+                */}
+                {mine.kind === 'convidado' && tipoDe(mine.id) === 'vaga' && event?.cobrancaAntecipada && (
+                  <PagarDiaria cobranca={event.cobrancaAntecipada} />
+                )}
                 {(naLista || saiuDaLista) && listaParaOGrupo && (
                   <div className="mt-3 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-4">
                     <p className="text-sm font-semibold text-brand-100">
@@ -693,6 +704,58 @@ function gruposDeMensalistas(lista: Mensalista[]): { titulo: string; jogadores: 
     { titulo: 'Lista de espera', jogadores: de((p) => p.status === 'espera' || p.status === 'chamado') },
     { titulo: 'Não vão', jogadores: de((p) => p.status === 'nao_vou') },
   ].filter((g) => g.jogadores.length > 0);
+}
+
+function PagarDiaria({ cobranca }: { cobranca: NonNullable<CloudEvent['cobrancaAntecipada']> }) {
+  const [copiado, setCopiado] = useState(false);
+  const codigo =
+    cobranca.pixChave && cobranca.pixNome && cobranca.pixCidade
+      ? pixCopiaECola({
+          chave: cobranca.pixChave,
+          nome: cobranca.pixNome,
+          cidade: cobranca.pixCidade,
+          valorCents: cobranca.diariaCents,
+        })
+      : null;
+
+  async function copiar() {
+    if (!codigo) return;
+    try {
+      await navigator.clipboard.writeText(codigo);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      /* sem permissão de área de transferência: o código está à vista para copiar à mão */
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
+      <p className="text-sm font-semibold text-amber-100">Diária deste jogo: {formatBRL(cobranca.diariaCents)}</p>
+      {codigo ? (
+        <>
+          <p className="mt-0.5 text-xs leading-relaxed text-amber-100/80">
+            Copie o código e cole no app do seu banco, em Pix › Copia e cola. O valor já vai preenchido.
+          </p>
+          <p className="mt-2 break-all rounded-xl bg-ink-950 px-3 py-2 font-mono text-[11px] leading-relaxed text-ink-300 select-all">
+            {codigo}
+          </p>
+          <button
+            onClick={copiar}
+            className="mt-2 flex h-11 w-full items-center justify-center rounded-xl bg-amber-400 text-sm font-semibold text-ink-950 active:scale-[0.99]"
+          >
+            {copiado ? 'Código copiado!' : 'Copiar o código Pix'}
+          </button>
+          <p className="mt-2 text-[11px] leading-relaxed text-amber-100/70">
+            Se desistir antes do jogo, a cobrança é cancelada. Se já tiver pago, o organizador devolve ou deixa de
+            crédito para o próximo.
+          </p>
+        </>
+      ) : (
+        <p className="mt-0.5 text-xs leading-relaxed text-amber-100/80">Combine o pagamento com o organizador.</p>
+      )}
+    </div>
+  );
 }
 
 function posicao(s: Situacao | undefined): number {
