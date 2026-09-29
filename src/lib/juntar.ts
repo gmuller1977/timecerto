@@ -77,6 +77,24 @@ export function candidatosParaJuntar(pedido: Player, players: Player[]): Candida
 }
 
 /**
+ * Quem do grupo pode ser a pessoa que está digitando o nome no link — a
+ * mesma regra de "nome parecido" da junção: igual (sem acento e caixa) ou o
+ * nome inteiro de um dentro do outro ("Beatriz" em "Beatriz Souza"). Nunca
+ * só o primeiro nome dos dois: duas Anas diferentes não viram a mesma.
+ * O link só PERGUNTA "você é…?"; quem responde é a pessoa.
+ */
+export function nomesParecidos<T extends { name: string }>(digitado: string, lista: T[]): T[] {
+  const n = normalizar(digitado);
+  if (n.length < 3) return [];
+  return lista
+    .filter((p) => {
+      const q = normalizar(p.name);
+      return q === n || contidoPorPalavras(n, q) || contidoPorPalavras(q, n);
+    })
+    .slice(0, 3);
+}
+
+/**
  * O que passa do pedido para o cadastro existente.
  *
  * - Nascimento, telefone e apelido: vale o do pedido quando ele trouxe — foi

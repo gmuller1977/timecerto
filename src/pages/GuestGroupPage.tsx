@@ -10,6 +10,7 @@ import {
   type PublishedTeams,
 } from '@/lib/cloud';
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
+import { nomesParecidos } from '@/lib/juntar';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
@@ -25,7 +26,37 @@ function readMe(code: string): string | null {
     return null;
   }
 }
+/**
+ * Todos os nomes que este celular já usou neste link. É o que o "Já jogou
+ * com a gente?" mostra — decidido pelo Guilherme em 29/09/2026: só os nomes
+ * deste aparelho, não os do grupo inteiro. Celular novo não mostra nada; aí
+ * vale o "Você é…?" ao digitar.
+ */
+const usadosKey = (code: string) => `timecerto:guest-usados:${code.toUpperCase()}`;
+function readUsados(code: string): Set<string> {
+  const ids = new Set<string>();
+  try {
+    const lista = JSON.parse(localStorage.getItem(usadosKey(code)) ?? '[]');
+    if (Array.isArray(lista)) for (const id of lista) if (typeof id === 'string') ids.add(id);
+  } catch {
+    /* navegação privada ou valor estragado: começa vazio */
+  }
+  const atual = readMe(code);
+  if (atual) ids.add(atual);
+  return ids;
+}
+function lembrarUsado(code: string, id: string) {
+  try {
+    const ids = readUsados(code);
+    ids.add(id);
+    localStorage.setItem(usadosKey(code), JSON.stringify([...ids].slice(-20)));
+  } catch {
+    /* navegação privada: só não lembra */
+  }
+}
+
 function writeMe(code: string, id: string | null) {
+  if (id) lembrarUsado(code, id);
   try {
     if (id) localStorage.setItem(meKey(code), id);
     else localStorage.removeItem(meKey(code));
@@ -127,6 +158,18 @@ export function GuestGroupPage() {
     .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
   const comVaga = convidados.filter((p) => sit(p.id)?.tipo === 'vaga');
   const naoVao = convidados.filter((p) => sit(p.id)?.tipo === 'nao_vou');
+  // Os convidados que ESTE celular já usou — só eles no "Já jogou com a gente?"
+  const usados = readUsados(code);
+  const usadosAqui = convidados.filter((p) => usados.has(p.id));
+
+  /*
+   * "Você é…?" enquanto digita: o nome bate com alguém do grupo? No link de
+   * convidados, a pessoa confirma que é ela e não vira um cadastro novo. No
+   * dos mensalistas, quem leva alguém vê que essa pessoa já existe.
+   */
+  const parecidos = nomesParecidos(newName, data.players);
+  const mensalistaParecido = parecidos.find((p) => p.kind === 'mensalista');
+  const convidadosParecidos = parecidos.filter((p) => p.kind === 'convidado');
   // Lista fechada: quem foi chamado e quem espera. No link dos mensalistas,
   // eles já estão na "Lista de espera" da lista de escolha — aqui ficam só
   // os convidados, para ninguém aparecer duas vezes
@@ -184,30 +227,26 @@ export function GuestGroupPage() {
    * digitar, e não depois (pedido do Guilherme em 29/09/2026). É a placa na
    * porta: com as vagas cheias, quem chega decide se quer esperar.
    */
+  // Texto do Guilherme, 29/09/2026: curto, sem explicar a regra
+  const encerradas = {
+    texto: 'As vagas estão encerradas. Coloque seu nome na lista de espera.',
+    detalhe: null,
+    cheio: true,
+  };
   const seEntrarAgora: { texto: string; detalhe: string | null; cheio: boolean } | null = !event
     ? null
     : fechada
-      ? {
-          texto: `A lista já fechou: quem se inscrever agora entra na fila de espera, em ${dist.naEspera + 1}º.`,
-          detalhe: 'Se alguém sair, o primeiro da espera é chamado aqui para confirmar se ainda quer jogar.',
-          cheio: true,
-        }
+      ? encerradas
       : event.slots == null
-        ? { texto: 'Sem limite de vagas: quem se inscrever entra confirmado.', detalhe: null, cheio: false }
+        ? { texto: 'Para este jogo não há limite de vagas.', detalhe: null, cheio: false }
         : (dist.livres ?? 0) > 0
           ? {
               texto:
-                dist.livres === 1
-                  ? 'Ainda há 1 vaga: quem se inscrever agora fica com ela.'
-                  : `Ainda há ${dist.livres} vagas: quem se inscrever agora entra com vaga.`,
-              detalhe: 'Mensalista que confirmar depois tem prioridade e pode passar na frente.',
+                dist.livres === 1 ? 'Para este jogo temos 1 vaga.' : `Para este jogo temos ${dist.livres} vagas.`,
+              detalhe: null,
               cheio: false,
             }
-          : {
-              texto: `As ${event.slots} vagas estão cheias: quem se inscrever agora entra em ${dist.naFila + 1}º na fila.`,
-              detalhe: 'Se alguém desistir, o primeiro da fila entra sozinho.',
-              cheio: true,
-            };
+          : encerradas;
 
   const nameForm = (
     <form onSubmit={submitName} className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
@@ -235,6 +274,55 @@ export function GuestGroupPage() {
         placeholder="Nome e sobrenome"
         className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
       />
+      {convidadosParecidos.map((p) => (
+        <div
+          key={p.id}
+          className="mt-2 flex items-center gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5"
+        >
+          <span className="min-w-0 flex-1 text-sm text-brand-100">
+            {viaConvidados ? (
+              <>
+                Você é <strong>{p.name}</strong>?
+              </>
+            ) : (
+              <>
+                <strong>{p.name}</strong> já é convidado do grupo. É essa pessoa?
+              </>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (viaConvidados) {
+                writeMe(code, p.id);
+                setMe(p.id);
+                setNewName('');
+              } else {
+                // Com o nome igual, o banco reconhece a pessoa e não cria outra
+                setNewName(p.name);
+              }
+            }}
+            className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-ink-950"
+          >
+            {viaConvidados ? 'Sou eu' : 'É ela'}
+          </button>
+        </div>
+      ))}
+      {mensalistaParecido && (
+        <p className="mt-2 rounded-xl bg-ink-800 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
+          {viaConvidados ? (
+            <>
+              <strong className="text-ink-100">{mensalistaParecido.name}</strong> está na lista de mensalistas. Se
+              for você, confirme pelo link dos mensalistas.
+            </>
+          ) : (
+            <>
+              <strong className="text-ink-100">{mensalistaParecido.name}</strong> já é mensalista — não precisa
+              levar, é só ele confirmar na lista acima.
+            </>
+          )}
+        </p>
+      )}
       <p className="mt-4 text-xs font-medium text-ink-400">
         {viaConvidados ? 'Sua posição' : 'Posição de quem você vai levar'}
       </p>
@@ -349,9 +437,9 @@ export function GuestGroupPage() {
               </>
             ) : viaConvidados ? (
               <>
-                {convidados.length > 0 && (
+                {usadosAqui.length > 0 && (
                   <JaJogou
-                    convidados={convidados}
+                    convidados={usadosAqui}
                     onEscolher={(id) => {
                       writeMe(code, id);
                       setMe(id);
