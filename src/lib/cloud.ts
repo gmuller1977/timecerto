@@ -287,6 +287,29 @@ export async function renomearGrupo(groupId: string, nome: string): Promise<stri
  * Devolve quantas pessoas novas chegaram (links e outros aparelhos).
  */
 let rodada: Promise<number> | null = null;
+/**
+ * A cópia deste aparelho é do grupo? Confere alguns ids da nuvem que o
+ * aparelho já enviou (atletas e jogos) contra o grupo. Sem nada enviado, não
+ * há o que conferir e vale sim. Serve a `SincronizacaoNuvem`: sincronizar a
+ * cópia de OUTRO grupo mandaria os atletas dele para este.
+ */
+export async function copiaEDoGrupo(groupId: string, atletas: string[], jogos: string[]): Promise<boolean> {
+  const amostraA = atletas.slice(0, 20);
+  const amostraJ = jogos.slice(0, 20);
+  if (amostraA.length === 0 && amostraJ.length === 0) return true;
+  const [pa, pj] = await Promise.all([
+    amostraA.length
+      ? db().from('players').select('id').eq('group_id', groupId).in('id', amostraA).limit(1)
+      : Promise.resolve({ data: [], error: null }),
+    amostraJ.length
+      ? db().from('events').select('id').eq('group_id', groupId).in('id', amostraJ).limit(1)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (pa.error) throw pa.error;
+  if (pj.error) throw pj.error;
+  return (pa.data?.length ?? 0) > 0 || (pj.data?.length ?? 0) > 0;
+}
+
 export function syncAmador(groupId: string): Promise<number> {
   if (!rodada) {
     rodada = sincronizarAtletas(groupId).finally(() => {

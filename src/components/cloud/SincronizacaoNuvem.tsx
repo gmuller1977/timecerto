@@ -3,7 +3,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { useAuth } from '@/store/useAuth';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { anunciarJogo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
+import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 
 const naoEnviado = (x: { remoteId?: string; enviadoEm?: string; updatedAt?: string }) =>
@@ -77,7 +77,22 @@ async function rodar(): Promise<void> {
     // com ele) e a conta não ter grupo nenhum
     const veioDaNuvem =
       useAppStore.getState().players.some((x) => x.enviadoEm) || useJogoStore.getState().jogos.some((j) => j.enviadoEm);
-    if ((anterior && anterior !== grupo) || (!anterior && !grupo && veioDaNuvem)) {
+    let perdeu = (anterior && anterior !== grupo) || (!anterior && !grupo && veioDaNuvem);
+    // Sem marca e COM grupo: a conta pode ter um grupo próprio e o aparelho
+    // guardar a cópia do grupo de onde ela foi removida (achado no teste do
+    // Guilherme em 29/09/2026). Confere uma vez; depois a marca responde
+    if (!perdeu && !anterior && grupo && veioDaNuvem) {
+      const atletas = useAppStore
+        .getState()
+        .players.filter((x) => x.enviadoEm && x.remoteId)
+        .map((x) => x.remoteId!);
+      const jogos = useJogoStore
+        .getState()
+        .jogos.filter((j) => j.enviadoEm && j.remoteId)
+        .map((j) => j.remoteId!);
+      perdeu = !(await copiaEDoGrupo(grupo, atletas, jogos));
+    }
+    if (perdeu) {
       console.warn('sem acesso ao grupo sincronizado antes: limpando a cópia do aparelho');
       limparCopiaDoGrupo();
       gravarMarca(null);

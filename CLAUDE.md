@@ -314,6 +314,11 @@ limpa quando a conta não tem grupo nenhum e a cópia já passou pela nuvem
 (`enviadoEm`, e não `remoteId`, que o jogo ganha ao nascer). Erro de rede
 nunca limpa: só a resposta do banco.
 
+O mesmo dia mostrou um segundo caso: a conta removida pode ter um grupo
+PRÓPRIO. Aí ela "tem grupo", nada limpava, e a sincronização mandaria os
+atletas do outro grupo para o dela. Sem marca e com grupo, `copiaEDoGrupo`
+confere uma amostra dos ids enviados contra o grupo antes de sincronizar.
+
 ### Avisos no celular (web push)
 
 Feito em 25/09/2026, migração 016, com o escopo decidido pelo Guilherme. Quem
