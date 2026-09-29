@@ -216,6 +216,8 @@ export function GuestGroupPage() {
     (p) => p.id === me && (viaConvidados ? p.kind === 'convidado' : p.kind === 'mensalista'),
   );
   const naLista = Boolean(mine && ['confirmado', 'vaga', 'fila', 'espera', 'chamado'].includes(tipoDe(mine.id) ?? ''));
+  // Quem desistiu também avisa o grupo: a vaga abriu (pedido do Guilherme, 29/09/2026)
+  const saiuDaLista = Boolean(mine && tipoDe(mine.id) === 'nao_vou');
 
   async function answer(status: 'vou' | 'nao_vou') {
     if (!event || !mine) return;
@@ -470,11 +472,15 @@ export function GuestGroupPage() {
                   convite para mandar a lista atualizada no grupo. O app não
                   posta sozinho no grupo; a mensagem sai pronta, a pessoa envia.
                 */}
-                {naLista && listaParaOGrupo && (
+                {(naLista || saiuDaLista) && listaParaOGrupo && (
                   <div className="mt-3 rounded-2xl border border-brand-500/30 bg-brand-500/10 p-4">
-                    <p className="text-sm font-semibold text-brand-100">Seu nome está na lista!</p>
+                    <p className="text-sm font-semibold text-brand-100">
+                      {saiuDaLista ? 'Você saiu da lista.' : 'Seu nome está na lista!'}
+                    </p>
                     <p className="mt-0.5 text-xs leading-relaxed text-brand-100/80">
-                      Agora mande a lista atualizada no grupo da pelada, para todo mundo ver quem vai.
+                      {saiuDaLista
+                        ? 'Mande a lista atualizada no grupo, para todo mundo saber que abriu vaga.'
+                        : 'Agora mande a lista atualizada no grupo da pelada, para todo mundo ver quem vai.'}
                     </p>
                     <button
                       onClick={() =>
