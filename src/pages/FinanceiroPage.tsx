@@ -25,6 +25,7 @@ import {
   reaisParaCentavos,
   resumoDoMes,
   saldosPorJogador,
+  type Cobranca,
   type SaldoDoJogador,
 } from '@/lib/financeiro';
 import { hoje } from '@/lib/jogo';
@@ -43,6 +44,17 @@ const moverMes = (mes: string, delta: number) => {
 };
 /** AAAA-MM-DD → DD/MM */
 const dm = (data: string) => `${data.slice(8, 10)}/${data.slice(5, 7)}`;
+
+/**
+ * A data DA COBRANÇA, não o vencimento (pedido do Guilherme, 29/09/2026): a
+ * mensalidade, o dia em que foi lançada; a diária, o dia do jogo; a avulsa, a
+ * data escolhida ao lançar.
+ */
+function dataDaCobranca(c: Cobranca): string {
+  if (c.tipo !== 'mensalidade') return c.venceEm;
+  const d = new Date(c.criadaEm);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 /** A cobrança de UMA pessoa: o que deve, e o Pix já com o valor dela */
 function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGroup, dados: DadosFinanceiros): string {
@@ -67,12 +79,12 @@ function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGro
  * nomes: quem cobra decide, a cada vez, se expõe quanto cada um deve.
  */
 function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => string, grupo: CloudGroup, dados: DadosFinanceiros, valores: boolean): string {
-  // Uma linha por cobrança em aberto: nome — descrição — vencimento — o que falta (pedido do Guilherme, 29/09/2026)
+  // Uma linha por cobrança em aberto: nome — descrição — data da cobrança — o que falta (pedido do Guilherme, 29/09/2026)
   const lista = valores
     ? devedores
         .flatMap((d) =>
           d.abertas.map(
-            (a) => `• ${nome(d.playerId)} — ${a.cobranca.descricao} — ${dm(a.cobranca.venceEm)} — ${formatBRL(a.faltaCents)}`,
+            (a) => `• ${nome(d.playerId)} — ${a.cobranca.descricao} — ${dm(dataDaCobranca(a.cobranca))} — ${formatBRL(a.faltaCents)}`,
           ),
         )
         .join('\n')
@@ -913,20 +925,25 @@ function CobrancaAvulsa({ dados, recarregar }: { dados: DadosFinanceiros; recarr
         className="w-full rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
       />
       <div className="flex gap-2">
-        <input
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          inputMode="decimal"
-          placeholder="Valor (R$)"
-          className="min-w-0 flex-1 rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
-        />
-        <input
-          type="date"
-          value={vence}
-          onChange={(e) => setVence(e.target.value)}
-          aria-label="Vencimento"
-          className="min-w-0 flex-1 rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 outline-none [color-scheme:dark]"
-        />
+        <label className="min-w-0 flex-1">
+          <span className="text-[11px] text-ink-500">Valor (R$)</span>
+          <input
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+            inputMode="decimal"
+            placeholder="Ex.: 50,00"
+            className="mt-0.5 w-full rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
+          />
+        </label>
+        <label className="min-w-0 flex-1">
+          <span className="text-[11px] text-ink-500">Data da cobrança</span>
+          <input
+            type="date"
+            value={vence}
+            onChange={(e) => setVence(e.target.value)}
+            className="mt-0.5 w-full rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 outline-none [color-scheme:dark]"
+          />
+        </label>
       </div>
       {erro && <p className="text-sm text-red-300">{erro}</p>}
       <div className="flex gap-2">
