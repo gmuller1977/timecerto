@@ -7,7 +7,7 @@ import {
   cancelarCobranca,
   estornarDespesa,
   estornarPagamento,
-  findMyGroup,
+  findActiveGroup,
   lancarAvulsa,
   lancarDespesa,
   lerFinanceiro,
@@ -256,7 +256,7 @@ export function FinanceiroPage() {
   useEffect(() => {
     if (!ready || !session) return;
     let vivo = true;
-    findMyGroup('amador')
+    findActiveGroup()
       .then((g) => {
         if (!vivo) return;
         setGrupo(g);

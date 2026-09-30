@@ -141,6 +141,15 @@ async function uid(): Promise<string> {
  * migração 012). Um grupo por conta e por modo — quem tem grupo próprio e
  * aceita administrar outro continua vendo o próprio.
  */
+/** O tipo do grupo em que o app está: o do grupo ativo, ou o lembrado */
+export const modoAtivo = (): AppMode => lerGrupoAtivo()?.mode ?? useAppStore.getState().mode ?? 'amador';
+
+/**
+ * O grupo em que o app está, seja pelada ou time. Ajustes e Financeiro servem
+ * aos dois tipos (as mesmas abas no profissional, 30/09/2026) e usam este.
+ */
+export const findActiveGroup = () => findMyGroup(modoAtivo());
+
 export async function findMyGroup(mode: AppMode): Promise<CloudGroup | null> {
   // Etapa 8: com um grupo ativo daquele tipo, é ELE — e só ele. Sem acesso,
   // a resposta é null, e nunca outro grupo no lugar: é o que permite à

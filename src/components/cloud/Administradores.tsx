@@ -11,6 +11,7 @@ import {
   convitesAdminAbertos,
   criarConviteAdmin,
   findMyGroup,
+  modoAtivo,
   removerAdmin,
   shareOnWhatsApp,
   type Administrador,
@@ -33,7 +34,9 @@ const validoAte = (iso: string) =>
  * O cartão diz o nome do grupo, para ninguém achar que o administrador é
  * "geral" — no banco ele sempre foi de um grupo só.
  */
-export function Administradores({ mode = 'amador' }: { mode?: AppMode }) {
+export function Administradores({ mode: modoPedido }: { mode?: AppMode }) {
+  // Sem tipo pedido, o do grupo em que o app está
+  const [mode] = useState<AppMode>(() => modoPedido ?? modoAtivo());
   const ready = useAuth((s) => s.ready);
   const session = useAuth((s) => s.session);
   const [group, setGroup] = useState<CloudGroup | null | undefined>(undefined);
@@ -186,7 +189,7 @@ export function Administradores({ mode = 'amador' }: { mode?: AppMode }) {
                 </div>
               ))}
               {/* Mais de um administrador é do plano pago (migração 021) */}
-              {mode === 'profissional' || situacaoDoPlano(group.plano).premium ? (
+              {situacaoDoPlano(group.plano).premium ? (
                 <Button variant="secondary" className="mt-3 w-full" disabled={busy} onClick={convidar}>
                   {busy ? 'Gerando…' : 'Convidar administrador'}
                 </Button>

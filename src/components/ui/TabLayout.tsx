@@ -23,8 +23,9 @@ export function TabLayout() {
   // responde sem rede. Não é mais uma escolha feita a cada abertura
   const mode = useAppStore((s) => s.mode) ?? 'amador';
   const { pathname, search, state } = useLocation();
-  const active = tabOf(pathname);
-  const show = hydrated && mode === 'amador';
+  const active = tabOf(pathname, mode);
+  // Os dois tipos têm a barra desde 30/09/2026
+  const show = hydrated;
   const current = pathname + search;
 
   useLayoutEffect(() => {
@@ -74,7 +75,7 @@ export function TabLayout() {
       {show && (
         <>
           <div aria-hidden className="h-[var(--tabbar-h)]" />
-          <TabBar active={active} current={current} />
+          <TabBar active={active} current={current} mode={mode} />
         </>
       )}
     </>

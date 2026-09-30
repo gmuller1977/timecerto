@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import type { TipoDeJogo } from '@/types';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -51,6 +52,7 @@ function LineupEditor() {
   const saveLineup = useProStore((s) => s.saveLineup);
   const live = useMatchStore((s) => s.live);
   const startMatch = useMatchStore((s) => s.startMatch);
+  const competicao = (useLocation().state as { competicao?: TipoDeJogo } | null)?.competicao;
 
   // A quadra, a validação e o sugerir falam `Player`
   const players = useMemo(() => proPlayers.map(proToPlayer), [proPlayers]);
@@ -181,6 +183,8 @@ function LineupEditor() {
       teams: [home, away],
       scout: { mode: 'atleta' },
       lineup: { system, court, liberoId },
+      // Amistoso ou campeonato: escolhido no "Novo jogo" da aba Jogo
+      ...(competicao ? { competicao } : {}),
     });
     navigate('/placar');
   }
@@ -188,7 +192,7 @@ function LineupEditor() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
       <header className="safe-top flex items-center gap-3 pt-6 pb-4">
-        <button onClick={() => navigate('/profissional')} className="p-1 text-ink-400">
+        <button onClick={() => navigate('/profissional/jogo')} className="p-1 text-ink-400">
           <ArrowLeft size={22} />
         </button>
         <div className="min-w-0 flex-1">

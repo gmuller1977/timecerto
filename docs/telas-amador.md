@@ -380,6 +380,29 @@ grupo de um tipo nasce vazio. O nome do grupo no alto de Jogo e do elenco
 profissional é o seletor; `/modo` virou a lista dos grupos, com "Criar novo
 grupo". Perder o acesso ao grupo ativo apaga só a cópia dele.
 
+## O profissional com as mesmas abas
+
+Pedido do Guilherme em 30/09/2026: Jogo, Atletas, Financeiro e Ajustes também
+no profissional. Os dois cadastros de atleta são diferentes (a pelada tem
+nível, posição e mensalista/convidado; o time tem categoria, naipe, altura e
+peso), então em três fases:
+
+**Fase 1. A casca e o plano.** ✓ Feita em 30/09/2026. A barra de abas e a faixa
+do grupo no profissional. Jogo (`ProJogoPage`): "Novo jogo" pergunta
+**Amistoso** ou **Campeonato** e segue para a escalação, com a partida em
+andamento e as últimas. Atletas: o elenco do time (`/profissional`, com
+Convidar). Financeiro e Ajustes são os da pelada, olhando o grupo ativo
+(`findActiveGroup`). Migração 022: o profissional entra no plano, com 30
+dias de teste; no grátis, o elenco vai até 20.
+
+**Fase 2. Um cadastro só.** O elenco do time vira o mesmo cadastro da pelada,
+com os campos do profissional a mais, migrando sem perder ninguém. Destrava a
+aba Jogo igual à da pelada (agenda, confirmação pelo link, vagas) e a
+mensalidade por atleta.
+
+**Fase 3. Da confirmação para a escalação.** "Escalar" no jogo do time abre a
+escalação já com os confirmados, no lugar do sorteio.
+
 ### Para o Claude Code
 
 Uma etapa por sessão. Rodar a revisão do projeto ao fim de cada etapa. Prestar

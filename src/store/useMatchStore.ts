@@ -1,4 +1,5 @@
 import { BASES, chaveInicial } from '@/lib/grupoAtivo';
+import type { TipoDeJogo } from '@/types';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
@@ -28,6 +29,8 @@ export interface LiveMatch {
   pro?: ProSetup;
   /** Jogo (id LOCAL) a que a partida pertence */
   jogoId?: string;
+  /** Profissional: amistoso ou campeonato */
+  competicao?: TipoDeJogo;
 }
 
 /** O que vale para a partida inteira; o que muda por set fica em `Game.lineup` */
@@ -61,6 +64,8 @@ interface MatchState {
     lineup?: { system: RotationSystem; court: Court; liberoId?: string };
     /** Jogo a que a partida pertence (amador) */
     jogoId?: string;
+    /** Profissional: amistoso ou campeonato */
+    competicao?: TipoDeJogo;
   }) => void;
   updateScout: (patch: Partial<ScoutSettings>) => void;
   addRally: (input: {
@@ -119,11 +124,12 @@ export const useMatchStore = create<MatchState>()(
       matches: [],
       excluidas: [],
 
-      startMatch: ({ sport, teams, scout, lineup, jogoId }) =>
+      startMatch: ({ sport, teams, scout, lineup, jogoId, competicao }) =>
         set({
           live: {
             id: uid(),
             ...(jogoId ? { jogoId } : {}),
+            ...(competicao ? { competicao } : {}),
             sport,
             date: new Date().toISOString(),
             teams,
@@ -342,6 +348,7 @@ export const useMatchStore = create<MatchState>()(
           attendance: live.teams.flatMap((t) => t.playerIds),
           mode: live.pro ? 'profissional' : 'amador',
           ...(live.jogoId ? { jogoId: live.jogoId } : {}),
+          ...(live.competicao ? { competicao: live.competicao } : {}),
           updatedAt: new Date().toISOString(),
         };
 

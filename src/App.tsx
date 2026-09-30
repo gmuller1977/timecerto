@@ -1,4 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
+import { ProJogoPage } from '@/pages/ProJogoPage';
+import { SoNaPelada } from '@/components/ui/SoNaPelada';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
 import { useHydrated } from '@/store/useHydrated';
 import { useJogoStore } from '@/store/useJogoStore';
@@ -126,17 +128,20 @@ export default function App() {
                 a primeira entrada, ou para trocar, por Ajustes */}
             <Route path="/" element={<AberturaPage />} />
             <Route path="/modo" element={<HomePage />} />
-            <Route path="/profissional" element={<ProPlayersPage />} />
+            {/* Foco total, como o sorteio: sem barra de abas */}
             <Route path="/profissional/escalacao" element={<LineupPage />} />
             {/* Foco total: sem barra de abas */}
             <Route path="/sortear" element={<DrawPage />} />
             <Route path="/placar" element={<ScoreboardPage />} />
-            {/* Só o profissional; no amador leva ao Jogo */}
-            <Route path="/convites" element={<InvitePage />} />
             {/* Modo amador, com a barra de abas (docs/telas-amador.md). A aba de
                 cada rota está em components/ui/TabBar.tsx */}
             <Route element={<TabLayout />}>
               <Route path="/amador" element={<JogosPage />} />
+              {/* Profissional, com as mesmas abas (30/09/2026) */}
+              <Route path="/profissional/jogo" element={<ProJogoPage />} />
+              <Route path="/profissional" element={<ProPlayersPage />} />
+              {/* Só o profissional; no amador leva ao Jogo */}
+              <Route path="/convites" element={<InvitePage />} />
               <Route path="/jogo/:id" element={<JogoPage />} />
               <Route path="/resultado" element={<ResultPage />} />
               <Route path="/partida" element={<QuickMatchPage />} />
@@ -165,7 +170,9 @@ export default function App() {
                         <PlanoDoGrupo />
                         <FinanceiroAjustes />
                         <Administradores />
-                        <AvisosDoAdmin />
+                        <SoNaPelada>
+                          <AvisosDoAdmin />
+                        </SoNaPelada>
                       </Suspense>
                     )}
                     {/* Com o login obrigatório, a conta só tem uma ação: sair.

@@ -20,7 +20,7 @@ export function HistoryPage() {
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
       <header className="safe-top flex items-center gap-3 pt-6 pb-4">
         <button
-          onClick={() => navigate(pro ? '/profissional' : '/amador')}
+          onClick={() => navigate(pro ? '/profissional/jogo' : '/amador')}
           className="p-1 text-ink-400"
         >
           <ArrowLeft size={22} />

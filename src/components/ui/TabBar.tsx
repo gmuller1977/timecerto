@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import type { AppMode } from '@/types';
 import { FaixaDoGrupo } from '@/components/ui/TrocaDeGrupo';
 import { Settings, Users, Volleyball, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,13 +15,15 @@ export type TabId = 'jogo' | 'elenco' | 'financeiro' | 'ajustes';
  * A aba se chamava Elenco; a rota continua /elenco.
  * Financeiro e Ajustes ainda são lugar reservado — docs/telas-amador.md.
  */
-export const TABS: {
+type Aba = {
   id: TabId;
   label: string;
   icon: typeof Users;
   root: string;
   prefixes: string[];
-}[] = [
+};
+
+export const TABS: Aba[] = [
   {
     id: 'jogo',
     label: 'Jogo',
@@ -39,8 +42,35 @@ export const TABS: {
   { id: 'ajustes', label: 'Ajustes', icon: Settings, root: '/ajustes', prefixes: ['/ajustes'] },
 ];
 
-export function tabOf(pathname: string): TabId | null {
-  const tab = TABS.find((t) =>
+/**
+ * As mesmas quatro abas no profissional (pedido do Guilherme, 30/09/2026).
+ * Jogo e Atletas têm as telas do time; Financeiro e Ajustes são as mesmas da
+ * pelada, e olham o grupo ativo. Jogo vem antes de Atletas: /profissional/jogo
+ * também começa com /profissional.
+ */
+const TABS_PRO: Aba[] = [
+  {
+    id: 'jogo',
+    label: 'Jogo',
+    icon: Volleyball,
+    root: '/profissional/jogo',
+    prefixes: ['/profissional/jogo', '/historico', '/partida'],
+  },
+  {
+    id: 'elenco',
+    label: 'Atletas',
+    icon: Users,
+    root: '/profissional',
+    prefixes: ['/profissional', '/convites'],
+  },
+  TABS[2],
+  TABS[3],
+];
+
+export const abasDo = (mode: AppMode) => (mode === 'profissional' ? TABS_PRO : TABS);
+
+export function tabOf(pathname: string, mode: AppMode = 'amador'): TabId | null {
+  const tab = abasDo(mode).find((t) =>
     t.prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`)),
   );
   return tab?.id ?? null;
@@ -62,10 +92,10 @@ export function savedScroll(path: string): number {
   return scrollOf.get(path) ?? 0;
 }
 
-export function TabBar({ active, current }: { active: TabId | null; current: string }) {
+export function TabBar({ active, current, mode }: { active: TabId | null; current: string; mode: AppMode }) {
   const navigate = useNavigate();
 
-  function go(tab: (typeof TABS)[number]) {
+  function go(tab: Aba) {
     scrollOf.set(current, window.scrollY);
     // Tocar na aba em que já se está volta para a raiz dela; nas outras,
     // retoma de onde a pessoa parou
@@ -86,7 +116,7 @@ export function TabBar({ active, current }: { active: TabId | null; current: str
       {/* O grupo, à mão em todas as abas (etapa 8) */}
       <FaixaDoGrupo />
       <div className="mx-auto flex h-16 max-w-lg">
-        {TABS.map((tab) => {
+        {abasDo(mode).map((tab) => {
           const Icon = tab.icon;
           const on = tab.id === active;
           return (

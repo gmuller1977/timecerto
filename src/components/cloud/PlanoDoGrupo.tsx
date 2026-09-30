@@ -3,7 +3,8 @@ import { Check, Crown, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { useAppStore } from '@/store/useAppStore';
-import { findMyGroup, type CloudGroup } from '@/lib/cloud';
+import { useProStore } from '@/store/useProStore';
+import { findActiveGroup, type CloudGroup } from '@/lib/cloud';
 import { LIMITE_MENSALISTAS_GRATIS, PRECO_DO_PLANO_CENTS, situacaoDoPlano } from '@/lib/plano';
 import { formatBRL } from '@/lib/utils';
 
@@ -19,11 +20,14 @@ export function PlanoDoGrupo() {
   const session = useAuth((s) => s.session);
   const [group, setGroup] = useState<CloudGroup | null | undefined>(undefined);
   const mensalistas = useAppStore((s) => s.players.filter((p) => !p.pending && p.kind !== 'convidado').length);
+  // No time, todo atleta do elenco conta
+  const atletasDoTime = useProStore((s) => s.players.length);
+  const pro = (useAppStore((s) => s.mode) ?? 'amador') === 'profissional';
 
   useEffect(() => {
     if (!ready || !session) return;
     let vivo = true;
-    findMyGroup('amador')
+    findActiveGroup()
       .then((g) => vivo && setGroup(g))
       .catch(() => vivo && setGroup(null));
     return () => {
@@ -50,12 +54,14 @@ export function PlanoDoGrupo() {
         ? `Assinatura em dia até ${data(sit.ate!)}.`
         : sit.tipo === 'teste'
           ? `${sit.dias === 1 ? 'Falta 1 dia' : `Faltam ${sit.dias} dias`}, até ${data(sit.ate!)}. Depois, sem assinatura, o grupo passa para o grátis — nada se perde, só trava.`
-          : 'Financeiro só para consulta, um administrador e até 20 mensalistas. Nada do que já existe se perdeu.';
+          : `Financeiro só para consulta, um administrador e até 20 ${pro ? 'atletas' : 'mensalistas'}. Nada do que já existe se perdeu.`;
 
   const itens = [
     'Financeiro: mensalidades, diárias, Pix, cobranças e caixa',
     'Mais de um administrador',
-    `Mais de ${LIMITE_MENSALISTAS_GRATIS} mensalistas (hoje: ${mensalistas}). Convidados nunca contam`,
+    pro
+      ? `Mais de ${LIMITE_MENSALISTAS_GRATIS} atletas no elenco (hoje: ${atletasDoTime})`
+      : `Mais de ${LIMITE_MENSALISTAS_GRATIS} mensalistas (hoje: ${mensalistas}). Convidados nunca contam`,
   ];
 
   return (

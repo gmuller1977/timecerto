@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pencil, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
-import { findMyGroup, renomearGrupo, type CloudGroup } from '@/lib/cloud';
+import { findActiveGroup, renomearGrupo, type CloudGroup } from '@/lib/cloud';
 import { explain } from '@/components/cloud/partes';
 
 /**
@@ -23,7 +23,7 @@ export function NomeDoGrupo() {
   useEffect(() => {
     if (!ready || !session) return;
     let vivo = true;
-    findMyGroup('amador')
+    findActiveGroup()
       .then((g) => vivo && setGroup(g))
       .catch(() => vivo && setGroup(null));
     return () => {

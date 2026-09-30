@@ -420,6 +420,11 @@ export interface ScoutSettings {
   cap: number;
 }
 
+/** O tipo do jogo do profissional */
+export type TipoDeJogo = 'amistoso' | 'campeonato';
+
+export const NOME_DA_COMPETICAO: Record<TipoDeJogo, string> = { amistoso: 'Amistoso', campeonato: 'Campeonato' };
+
 export interface Match {
   id: string;
   date: string;
@@ -434,6 +439,8 @@ export interface Match {
   notes?: string;
   /** Ausente = amador (partidas de antes da separação dos modos) */
   mode?: AppMode;
+  /** Profissional: amistoso ou campeonato (pedido do Guilherme, 30/09/2026) */
+  competicao?: TipoDeJogo;
   /** Jogo (id LOCAL) a que a partida pertence */
   jogoId?: string;
   /** Id na nuvem (matches.id) */

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { SeletorDeGrupo } from '@/components/ui/SeletorDeGrupo';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, ClipboardList, History, Radio, Send, UserPlus } from 'lucide-react';
+import { ChevronRight, Radio, Send, UserPlus } from 'lucide-react';
+import { avisoDeLimite } from '@/lib/plano';
+import { usePremium } from '@/store/usePlano';
 import { Button } from '@/components/ui/Button';
 import { ProPlayerSheet } from '@/components/pro/ProPlayerSheet';
 import { useProStore, matchesFilter } from '@/store/useProStore';
@@ -28,9 +29,9 @@ export function ProPlayersPage() {
   const updatePlayer = useProStore((s) => s.updatePlayer);
   const removePlayer = useProStore((s) => s.removePlayer);
   const live = useMatchStore((s) => s.live);
-  const proMatches = useMatchStore(
-    (s) => s.matches.filter((m) => m.mode === 'profissional').length,
-  );
+  // Plano grátis: até 20 atletas no time (migração 022). O banco recusaria o
+  // 21º e a sincronização do elenco travaria; a tela avisa antes
+  const premium = usePremium();
 
   // null = fechado · 'novo' = cadastro · atleta = edição
   const [editing, setEditing] = useState<ProPlayer | 'novo' | null>(null);
@@ -50,12 +51,8 @@ export function ProPlayersPage() {
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
       <header className="safe-top flex items-start justify-between pt-6 pb-4">
         <div className="flex items-start gap-2">
-          <button onClick={() => navigate('/modo')} className="p-1 pt-0.5 text-ink-400">
-            <ArrowLeft size={22} />
-          </button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Elenco</h1>
-            <SeletorDeGrupo />
+            <h1 className="text-2xl font-bold tracking-tight">Atletas</h1>
             <p className="mt-0.5 text-sm text-ink-400">
               🏐 {players.length} {players.length === 1 ? 'atleta' : 'atletas'}
             </p>
@@ -68,14 +65,6 @@ export function ProPlayersPage() {
           >
             <Send size={14} />
             Convidar
-          </button>
-          <button
-            onClick={() => navigate('/historico')}
-            className="flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2 text-xs font-medium text-ink-300"
-            aria-label="Partidas"
-          >
-            <History size={14} />
-            {proMatches > 0 && <span className="text-ink-500">{proMatches}</span>}
           </button>
         </div>
       </header>
@@ -179,20 +168,20 @@ export function ProPlayersPage() {
         </p>
       )}
 
-      <div className="safe-bottom fixed inset-x-0 bottom-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
+      {/* Acima da barra de abas; escalar e começar o jogo ficam na aba Jogo */}
+      <div className="safe-bottom above-tabbar fixed inset-x-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg gap-2">
-          <Button variant="secondary" size="lg" onClick={() => setEditing('novo')}>
-            <UserPlus size={19} />
-            Atleta
-          </Button>
           <Button
             size="lg"
             className="flex-1"
-            disabled={shown.length < 6}
-            onClick={() => navigate('/profissional/escalacao')}
+            onClick={() => {
+              const aviso = avisoDeLimite(premium, players.length);
+              if (aviso) window.alert(aviso.replace('mensalistas', 'atletas').replace(' Convidados não contam.', ''));
+              else setEditing('novo');
+            }}
           >
-            <ClipboardList size={19} />
-            {shown.length < 6 ? `Faltam ${6 - shown.length} para escalar` : 'Escalar time'}
+            <UserPlus size={19} />
+            Novo atleta
           </Button>
         </div>
       </div>

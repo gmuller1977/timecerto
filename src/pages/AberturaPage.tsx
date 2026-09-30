@@ -7,7 +7,7 @@ import { lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { hasSavedSession } from '@/lib/sessao';
 import type { AppMode } from '@/types';
 
-const INICIO: Record<AppMode, string> = { amador: '/amador', profissional: '/profissional' };
+const INICIO: Record<AppMode, string> = { amador: '/amador', profissional: '/profissional/jogo' };
 
 /**
  * A abertura do app (docs/telas-amador.md, etapas 7 e 8): abre direto no

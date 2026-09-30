@@ -11,7 +11,7 @@ import type { MeuGrupo } from '@/lib/cloud';
 import type { AppMode } from '@/types';
 import { cn } from '@/lib/utils';
 
-const INICIO: Record<AppMode, string> = { amador: '/amador', profissional: '/profissional' };
+const INICIO: Record<AppMode, string> = { amador: '/amador', profissional: '/profissional/jogo' };
 const NOME_DO_TIPO: Record<AppMode, string> = { amador: 'Pelada', profissional: 'Time profissional' };
 
 const MODES: {

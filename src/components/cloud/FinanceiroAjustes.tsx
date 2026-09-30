@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
-import { findMyGroup, lerConfigFinanceiro, salvarConfigFinanceiro, type ConfigFinanceiro } from '@/lib/cloud';
+import { findActiveGroup, lerConfigFinanceiro, salvarConfigFinanceiro, type ConfigFinanceiro } from '@/lib/cloud';
 import { centavosParaCampo, reaisComSinalParaCentavos, reaisParaCentavos } from '@/lib/financeiro';
 import { hoje } from '@/lib/jogo';
 import { formatBRL } from '@/lib/utils';
@@ -36,7 +36,7 @@ export function FinanceiroAjustes() {
   useEffect(() => {
     if (!ready || !session) return;
     let vivo = true;
-    findMyGroup('amador')
+    findActiveGroup()
       .then(async (g) => {
         if (!vivo) return;
         setGrupo(g?.id ?? null);

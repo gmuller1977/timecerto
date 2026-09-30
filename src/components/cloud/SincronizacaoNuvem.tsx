@@ -4,7 +4,7 @@ import { useAuth } from '@/store/useAuth';
 import { usePlano } from '@/store/usePlano';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
+import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador, syncPro } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 import { lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { ativarGrupo, esquecerGrupo, lembrarNome } from '@/store/trocarGrupo';
@@ -79,8 +79,9 @@ async function rodar(): Promise<void> {
     if (ativo) {
       // Etapa 8: o grupo é o ATIVO, e findMyGroup devolve ele ou nada
       const g = await findMyGroup(ativo.mode);
-      // O plano (migração 021) vem junto: é daqui que as telas sabem o que travar
-      usePlano.getState().definir(ativo.mode === 'amador' ? g : null, meuId);
+      // O plano (migrações 021 e 022) vem junto: é daqui que as telas sabem o
+      // que travar — na pelada e no time
+      usePlano.getState().definir(g, meuId);
       if (!g) {
         console.warn('sem acesso ao grupo ativo: limpando a cópia dele deste aparelho');
         await esquecerGrupo(ativo.id);
@@ -88,8 +89,13 @@ async function rodar(): Promise<void> {
         return;
       }
       lembrarNome(g.id, g.name);
-      // O profissional sincroniza pela tela de convites dele
-      if (ativo.mode !== 'amador') return;
+      // O time: o elenco sobe (e o que o atleta preencheu pelo link desce), e
+      // a mensalidade do mês nasce — o Financeiro também é do profissional
+      if (ativo.mode !== 'amador') {
+        await syncPro(g.id);
+        await gerarMensalidades(g.id).catch((e) => console.warn('gerar mensalidades', e));
+        return;
+      }
       grupo = g.id;
     } else {
       grupo = await grupoDoLegado(meuId);
