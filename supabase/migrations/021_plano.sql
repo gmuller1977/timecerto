@@ -50,11 +50,14 @@ create trigger groups_proteger_plano
   before insert or update on public.groups
   for each row execute function public.proteger_plano();
 
--- Está no pago? Cortesia, assinatura em dia, ou ainda no teste
+-- Está no pago? Cortesia, assinatura em dia, ou ainda no teste. O modo
+-- profissional fica fora: o plano decidido é o da pelada, e o técnico
+-- convidado de um time não pode perder a edição por um plano que não é dele
 create or replace function public.grupo_premium(gid uuid)
 returns boolean language sql security definer stable set search_path = public as $$
   select coalesce((
-    select g.cortesia
+    select g.mode = 'profissional'
+        or g.cortesia
         or coalesce(g.pago_ate > now(), false)
         or coalesce(g.teste_ate > now(), false)
       from public.groups g where g.id = gid), false);

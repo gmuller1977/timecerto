@@ -3328,7 +3328,7 @@ alter table public.groups
 -- authenticated) cria o grupo sempre com o teste padrão e nunca altera as três
 -- colunas; o SQL Editor (postgres) e a Edge Function (service_role) podem.
 create or replace function public.proteger_plano()
-returns trigger language plpgsql set search_path = public as $
+returns trigger language plpgsql set search_path = public as $$
 begin
   if current_user not in ('anon', 'authenticated') then
     return new;
@@ -3343,21 +3343,24 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 drop trigger if exists groups_proteger_plano on public.groups;
 create trigger groups_proteger_plano
   before insert or update on public.groups
   for each row execute function public.proteger_plano();
 
--- Está no pago? Cortesia, assinatura em dia, ou ainda no teste
+-- Está no pago? Cortesia, assinatura em dia, ou ainda no teste. O modo
+-- profissional fica fora: o plano decidido é o da pelada, e o técnico
+-- convidado de um time não pode perder a edição por um plano que não é dele
 create or replace function public.grupo_premium(gid uuid)
-returns boolean language sql security definer stable set search_path = public as $
+returns boolean language sql security definer stable set search_path = public as $$
   select coalesce((
-    select g.cortesia
+    select g.mode = 'profissional'
+        or g.cortesia
         or coalesce(g.pago_ate > now(), false)
         or coalesce(g.teste_ate > now(), false)
       from public.groups g where g.id = gid), false);
-$;
+$$;
 revoke execute on function public.grupo_premium(uuid) from public, anon;
 grant  execute on function public.grupo_premium(uuid) to authenticated;
 
@@ -3366,11 +3369,11 @@ grant  execute on function public.grupo_premium(uuid) to authenticated;
 -- can_manage_group até aqui. Serve ao Financeiro: lá "membro" não basta — o
 -- papel 'jogador' também é membro e não pode ver dinheiro de ninguém.
 create or replace function public.e_admin_do_grupo(gid uuid)
-returns boolean language sql security definer stable set search_path = public as $
+returns boolean language sql security definer stable set search_path = public as $$
   select exists (
     select 1 from public.group_members
     where group_id = gid and user_id = auth.uid() and role in ('dono', 'organizador'));
-$;
+$$;
 revoke execute on function public.e_admin_do_grupo(uuid) from public, anon;
 grant  execute on function public.e_admin_do_grupo(uuid) to authenticated;
 
@@ -3379,12 +3382,12 @@ grant  execute on function public.e_admin_do_grupo(uuid) to authenticated;
 -- isso trocar o corpo desta função basta: o dono edita sempre, o organizador
 -- só com o plano.
 create or replace function public.can_manage_group(gid uuid)
-returns boolean language sql security definer stable set search_path = public as $
+returns boolean language sql security definer stable set search_path = public as $$
   select exists (
     select 1 from public.group_members
     where group_id = gid and user_id = auth.uid()
       and (role = 'dono' or (role = 'organizador' and public.grupo_premium(gid))));
-$;
+$$;
 
 -- O Financeiro continua legível para todo administrador, com ou sem plano
 drop policy if exists cobrancas_ler on public.cobrancas;
@@ -3404,7 +3407,7 @@ create policy lembretes_ler on public.lembretes
 -- Nas tabelas, e não em cada função: pega pagamento, despesa, estorno,
 -- avulsa e diária pelo mesmo lugar.
 create or replace function public.financeiro_do_plano()
-returns trigger language plpgsql security definer set search_path = public as $
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if public.grupo_premium(new.group_id) then
     return new;
@@ -3420,9 +3423,9 @@ begin
   end if;
   raise exception 'O Financeiro é do plano pago. Sem ele, dá para consultar, mas não lançar.';
 end;
-$;
+$$;
 
-do $
+do $$
 declare t text;
 begin
   foreach t in array array['cobrancas', 'pagamentos', 'despesas', 'lembretes'] loop
@@ -3431,12 +3434,12 @@ begin
       'create trigger %I_do_plano before insert on public.%I for each row execute function public.financeiro_do_plano()',
       t, t);
   end loop;
-end $;
+end $$;
 
 -- Cancelar à mão também é lançar. O sistema (cancelada_por nulo) continua
 -- cancelando a diária de quem perdeu a vaga, e reativando a de quem voltou
 create or replace function public.cancelar_do_plano()
-returns trigger language plpgsql security definer set search_path = public as $
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if new.cancelada_em is not null and old.cancelada_em is null and new.cancelada_por is not null
      and not public.grupo_premium(new.group_id) then
@@ -3444,7 +3447,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 drop trigger if exists cobrancas_cancelar_do_plano on public.cobrancas;
 create trigger cobrancas_cancelar_do_plano
   before update on public.cobrancas
@@ -3452,7 +3455,7 @@ create trigger cobrancas_cancelar_do_plano
 
 -- ── Mais de um administrador ──
 create or replace function public.admin_do_plano()
-returns trigger language plpgsql security definer set search_path = public as $
+returns trigger language plpgsql security definer set search_path = public as $$
 begin
   -- (ifs aninhados: só group_members tem role)
   if tg_table_name = 'group_members' then
@@ -3465,7 +3468,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 drop trigger if exists admin_invites_do_plano on public.admin_invites;
 create trigger admin_invites_do_plano
   before insert on public.admin_invites
@@ -3481,7 +3484,7 @@ create trigger group_members_do_plano
 -- mensalista —: quem já contava continua sendo editado e sincronizado, então
 -- um grupo com 25 que perde o plano não perde ninguém.
 create or replace function public.limite_de_mensalistas()
-returns trigger language plpgsql security definer set search_path = public as $
+returns trigger language plpgsql security definer set search_path = public as $$
 declare
   conta boolean := coalesce(new.kind, 'mensalista') = 'mensalista'
                    and new.active and not new.pending and new.deleted_at is null;
@@ -3510,7 +3513,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 drop trigger if exists players_limite_de_mensalistas on public.players;
 create trigger players_limite_de_mensalistas
   before insert or update on public.players

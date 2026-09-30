@@ -306,7 +306,7 @@ paga é o organizador, R$ 14,90/mês pelo Mercado Pago (fase 2, pendente). O
 pago libera **Financeiro**, **mais de um administrador** e **mais de 20
 mensalistas** (convidado nunca conta). Todo grupo nasce com **30 dias** do
 pago; os que existiam ganharam os 30 dias a partir da migração; os do
-Guilherme são **cortesia**.
+Guilherme são **cortesia**. O modo profissional fica fora (`grupo_premium` devolve sim): o plano decidido é o da pelada.
 
 **Quando acaba, nada se perde, só trava** — e quem trava é o banco:
 
