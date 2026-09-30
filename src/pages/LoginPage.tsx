@@ -43,10 +43,16 @@ export function LoginPage() {
   /*
    * Já entrou: segue para o app. Havia aqui uma tela da conta, com foto,
    * e-mail e "Sair da conta" — sem finalidade, e o Guilherme pediu para tirar
-   * em 29/09/2026: sair da conta fica em Ajustes. Veio de uma tela que pediu
-   * login: devolve para ela.
+   * em 29/09/2026: sair da conta fica em Ajustes.
+   *
+   * Depois de entrar, a lista dos grupos (pedido do Guilherme, 30/09/2026):
+   * é ali que se escolhe o grupo ou se cria um. Só um link com destino
+   * próprio — o Financeiro, um convite de administrador — volta para ele.
    */
-  if (session) return <Navigate to={volta ?? '/'} replace />;
+  if (session) {
+    const inicio = !volta || ['/', '/amador', '/profissional', '/modo'].includes(volta);
+    return <Navigate to={inicio ? '/modo' : volta} replace />;
+  }
 
   async function google() {
     setBusy(true);
