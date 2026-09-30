@@ -7,7 +7,7 @@ import { useMatchStore } from '@/store/useMatchStore';
 import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 import { lerGrupoAtivo } from '@/lib/grupoAtivo';
-import { ativarGrupo, esquecerGrupo, lembrarNome } from '@/store/trocarGrupo';
+import { ativarGrupo, esquecerGrupo, lembrarNome, lembrarPerfil } from '@/store/trocarGrupo';
 
 const naoEnviado = (x: { remoteId?: string; enviadoEm?: string; updatedAt?: string }) =>
   !x.remoteId || x.enviadoEm !== x.updatedAt;
@@ -89,6 +89,7 @@ async function rodar(): Promise<void> {
         return;
       }
       lembrarNome(g.id, g.name);
+      lembrarPerfil(g.id, g.ageGroup, g.naipe);
       // Desde a fase 2 o time sincroniza pelo MESMO caminho da pelada: um
       // cadastro só, com agenda, confirmação e mensalidade (migração 023)
       grupo = g.id;

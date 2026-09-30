@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CategoriaENaipe } from '@/components/pro/CategoriaENaipe';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, ClipboardList, Plus, Radio, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -8,7 +9,7 @@ import { lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { SPORT_LIST } from '@/lib/sports';
 import { hasSavedSession } from '@/lib/sessao';
 import type { MeuGrupo } from '@/lib/cloud';
-import type { AppMode } from '@/types';
+import type { AgeGroup, AppMode, Naipe } from '@/types';
 import { cn } from '@/lib/utils';
 
 const INICIO: Record<AppMode, string> = { amador: '/amador', profissional: '/profissional/jogo' };
@@ -62,6 +63,11 @@ export function HomePage() {
   const [criando, setCriando] = useState(() => Boolean((location.state as { criar?: boolean } | null)?.criar));
   const [tipoNovo, setTipoNovo] = useState<AppMode>('amador');
   const [nomeNovo, setNomeNovo] = useState('');
+  // Do time (migração 024): o padrão de todo atleta novo
+  const [perfil, setPerfil] = useState<{ ageGroup: AgeGroup | null; naipe: Naipe | null }>({
+    ageGroup: null,
+    naipe: null,
+  });
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -100,7 +106,7 @@ export function HomePage() {
     setErro(null);
     try {
       const { createGroup } = await import('@/lib/cloud');
-      await createGroup(tipoNovo, nome);
+      await createGroup(tipoNovo, nome, tipoNovo === 'profissional' ? perfil : undefined);
       navigate(INICIO[tipoNovo], { replace: true });
     } catch {
       setErro('Não deu para criar o grupo. Confira a internet e tente de novo.');
@@ -207,6 +213,14 @@ export function HomePage() {
                 aria-label="Nome do grupo"
                 className="w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none"
               />
+              {tipoNovo === 'profissional' && (
+                <>
+                  <CategoriaENaipe ageGroup={perfil.ageGroup} naipe={perfil.naipe} onChange={(v) => setPerfil((p) => ({ ...p, ...v }))} />
+                  <p className="text-[11px] leading-relaxed text-ink-500">
+                    Todo atleta novo já nasce com essa categoria e esse naipe — dá para trocar na ficha dele.
+                  </p>
+                </>
+              )}
               {erro && <p className="text-sm text-red-300">{erro}</p>}
               <div className="flex gap-2">
                 <Button type="button" variant="secondary" onClick={() => setCriando(false)}>

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CategoriaENaipe } from '@/components/pro/CategoriaENaipe';
+import type { AgeGroup, Naipe } from '@/types';
 import { comoPro } from '@/lib/pro';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft, LogOut, MessageCircle, RefreshCw } from 'lucide-react';
@@ -78,6 +80,11 @@ function Connected({ email }: { email: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState('Meu time');
+  // Do time (migração 024): o padrão de todo atleta novo
+  const [perfil, setPerfil] = useState<{ ageGroup: AgeGroup | null; naipe: Naipe | null }>({
+    ageGroup: null,
+    naipe: null,
+  });
 
   useEffect(() => {
     let alive = true;
@@ -102,7 +109,7 @@ function Connected({ email }: { email: string }) {
     setBusy(true);
     setError(null);
     try {
-      const g = await createGroup('profissional', name || 'Meu grupo');
+      const g = await createGroup('profissional', name || 'Meu grupo', perfil);
       await syncAmador(g.id);
       setGroup(g);
     } catch (e) {
@@ -136,6 +143,9 @@ function Connected({ email }: { email: string }) {
             onChange={(e) => setName(e.target.value)}
             className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 outline-none"
           />
+          <div className="mt-4">
+            <CategoriaENaipe ageGroup={perfil.ageGroup} naipe={perfil.naipe} onChange={(v) => setPerfil((p) => ({ ...p, ...v }))} />
+          </div>
           <Button size="lg" className="mt-4 w-full" disabled={busy} onClick={handleCreate}>
             {busy ? 'Criando…' : 'Criar e gerar convites'}
           </Button>

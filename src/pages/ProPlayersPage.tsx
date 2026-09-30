@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useGrupoAtivo } from '@/store/useGrupoAtivo';
 import { useAppStore } from '@/store/useAppStore';
 import { camposDoPro, comoPro } from '@/lib/pro';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +29,7 @@ export function ProPlayersPage() {
   const cadastro = useAppStore((s) => s.players);
   const players = useMemo(() => cadastro.filter((p) => !p.pending).map(comoPro), [cadastro]);
   const filter = useProStore((s) => s.filter);
+  const time = useGrupoAtivo();
   const setFilter = useProStore((s) => s.setFilter);
   const addPlayerCompleto = useAppStore((s) => s.addPlayerCompleto);
   const updatePlayerUnico = useAppStore((s) => s.updatePlayer);
@@ -193,7 +195,11 @@ export function ProPlayersPage() {
       {editing && (
         <ProPlayerSheet
           player={editing === 'novo' ? undefined : editing}
-          defaults={filter}
+          defaults={{
+            // O filtro da tela manda; sem filtro, o padrão do time (migração 024)
+            ageGroup: filter.ageGroup ?? time?.ageGroup ?? null,
+            naipe: filter.naipe ?? time?.naipe ?? null,
+          }}
           onClose={() => setEditing(null)}
           onSave={(draft) => {
             if (editing === 'novo') addPlayerCompleto({ name: draft.name, ...camposDoPro(draft) });

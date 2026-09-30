@@ -1,4 +1,4 @@
-import type { AppMode } from '@/types';
+import type { AgeGroup, AppMode, Naipe } from '@/types';
 
 /**
  * Multi-grupo (docs/telas-amador.md, etapa 8). O aparelho guarda UM grupo
@@ -22,6 +22,9 @@ export interface GrupoAtivo {
   id: string;
   mode: AppMode;
   name?: string;
+  /** Do time (migração 024): o padrão de todo atleta novo, também sem rede */
+  ageGroup?: AgeGroup | null;
+  naipe?: Naipe | null;
 }
 
 export const BASES = {

@@ -80,6 +80,12 @@ export function lembrarNome(id: string, name: string) {
   if (g && g.id === id && g.name !== name) definirGrupoAtivo({ ...g, name });
 }
 
+/** Categoria e naipe do time mudaram (ou chegaram): só a lembrança */
+export function lembrarPerfil(id: string, ageGroup: GrupoAtivo['ageGroup'], naipe: GrupoAtivo['naipe']) {
+  const g = lerGrupoAtivo();
+  if (g && g.id === id && (g.ageGroup !== ageGroup || g.naipe !== naipe)) definirGrupoAtivo({ ...g, ageGroup, naipe });
+}
+
 /**
  * Perdeu o acesso ao grupo ativo: apaga a cópia DELE deste aparelho e sai
  * dele. Os outros grupos guardados no aparelho ficam.

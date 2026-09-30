@@ -50,6 +50,9 @@ const SairDaConta = lazy(() =>
 const PlanoDoGrupo = lazy(() =>
   import('@/components/cloud/PlanoDoGrupo').then((m) => ({ default: m.PlanoDoGrupo })),
 );
+const PerfilDoTime = lazy(() =>
+  import('@/components/cloud/PerfilDoTime').then((m) => ({ default: m.PerfilDoTime })),
+);
 const NomeDoGrupo = lazy(() =>
   import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })),
 );
@@ -170,6 +173,7 @@ export default function App() {
                     {hasSavedSession() && (
                       <Suspense fallback={null}>
                         <NomeDoGrupo />
+                        <PerfilDoTime />
                         <PlanoDoGrupo />
                         <FinanceiroAjustes />
                         <Administradores />

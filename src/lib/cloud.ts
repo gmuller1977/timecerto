@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { guardarGrupos, lerGrupoAtivo } from '@/lib/grupoAtivo';
-import { ativarGrupo, lembrarNome } from '@/store/trocarGrupo';
+import { ativarGrupo, lembrarNome, lembrarPerfil } from '@/store/trocarGrupo';
 import type { PlanoDoGrupo } from '@/lib/plano';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogoStore } from '@/store/useJogoStore';
@@ -48,6 +48,9 @@ export interface CloudGroup {
   ownerId: string;
   /** Migração 021 */
   plano: PlanoDoGrupo;
+  /** Do time (migração 024); nulos na pelada */
+  ageGroup: AgeGroup | null;
+  naipe: Naipe | null;
 }
 
 export interface CloudEvent {
@@ -86,7 +89,8 @@ export interface PublishedTeams {
 /** Resposta de cada jogador, pelo id da NUVEM */
 export type Attendance = Record<string, { status: 'vou' | 'nao_vou'; answeredAt: string }>;
 
-const GROUP_COLS = 'id, name, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia';
+const GROUP_COLS =
+  'id, name, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia, age_group, naipe';
 const toGroup = (d: {
   id: string;
   name: string;
@@ -97,6 +101,8 @@ const toGroup = (d: {
   teste_ate: string | null;
   pago_ate: string | null;
   cortesia: boolean | null;
+  age_group: AgeGroup | null;
+  naipe: Naipe | null;
 }): CloudGroup => ({
   id: d.id,
   name: d.name,
@@ -105,6 +111,8 @@ const toGroup = (d: {
   registerCode: d.register_code,
   ownerId: d.owner_id,
   plano: { testeAte: d.teste_ate, pagoAte: d.pago_ate, cortesia: Boolean(d.cortesia) },
+  ageGroup: d.age_group,
+  naipe: d.naipe,
 });
 const EVENT_COLS = 'id, title, starts_at, slots, location, list_closed, teams';
 const toEvent = (d: {
@@ -310,19 +318,45 @@ export async function aceitarConviteAdmin(token: string): Promise<{ group: strin
   return data as { group: string; mode: AppMode };
 }
 
-export async function createGroup(mode: AppMode, name: string): Promise<CloudGroup> {
+export async function createGroup(
+  mode: AppMode,
+  name: string,
+  /** Do time: o padrão de todo atleta novo (migração 024) */
+  perfil?: { ageGroup: AgeGroup | null; naipe: Naipe | null },
+): Promise<CloudGroup> {
   const sport = mode === 'profissional' ? 'volei' : useAppStore.getState().sport;
   const { data, error } = await db()
     .from('groups')
-    .insert({ name: name.trim(), sport, mode, owner_id: await uid() })
+    .insert({
+      name: name.trim(),
+      sport,
+      mode,
+      owner_id: await uid(),
+      ...(perfil ? { age_group: perfil.ageGroup, naipe: perfil.naipe } : {}),
+    })
     .select(GROUP_COLS)
     .single();
   if (error) throw error;
   const g = toGroup(data);
   // O grupo novo vira o ativo (etapa 8). O primeiro de cada tipo leva o que o
   // aparelho já tinha daquele tipo; os seguintes nascem vazios
-  await ativarGrupo({ id: g.id, mode, name: g.name });
+  await ativarGrupo({ id: g.id, mode, name: g.name, ageGroup: g.ageGroup, naipe: g.naipe });
   return g;
+}
+
+/** Ajustes do time: categoria e naipe, o padrão de todo atleta novo */
+export async function salvarPerfilDoTime(
+  groupId: string,
+  perfil: { ageGroup: AgeGroup | null; naipe: Naipe | null },
+): Promise<void> {
+  const { data, error } = await db()
+    .from('groups')
+    .update({ age_group: perfil.ageGroup, naipe: perfil.naipe })
+    .eq('id', groupId)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Só o dono ou um administrador do time pode mudar isso.');
+  lembrarPerfil(groupId, perfil.ageGroup, perfil.naipe);
 }
 
 /**
