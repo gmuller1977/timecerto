@@ -61,6 +61,7 @@ export function lerGrupoAtivo(): GrupoAtivo | null {
 
 export function definirGrupoAtivo(g: GrupoAtivo | null) {
   gravar(CHAVE_ATIVO, g);
+  avisarMudanca();
 }
 
 export const chaveDe = (base: string, id: string | null | undefined) => (id ? `${base}@${id}` : base);
@@ -157,4 +158,54 @@ export function chaveInicial(base: string): string {
     prepararAoCarregar();
   }
   return chaveDe(base, lerGrupoAtivo()?.id);
+}
+
+// ── Avisar quem mostra o grupo, e a lista guardada ──
+
+const EVENTO = 'timecerto:grupo-ativo';
+const CHAVE_LISTA = 'timecerto:meus-grupos';
+
+export interface GrupoDaLista extends GrupoAtivo {
+  name: string;
+  papel: 'dono' | 'administrador';
+}
+
+/** Chamado a cada mudança do grupo ativo: a faixa da barra redesenha */
+export function avisarMudanca() {
+  try {
+    window.dispatchEvent(new Event(EVENTO));
+  } catch {
+    /* fora do navegador */
+  }
+}
+
+export function ouvirMudanca(f: () => void): () => void {
+  window.addEventListener(EVENTO, f);
+  window.addEventListener('storage', f);
+  return () => {
+    window.removeEventListener(EVENTO, f);
+    window.removeEventListener('storage', f);
+  };
+}
+
+/** O texto guardado, para comparar sem criar objeto novo a cada leitura */
+export const grupoAtivoCru = () => {
+  try {
+    return localStorage.getItem(CHAVE_ATIVO);
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * A lista dos grupos da conta, como a nuvem respondeu da última vez. É o que
+ * deixa trocar de grupo sem rede: o conteúdo de cada um já está no aparelho.
+ */
+export function lerGruposGuardados(): GrupoDaLista[] {
+  return ler<GrupoDaLista[]>(CHAVE_LISTA) ?? [];
+}
+
+export function guardarGrupos(lista: GrupoDaLista[]) {
+  gravar(CHAVE_LISTA, lista);
+  avisarMudanca();
 }

@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import { SeletorDeGrupo } from '@/components/ui/SeletorDeGrupo';
 import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, ChevronDown, ChevronRight, History, MapPin, Radio, Swords, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -102,7 +101,6 @@ export function JogosPage() {
       <header className="safe-top flex items-center justify-between gap-3 pt-6 pb-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Jogo</h1>
-          <SeletorDeGrupo />
         </div>
         <button
           onClick={() => navigate('/historico')}

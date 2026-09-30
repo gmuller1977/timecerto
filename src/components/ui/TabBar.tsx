@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { FaixaDoGrupo } from '@/components/ui/TrocaDeGrupo';
 import { Settings, Users, Volleyball, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -82,6 +83,8 @@ export function TabBar({ active, current }: { active: TabId | null; current: str
       aria-label="Seções"
       className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-ink-800 bg-ink-950/95 backdrop-blur"
     >
+      {/* O grupo, à mão em todas as abas (etapa 8) */}
+      <FaixaDoGrupo />
       <div className="mx-auto flex h-16 max-w-lg">
         {TABS.map((tab) => {
           const Icon = tab.icon;

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { lerGrupoAtivo } from '@/lib/grupoAtivo';
+import { guardarGrupos, lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { ativarGrupo, lembrarNome } from '@/store/trocarGrupo';
 import type { PlanoDoGrupo } from '@/lib/plano';
 import { useAppStore } from '@/store/useAppStore';
@@ -210,6 +210,8 @@ export async function meusGrupos(): Promise<MeuGrupo[]> {
     if (error) throw error;
     lista.push(...(data ?? []).map((g) => ({ id: g.id, name: g.name, mode: g.mode as AppMode, papel: 'administrador' as const })));
   }
+  // Guardada no aparelho: a troca de grupo funciona sem rede
+  guardarGrupos(lista);
   return lista;
 }
 

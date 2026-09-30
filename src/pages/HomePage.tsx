@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, ClipboardList, Plus, Radio, Shuffle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -54,10 +54,12 @@ const MODES: {
  */
 export function HomePage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const live = useMatchStore((s) => s.live);
   const [grupos, setGrupos] = useState<MeuGrupo[] | null>(null);
   const [ativo] = useState(() => lerGrupoAtivo()?.id ?? null);
-  const [criando, setCriando] = useState(false);
+  // A faixa do grupo manda para cá com "criar" já aberto
+  const [criando, setCriando] = useState(() => Boolean((location.state as { criar?: boolean } | null)?.criar));
   const [tipoNovo, setTipoNovo] = useState<AppMode>('amador');
   const [nomeNovo, setNomeNovo] = useState('');
   const [busy, setBusy] = useState(false);

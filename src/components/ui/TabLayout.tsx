@@ -1,4 +1,5 @@
 import { Suspense, useLayoutEffect } from 'react';
+import { useGrupoAtivo } from '@/store/useGrupoAtivo';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { useHydrated } from '@/store/useHydrated';
@@ -49,6 +50,17 @@ export function TabLayout() {
       delete document.documentElement.dataset.tabbar;
     };
   }, [show]);
+
+  // Com grupo, a barra ganha a faixa do grupo em cima: o que fica acima dela
+  // (rodapés fixos, o espaçador do fim da lista) sobe junto — index.css
+  const comGrupo = Boolean(useGrupoAtivo());
+  useLayoutEffect(() => {
+    if (!show || !comGrupo) return;
+    document.documentElement.dataset.tabbarGrupo = '';
+    return () => {
+      delete document.documentElement.dataset.tabbarGrupo;
+    };
+  }, [show, comGrupo]);
 
   // A tela continua filha direta de #root — o min-h-full delas depende disso.
   // O espaçador depois dela é o que impede a barra de cobrir o fim da lista.
