@@ -88,15 +88,19 @@ export function ProPlayersPage() {
             </p>
           </div>
         </div>
-        <div className="flex shrink-0 gap-1.5">
-          <button
-            onClick={() => navigate('/convites')}
-            className="flex items-center gap-1.5 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-xs font-medium text-brand-300"
-          >
-            <Send size={14} />
-            Convidar
-          </button>
-        </div>
+        {/* Os links pessoais (Convidar) saíram em 30/09/2026: o link de
+            cadastro já pede tudo. Sem time na nuvem, o que resta é criá-lo */}
+        {!time && (
+          <div className="flex shrink-0 gap-1.5">
+            <button
+              onClick={() => navigate('/convites')}
+              className="flex items-center gap-1.5 rounded-lg border border-brand-500/40 bg-brand-500/10 px-3 py-2 text-xs font-medium text-brand-300"
+            >
+              <Send size={14} />
+              Criar o time
+            </button>
+          </div>
+        )}
       </header>
 
       {pendentes.length > 0 && (

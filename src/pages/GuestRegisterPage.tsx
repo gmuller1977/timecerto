@@ -87,6 +87,10 @@ export function GuestRegisterPage() {
     if (name.trim().length < 2) return setFormError('Falta o nome.');
     if (!birth) return setFormError('Falta a data de nascimento.');
     if (!isValidPhone(fone)) return setFormError('Telefone inválido — use DDD e número.');
+    // No time, tudo é obrigatório: o atleta não completa depois
+    if (pro && numero(altura) === undefined) return setFormError('Falta a altura.');
+    if (pro && numero(peso) === undefined) return setFormError('Falta o peso.');
+    if (pro && posicoes.length === 0) return setFormError('Escolha pelo menos uma posição.');
     setFormError(null);
     setSaving(true);
     try {

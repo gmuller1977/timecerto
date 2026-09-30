@@ -86,12 +86,18 @@ export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onC
     if (s && !groupTouched) setAgeGroup(s);
   }
 
+  // Tudo obrigatório (pedido do Guilherme, 30/09/2026): sem os links pessoais,
+  // não há mais como o atleta completar o cadastro depois
   function save() {
     if (!name.trim()) return setError('Falta o nome.');
+    if (!birthDate) return setError('Falta a data de nascimento.');
     const heightCm = parseHeight(height);
     if (heightCm === null) return setError('Altura inválida — use 1,85 ou 185.');
+    if (heightCm === undefined) return setError('Falta a altura.');
     const weightKg = parseWeight(weight);
     if (weightKg === null) return setError('Peso inválido — use 78 ou 78,5.');
+    if (weightKg === undefined) return setError('Falta o peso.');
+    if (posicoes.length === 0) return setError('Escolha pelo menos uma posição.');
     onSave({
       name: name.trim(),
       birthDate: birthDate || undefined,
