@@ -12,7 +12,7 @@ import { nomeDeExibicao } from '@/lib/nome';
 import { whatsappTo } from '@/lib/phone';
 import {
   createGroup,
-  findMyGroup,
+  findActiveGroup,
   avisarInscritos,
   groupLink,
   inscritosComAviso,
@@ -121,7 +121,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
 
   useEffect(() => {
     let alive = true;
-    findMyGroup('amador')
+    findActiveGroup()
       .then((g) => {
         if (!alive) return;
         setGroup(g);

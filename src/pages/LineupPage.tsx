@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { useAppStore } from '@/store/useAppStore';
+import { camposDoPro, comoPro } from '@/lib/pro';
 import type { TipoDeJogo } from '@/types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -45,14 +47,17 @@ export function LineupPage() {
 
 function LineupEditor() {
   const navigate = useNavigate();
-  const proPlayers = useProStore((s) => s.players);
+  // Fase 2: o elenco mora no cadastro único
+  const cadastro = useAppStore((s) => s.players);
+  const proPlayers = useMemo(() => cadastro.filter((p) => !p.pending).map(comoPro), [cadastro]);
+  const updatePlayerUnico = useAppStore((s) => s.updatePlayer);
   const filter = useProStore((s) => s.filter);
-  const updatePlayer = useProStore((s) => s.updatePlayer);
   const saved = useProStore((s) => s.lastLineup);
   const saveLineup = useProStore((s) => s.saveLineup);
   const live = useMatchStore((s) => s.live);
   const startMatch = useMatchStore((s) => s.startMatch);
-  const competicao = (useLocation().state as { competicao?: TipoDeJogo } | null)?.competicao;
+  const doJogo = useLocation().state as { competicao?: TipoDeJogo; jogoId?: string } | null;
+  const competicao = doJogo?.competicao;
 
   // A quadra, a validação e o sugerir falam `Player`
   const players = useMemo(() => proPlayers.map(proToPlayer), [proPlayers]);
@@ -185,6 +190,8 @@ function LineupEditor() {
       lineup: { system, court, liberoId },
       // Amistoso ou campeonato: escolhido no "Novo jogo" da aba Jogo
       ...(competicao ? { competicao } : {}),
+      // Veio de um jogo da agenda (fase 2): a partida fica nele
+      ...(doJogo?.jogoId ? { jogoId: doJogo.jogoId } : {}),
     });
     navigate('/placar');
   }
@@ -492,7 +499,10 @@ function LineupEditor() {
                     <select
                       value={p.positions.volei ?? ''}
                       onChange={(e) =>
-                        updatePlayer(p.id, { position: e.target.value || undefined })
+                        updatePlayerUnico(
+                          p.id,
+                          camposDoPro({ position: e.target.value || undefined }, cadastro.find((x) => x.id === p.id)),
+                        )
                       }
                       className="shrink-0 rounded-lg bg-ink-700 px-2 py-1.5 text-xs text-ink-200 outline-none"
                     >

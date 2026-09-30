@@ -60,6 +60,16 @@ export interface Player {
   nickname?: string;
   /** Só dígitos, com DDD. Só o administrador vê */
   phone?: string;
+  /*
+   * Do profissional (fase 2, 30/09/2026): o elenco do time mora neste mesmo
+   * cadastro. Na pelada ficam vazios.
+   */
+  ageGroup?: AgeGroup;
+  naipe?: Naipe;
+  heightCm?: number;
+  weightKg?: number;
+  /** Token do link pessoal do atleta — vem do banco, nunca nasce no aparelho */
+  inviteToken?: string;
   /**
    * ISO — quando o cadastro foi editado pela última vez, NESTE aparelho ou no
    * que a nuvem trouxe. Decide quem vence entre aparelhos (lib/cloud.ts,
@@ -126,6 +136,8 @@ export interface Jogo {
    * que valia antes. Amistoso e treino saem com `false`.
    */
   cobraDiaria?: boolean;
+  /** Profissional: amistoso ou campeonato (migração 023) */
+  competicao?: TipoDeJogo;
   /** Nasceu da conversão do antigo `present` — ver lib/jogo.ts */
   migrado?: boolean;
   /** O sorteio deste jogo (o último feito) */

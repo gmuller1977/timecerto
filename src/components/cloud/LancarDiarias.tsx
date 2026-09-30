@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { diariasLancadas, findMyGroup, lancarDiarias, lerConfigFinanceiro } from '@/lib/cloud';
+import { diariasLancadas, findActiveGroup, lancarDiarias, lerConfigFinanceiro } from '@/lib/cloud';
 import { centavosParaCampo, reaisParaCentavos } from '@/lib/financeiro';
 import { joga, vagasDoJogo } from '@/lib/vagas';
 import { nomeDeExibicao } from '@/lib/nome';
@@ -31,7 +31,7 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
   useEffect(() => {
     if (!jogo.remoteId) return;
     let vivo = true;
-    Promise.all([findMyGroup('amador'), diariasLancadas(jogo.remoteId)])
+    Promise.all([findActiveGroup(), diariasLancadas(jogo.remoteId)])
       .then(async ([g, ja]) => {
         if (!vivo) return;
         setLancadas(ja);

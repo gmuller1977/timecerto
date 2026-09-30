@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store/useAppStore';
+import { unificarElenco } from '@/store/unificarElenco';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useProStore } from '@/store/useProStore';
@@ -57,6 +58,8 @@ export async function ativarGrupo(g: GrupoAtivo): Promise<void> {
   definirGrupoAtivo(g);
   await apontar(g.id);
   useAppStore.getState().setMode(g.mode);
+  // O elenco do time, se ainda estava no store antigo, vai para o cadastro único
+  unificarElenco();
 }
 
 /**

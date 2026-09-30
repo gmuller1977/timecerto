@@ -3,7 +3,6 @@ import { Check, Crown, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { useAppStore } from '@/store/useAppStore';
-import { useProStore } from '@/store/useProStore';
 import { findActiveGroup, type CloudGroup } from '@/lib/cloud';
 import { LIMITE_MENSALISTAS_GRATIS, PRECO_DO_PLANO_CENTS, situacaoDoPlano } from '@/lib/plano';
 import { formatBRL } from '@/lib/utils';
@@ -20,8 +19,8 @@ export function PlanoDoGrupo() {
   const session = useAuth((s) => s.session);
   const [group, setGroup] = useState<CloudGroup | null | undefined>(undefined);
   const mensalistas = useAppStore((s) => s.players.filter((p) => !p.pending && p.kind !== 'convidado').length);
-  // No time, todo atleta do elenco conta
-  const atletasDoTime = useProStore((s) => s.players.length);
+  // No time, todo atleta do elenco conta — no cadastro único desde a fase 2
+  const atletasDoTime = useAppStore((s) => s.players.filter((p) => !p.pending).length);
   const pro = (useAppStore((s) => s.mode) ?? 'amador') === 'profissional';
 
   useEffect(() => {

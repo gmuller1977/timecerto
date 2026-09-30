@@ -62,6 +62,44 @@ export function proToPlayer(p: ProPlayer): Player {
   };
 }
 
+/**
+ * O atleta do cadastro único visto como a tela do elenco o conhece (fase 2).
+ * A tela do profissional continua falando `ProPlayer`; o que se guarda é
+ * `Player`.
+ */
+export function comoPro(p: Player): ProPlayer {
+  return {
+    id: p.id,
+    name: p.name,
+    birthDate: p.birthDate,
+    ageGroup: p.ageGroup ?? 'adulto',
+    naipe: p.naipe ?? 'misto',
+    heightCm: p.heightCm,
+    weightKg: p.weightKg,
+    position: p.positions.volei,
+    createdAt: p.createdAt,
+    remoteId: p.remoteId,
+    inviteToken: p.inviteToken,
+  };
+}
+
+/** O que a ficha do profissional edita, nos campos do cadastro único */
+export function camposDoPro(d: Partial<ProPlayer>, atual?: Player): Partial<Player> {
+  const out: Partial<Player> = {};
+  if (d.name !== undefined) out.name = d.name.trim();
+  if ('birthDate' in d) out.birthDate = d.birthDate;
+  if (d.ageGroup !== undefined) out.ageGroup = d.ageGroup;
+  if (d.naipe !== undefined) out.naipe = d.naipe;
+  if ('heightCm' in d) out.heightCm = d.heightCm;
+  if ('weightKg' in d) out.weightKg = d.weightKg;
+  if ('position' in d) {
+    const { volei: _v, ...outras } = atual?.positions ?? {};
+    void _v;
+    out.positions = d.position ? { ...outras, volei: d.position } : outras;
+  }
+  return out;
+}
+
 /** "1,85 m · 78 kg" — só o que foi preenchido */
 export function bodyLine(p: ProPlayer): string {
   const parts: string[] = [];

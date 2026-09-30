@@ -1,4 +1,5 @@
 import { BASES, chaveInicial } from '@/lib/grupoAtivo';
+import type { TipoDeJogo } from '@/types';
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -17,7 +18,9 @@ import {
 import { joga, vagasDoJogo } from '@/lib/vagas';
 
 /** Campos do jogo que o organizador edita — e que vão para a nuvem */
-type EdicaoDoJogo = Partial<Pick<Jogo, 'sport' | 'date' | 'time' | 'place' | 'vagas' | 'status' | 'cobraDiaria'>>;
+type EdicaoDoJogo = Partial<
+  Pick<Jogo, 'sport' | 'date' | 'time' | 'place' | 'vagas' | 'status' | 'cobraDiaria' | 'competicao'>
+>;
 
 interface JogoState {
   /** Mais recente primeiro. Vários `aberto` (programados) ao mesmo tempo */
@@ -34,6 +37,7 @@ interface JogoState {
     place: string;
     vagas: number | null;
     cobraDiaria: boolean;
+    competicao?: TipoDeJogo;
   }) => Jogo;
   /** Edição do organizador: carimba a hora e vai para a nuvem */
   editarJogo: (id: string, patch: EdicaoDoJogo) => void;

@@ -4,7 +4,7 @@ import { useAuth } from '@/store/useAuth';
 import { usePlano } from '@/store/usePlano';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador, syncPro } from '@/lib/cloud';
+import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 import { lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { ativarGrupo, esquecerGrupo, lembrarNome } from '@/store/trocarGrupo';
@@ -89,13 +89,8 @@ async function rodar(): Promise<void> {
         return;
       }
       lembrarNome(g.id, g.name);
-      // O time: o elenco sobe (e o que o atleta preencheu pelo link desce), e
-      // a mensalidade do mês nasce — o Financeiro também é do profissional
-      if (ativo.mode !== 'amador') {
-        await syncPro(g.id);
-        await gerarMensalidades(g.id).catch((e) => console.warn('gerar mensalidades', e));
-        return;
-      }
+      // Desde a fase 2 o time sincroniza pelo MESMO caminho da pelada: um
+      // cadastro só, com agenda, confirmação e mensalidade (migração 023)
       grupo = g.id;
     } else {
       grupo = await grupoDoLegado(meuId);

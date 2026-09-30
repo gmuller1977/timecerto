@@ -48,6 +48,8 @@ interface AppState {
     position?: string;
     kind?: PlayerKind;
   }) => Player;
+  /** Cadastro com todos os campos (a ficha do profissional) */
+  addPlayerCompleto: (campos: Partial<Player> & { name: string }) => Player;
   updatePlayer: (id: string, patch: Partial<Player>) => void;
   removePlayer: (id: string) => void;
   setSkill: (id: string, skill: SkillLevel) => void;
@@ -141,6 +143,22 @@ export const useAppStore = create<AppState>()(
           createdAt: new Date().toISOString(),
           kind: kind ?? 'mensalista',
           updatedAt: new Date().toISOString(),
+        };
+        set((s) => ({ players: [...s.players, player] }));
+        return player;
+      },
+
+      addPlayerCompleto: (campos) => {
+        const agoraIso = new Date().toISOString();
+        const player: Player = {
+          skills: {},
+          positions: {},
+          kind: 'mensalista',
+          ...campos,
+          id: uid(),
+          name: (campos.name ?? '').trim(),
+          createdAt: agoraIso,
+          updatedAt: agoraIso,
         };
         set((s) => ({ players: [...s.players, player] }));
         return player;

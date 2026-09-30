@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { ProJogoPage } from '@/pages/ProJogoPage';
+import { unificarElenco } from '@/store/unificarElenco';
 import { SoNaPelada } from '@/components/ui/SoNaPelada';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
 import { useHydrated } from '@/store/useHydrated';
@@ -69,7 +69,10 @@ const GuestAthletePage = lazy(() =>
 function MigracaoPresent() {
   const hydrated = useHydrated();
   useEffect(() => {
-    if (hydrated) useJogoStore.getState().migrar();
+    if (!hydrated) return;
+    useJogoStore.getState().migrar();
+    // Fase 2 do profissional: o elenco do time vai para o cadastro único
+    unificarElenco();
   }, [hydrated]);
   return null;
 }
@@ -138,7 +141,7 @@ export default function App() {
             <Route element={<TabLayout />}>
               <Route path="/amador" element={<JogosPage />} />
               {/* Profissional, com as mesmas abas (30/09/2026) */}
-              <Route path="/profissional/jogo" element={<ProJogoPage />} />
+              <Route path="/profissional/jogo" element={<JogosPage />} />
               <Route path="/profissional" element={<ProPlayersPage />} />
               {/* Só o profissional; no amador leva ao Jogo */}
               <Route path="/convites" element={<InvitePage />} />

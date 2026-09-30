@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useAppStore } from '@/store/useAppStore';
+import { camposDoPro, comoPro } from '@/lib/pro';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Radio, Send, UserPlus } from 'lucide-react';
 import { avisoDeLimite } from '@/lib/plano';
@@ -22,12 +24,14 @@ const chip = (active: boolean) =>
 
 export function ProPlayersPage() {
   const navigate = useNavigate();
-  const players = useProStore((s) => s.players);
+  // Fase 2: o elenco mora no cadastro único; a tela continua vendo ProPlayer
+  const cadastro = useAppStore((s) => s.players);
+  const players = useMemo(() => cadastro.filter((p) => !p.pending).map(comoPro), [cadastro]);
   const filter = useProStore((s) => s.filter);
   const setFilter = useProStore((s) => s.setFilter);
-  const addPlayer = useProStore((s) => s.addPlayer);
-  const updatePlayer = useProStore((s) => s.updatePlayer);
-  const removePlayer = useProStore((s) => s.removePlayer);
+  const addPlayerCompleto = useAppStore((s) => s.addPlayerCompleto);
+  const updatePlayerUnico = useAppStore((s) => s.updatePlayer);
+  const removePlayer = useAppStore((s) => s.removePlayer);
   const live = useMatchStore((s) => s.live);
   // Plano grátis: até 20 atletas no time (migração 022). O banco recusaria o
   // 21º e a sincronização do elenco travaria; a tela avisa antes
@@ -192,8 +196,8 @@ export function ProPlayersPage() {
           defaults={filter}
           onClose={() => setEditing(null)}
           onSave={(draft) => {
-            if (editing === 'novo') addPlayer(draft);
-            else updatePlayer(editing.id, draft);
+            if (editing === 'novo') addPlayerCompleto({ name: draft.name, ...camposDoPro(draft) });
+            else updatePlayerUnico(editing.id, camposDoPro(draft, cadastro.find((p) => p.id === editing.id)));
             setEditing(null);
           }}
           onDelete={

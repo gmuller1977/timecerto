@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { NOME_DA_COMPETICAO, type TipoDeJogo } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogoStore } from '@/store/useJogoStore';
@@ -27,16 +28,26 @@ export function FormJogo({
   onCancel?: () => void;
 }) {
   const sportDoApp = useAppStore((s) => s.sport);
+  // No time (fase 2): o esporte é o vôlei, e o jogo é amistoso ou campeonato
+  const pro = (useAppStore((s) => s.mode) ?? 'amador') === 'profissional';
+  const [competicao, setCompeticao] = useState<TipoDeJogo>(jogo?.competicao ?? 'amistoso');
   const settings = useAppStore((s) => s.settings);
   const criarJogo = useJogoStore((s) => s.criarJogo);
   const editarJogo = useJogoStore((s) => s.editarJogo);
   const vagasPadrao = (sp: SportId) => String(SPORTS[sp].defaultTeamSize * settings.numberOfTeams);
-  const [sport, setSport] = useState<SportId>(jogo?.sport ?? sportDoApp);
+  const [sport, setSport] = useState<SportId>(jogo?.sport ?? (pro ? 'volei' : sportDoApp));
   const [date, setDate] = useState(() => jogo?.date ?? hoje());
   const [time, setTime] = useState(jogo?.time ?? '20:00');
   const [place, setPlace] = useState(jogo?.place ?? '');
   const [vagas, setVagas] = useState(() =>
-    jogo ? (jogo.vagas == null ? '' : String(jogo.vagas)) : String(settings.teamSize * settings.numberOfTeams),
+    jogo
+      ? jogo.vagas == null
+        ? ''
+        : String(jogo.vagas)
+      : // No time quem vem é o elenco: sem limite de vagas por padrão
+        pro
+        ? ''
+        : String(settings.teamSize * settings.numberOfTeams),
   );
   // Migração 019: amistoso e treino saem sem cobrança de diária
   const [cobraDiaria, setCobraDiaria] = useState(jogo ? jogo.cobraDiaria !== false : true);
@@ -63,11 +74,29 @@ export function FormJogo({
       return;
     }
     if (jogo) {
-      const patch = { sport, date, time, place: place.trim(), vagas: n, cobraDiaria };
+      const patch = {
+        sport,
+        date,
+        time,
+        place: place.trim(),
+        vagas: n,
+        cobraDiaria: pro ? false : cobraDiaria,
+        ...(pro ? { competicao } : {}),
+      };
       editarJogo(jogo.id, patch);
       onDone({ ...jogo, ...patch });
     } else {
-      onDone(criarJogo({ sport, date, time, place: place.trim(), vagas: n, cobraDiaria }));
+      onDone(
+        criarJogo({
+          sport,
+          date,
+          time,
+          place: place.trim(),
+          vagas: n,
+          cobraDiaria: pro ? false : cobraDiaria,
+          ...(pro ? { competicao } : {}),
+        }),
+      );
     }
   }
 
@@ -75,7 +104,33 @@ export function FormJogo({
     'w-full rounded-xl bg-ink-800 px-3 py-3 text-[15px] text-ink-50 placeholder:text-ink-500 outline-none';
   return (
     <form onSubmit={submit} className="flex flex-col gap-2">
-      <div>
+      {pro && (
+        <div>
+          <span className="text-xs font-medium text-ink-400">Que jogo é?</span>
+          <div className="mt-1 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo do jogo">
+            {(['amistoso', 'campeonato'] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="radio"
+                aria-checked={competicao === t}
+                onClick={() => setCompeticao(t)}
+                className={cn(
+                  'rounded-xl border py-3 text-sm font-semibold transition-colors',
+                  competicao === t
+                    ? t === 'campeonato'
+                      ? 'border-amber-400 bg-amber-400/10 text-amber-200'
+                      : 'border-brand-500 bg-brand-500/10 text-brand-300'
+                    : 'border-ink-800 bg-ink-950 text-ink-400',
+                )}
+              >
+                {NOME_DA_COMPETICAO[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className={pro ? 'hidden' : undefined}>
         <span className="text-xs font-medium text-ink-400">Modalidade</span>
         <div className="mt-1 grid grid-cols-3 gap-2" role="radiogroup" aria-label="Modalidade">
           {SPORT_LIST.map((s) => (
@@ -145,18 +200,20 @@ export function FormJogo({
           className={`${input} mt-1`}
         />
       </label>
-      <label className="mt-1 flex items-center justify-between gap-3 rounded-xl bg-ink-800 px-3 py-3">
-        <span>
-          <span className="block text-[15px] text-ink-50">Cobrar diária dos convidados</span>
-          <span className="block text-[11px] text-ink-500">Desligue para amistoso ou treino</span>
-        </span>
-        <input
-          type="checkbox"
-          checked={cobraDiaria}
-          onChange={(e) => setCobraDiaria(e.target.checked)}
-          className="size-5 shrink-0 accent-brand-500"
-        />
-      </label>
+      {!pro && (
+        <label className="mt-1 flex items-center justify-between gap-3 rounded-xl bg-ink-800 px-3 py-3">
+          <span>
+            <span className="block text-[15px] text-ink-50">Cobrar diária dos convidados</span>
+            <span className="block text-[11px] text-ink-500">Desligue para amistoso ou treino</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={cobraDiaria}
+            onChange={(e) => setCobraDiaria(e.target.checked)}
+            className="size-5 shrink-0 accent-brand-500"
+          />
+        </label>
+      )}
       {error && <p className="text-sm text-red-300">{error}</p>}
       <div className="mt-1 flex gap-2">
         {onCancel && (

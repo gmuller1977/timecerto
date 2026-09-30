@@ -3,7 +3,6 @@ import { guardarGrupos, lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { ativarGrupo, lembrarNome } from '@/store/trocarGrupo';
 import type { PlanoDoGrupo } from '@/lib/plano';
 import { useAppStore } from '@/store/useAppStore';
-import { useProStore } from '@/store/useProStore';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
 import { inicioDo, pendentesDeEnvio } from '@/lib/jogo';
@@ -20,6 +19,8 @@ import type {
   PlayerKind,
   SportId,
   TeamColor,
+  AgeGroup,
+  Naipe,
 } from '@/types';
 
 /**
@@ -31,7 +32,7 @@ import type {
  * os outros editaram; vale a edição mais recente.
  *
  * Elenco PROFISSIONAL: ainda no modelo antigo — o aparelho é a fonte e a nuvem
- * recebe uma cópia (`syncPro`).
+ * recebe uma cópia (`syncAmador`, também para o time desde a fase 2).
  */
 
 export interface CloudGroup {
@@ -393,7 +394,35 @@ const LEGADO = new Date(0).toISOString();
 async function sincronizarAtletas(groupId: string): Promise<number> {
   prepararLegado();
   await enviarAtletas(groupId);
-  return receberAtletas(groupId);
+  const novos = await receberAtletas(groupId);
+  await trazerLinksPessoais(groupId);
+  return novos;
+}
+
+/**
+ * O link pessoal (invite_token) nasce no banco. Quem subiu e já foi lido não
+ * volta na leitura por synced_at — então quem está sem link busca aqui, só
+ * quando falta. É o que a sincronização própria do time fazia antes da fase 2.
+ */
+async function trazerLinksPessoais(groupId: string) {
+  const sem = useAppStore
+    .getState()
+    .players.filter((p) => p.remoteId && !p.inviteToken)
+    .map((p) => p.remoteId!);
+  for (let i = 0; i < sem.length; i += 100) {
+    const { data, error } = await db()
+      .from('players')
+      .select('id, invite_token')
+      .eq('group_id', groupId)
+      .in('id', sem.slice(i, i + 100));
+    if (error) throw error;
+    const token = new Map((data ?? []).map((r) => [r.id as string, r.invite_token as string]));
+    useAppStore.setState((st) => ({
+      players: st.players.map((p) =>
+        p.remoteId && !p.inviteToken && token.get(p.remoteId) ? { ...p, inviteToken: token.get(p.remoteId) } : p,
+      ),
+    }));
+  }
 }
 
 /**
@@ -446,6 +475,11 @@ async function enviarAtletas(groupId: string) {
     pending: Boolean(p.pending),
     birth_date: p.birthDate ?? null,
     phone: p.phone ?? null,
+    // Do profissional (migração 023); na pelada vão nulos
+    age_group: p.ageGroup ?? null,
+    naipe: p.naipe ?? null,
+    height_cm: p.heightCm ?? null,
+    weight_kg: p.weightKg ?? null,
     deleted_at: null,
     updated_at: p.updatedAt,
   });
@@ -483,6 +517,7 @@ async function enviarAtletas(groupId: string) {
 
 const PLAYER_SYNC_COLS =
   'id, name, nickname, skills, positions, is_keeper, kind, pending, birth_date, phone, ' +
+  'age_group, naipe, height_cm, weight_kg, invite_token, ' +
   'added_via_link, active, deleted_at, updated_at, synced_at, created_at';
 
 interface LinhaJogador {
@@ -496,6 +531,11 @@ interface LinhaJogador {
   pending: boolean | null;
   birth_date: string | null;
   phone: string | null;
+  age_group: AgeGroup | null;
+  naipe: Naipe | null;
+  height_cm: number | null;
+  weight_kg: number | string | null;
+  invite_token: string | null;
   added_via_link: boolean | null;
   active: boolean;
   deleted_at: string | null;
@@ -515,6 +555,11 @@ const doJogador = (r: LinhaJogador) => ({
   pending: Boolean(r.pending),
   birthDate: r.birth_date ?? undefined,
   phone: r.phone ?? undefined,
+  ageGroup: r.age_group ?? undefined,
+  naipe: r.naipe ?? undefined,
+  heightCm: r.height_cm ?? undefined,
+  weightKg: r.weight_kg != null ? Number(r.weight_kg) : undefined,
+  inviteToken: r.invite_token ?? undefined,
   remoteId: r.id,
   updatedAt: r.updated_at,
   enviadoEm: r.updated_at,
@@ -587,6 +632,12 @@ function mesclar(linhas: LinhaJogador[]): number {
       } else if (!localMaisNovo && local.updatedAt !== r.updated_at) {
         players[i] = { ...local, ...doJogador(r) };
       }
+      // O link pessoal nasce no banco e é espelho: vale sempre, mesmo quando a
+      // edição local é a mais nova (fase 2 — o time sincroniza por aqui)
+      const j = players.findIndex((p) => p.remoteId === r.id);
+      if (j >= 0 && r.invite_token && players[j].inviteToken !== r.invite_token) {
+        players[j] = { ...players[j], inviteToken: r.invite_token };
+      }
     }
     return { players };
   });
@@ -602,74 +653,6 @@ export async function pullLinkAdded(groupId: string): Promise<number> {
   return receberAtletas(groupId);
 }
 
-/**
- * Sobe o elenco profissional e traz o que o atleta preencheu pelo link.
- * Nascimento, altura e peso: a nuvem vence quando tem valor — quem sabe a
- * própria altura é o atleta. O resto (nome, categoria, naipe, posição) é
- * decisão do técnico e vai do aparelho para a nuvem.
- */
-export async function syncPro(groupId: string): Promise<void> {
-  const { data: remote, error } = await db()
-    .from('players')
-    .select('id, birth_date, height_cm, weight_kg')
-    .eq('group_id', groupId);
-  if (error) throw error;
-  const byId = new Map(remote.map((r) => [r.id, r]));
-
-  const { players, updatePlayer } = useProStore.getState();
-  const rows = players.map((p) => {
-    const id = p.remoteId ?? crypto.randomUUID();
-    const r = byId.get(id);
-    const merged = {
-      birthDate: r?.birth_date ?? p.birthDate,
-      heightCm: r?.height_cm ?? p.heightCm,
-      weightKg: r?.weight_kg != null ? Number(r.weight_kg) : p.weightKg,
-    };
-    updatePlayer(p.id, { remoteId: id, ...merged });
-    return {
-      id,
-      group_id: groupId,
-      name: p.name,
-      positions: p.position ? { volei: p.position } : {},
-      age_group: p.ageGroup,
-      naipe: p.naipe,
-      birth_date: merged.birthDate ?? null,
-      height_cm: merged.heightCm ?? null,
-      weight_kg: merged.weightKg ?? null,
-      active: true,
-    };
-  });
-  await upsertAndRetire(groupId, rows);
-
-  // O token do link pessoal nasce no banco; traz para o aparelho
-  const { data: tokens, error: e2 } = await db()
-    .from('players')
-    .select('id, invite_token')
-    .eq('group_id', groupId);
-  if (e2) throw e2;
-  const tokenOf = new Map(tokens.map((t) => [t.id, t.invite_token as string]));
-  for (const p of useProStore.getState().players) {
-    const t = p.remoteId && tokenOf.get(p.remoteId);
-    if (t && t !== p.inviteToken) updatePlayer(p.id, { inviteToken: t });
-  }
-}
-
-/**
- * `protectFrom`: não aposenta quem foi criado a partir deste instante — é quem
- * se inscreveu pelo link enquanto a sincronização rodava.
- */
-async function upsertAndRetire(groupId: string, rows: { id: string }[], protectFrom?: string) {
-  if (rows.length > 0) {
-    const { error } = await db().from('players').upsert(rows);
-    if (error) throw error;
-  }
-  const keep = rows.map((r) => r.id);
-  let q = db().from('players').update({ active: false }).eq('group_id', groupId);
-  if (keep.length > 0) q = q.not('id', 'in', `(${keep.join(',')})`);
-  if (protectFrom) q = q.lt('created_at', protectFrom);
-  const { error } = await q;
-  if (error) throw error;
-}
 
 // ── Jogo marcado e presença ─────────────────────────────────
 
@@ -1007,7 +990,7 @@ function sorteioDaNuvem(s: SorteioNuvem | null, jogoId: string, eventId: string)
 }
 
 const EVENT_SYNC_COLS =
-  'id, title, starts_at, location, slots, sport, status, list_closed, teams, sorteio, cobra_diaria, updated_at, synced_at, created_at';
+  'id, title, starts_at, location, slots, sport, status, list_closed, teams, sorteio, cobra_diaria, competicao, updated_at, synced_at, created_at';
 
 interface LinhaJogo {
   id: string;
@@ -1023,6 +1006,8 @@ interface LinhaJogo {
   sorteio: SorteioNuvem | null;
   /** Migração 019 */
   cobra_diaria: boolean | null;
+  /** Migração 023 */
+  competicao: 'amistoso' | 'campeonato' | null;
   updated_at: string;
   synced_at: string;
   created_at: string;
@@ -1046,6 +1031,7 @@ function doEvento(r: LinhaJogo, jogoId: string) {
     listaFechada: Boolean(r.list_closed),
     timesPublicados: r.teams != null,
     cobraDiaria: r.cobra_diaria !== false,
+    ...(r.competicao ? { competicao: r.competicao } : {}),
     sorteio: sorteioDaNuvem(r.sorteio, jogoId, r.id),
     updatedAt: r.updated_at,
     enviadoEm: r.updated_at,
@@ -1147,6 +1133,7 @@ async function enviarJogos(groupId: string) {
     status: j.status === 'aberto' ? 'programado' : j.status,
     sorteio: sorteioParaNuvem(j.sorteio),
     cobra_diaria: j.cobraDiaria !== false,
+    competicao: j.competicao ?? null,
     updated_at: j.updatedAt,
   }));
   const { error } = await db().rpc('salvar_jogos', { p_group: groupId, p_rows: rows });

@@ -395,10 +395,22 @@ Convidar). Financeiro e Ajustes são os da pelada, olhando o grupo ativo
 (`findActiveGroup`). Migração 022: o profissional entra no plano, com 30
 dias de teste; no grátis, o elenco vai até 20.
 
-**Fase 2. Um cadastro só.** O elenco do time vira o mesmo cadastro da pelada,
-com os campos do profissional a mais, migrando sem perder ninguém. Destrava a
-aba Jogo igual à da pelada (agenda, confirmação pelo link, vagas) e a
-mensalidade por atleta.
+**Fase 2. Um cadastro só.** ✓ Feita em 30/09/2026 (migração 023). O atleta do
+time mora em `useAppStore.players`, o mesmo cadastro da pelada, com categoria,
+naipe, altura, peso e o link pessoal a mais. A tela do elenco continua falando
+`ProPlayer` — `comoPro` e `camposDoPro` em `lib/pro.ts` fazem a ponte.
+`unificarElenco` move o store antigo para o cadastro, uma vez por time, ao
+abrir e ao entrar no time; sem `updatedAt`, quem já estava na nuvem segue a
+versão de lá. O time sincroniza pelo `syncAmador` (o `syncPro` foi removido).
+A aba Jogo do time é a `JogosPage`: criar jogo pergunta Amistoso ou
+Campeonato (`events.competicao`), sem modalidade nem diária e sem limite de
+vagas; o jogo tem "Escalar e começar" no lugar de "Sortear", e a partida fica
+ligada ao jogo.
+
+Duas armadilhas achadas no teste: o link pessoal nasce no banco e não volta na
+leitura por `synced_at` — `trazerLinksPessoais` busca o de quem está sem; e
+`hidden` não esconde um `Button` (o `inline-flex` dele vence pela ordem do
+CSS) — o que some no time não é renderizado.
 
 **Fase 3. Da confirmação para a escalação.** "Escalar" no jogo do time abre a
 escalação já com os confirmados, no lugar do sorteio.

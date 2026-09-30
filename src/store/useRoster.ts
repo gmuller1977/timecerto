@@ -13,7 +13,9 @@ import { nomeDeExibicao } from '@/lib/nome';
 export function useRoster(): Player[] {
   const amador = useAppStore((s) => s.players);
   const pro = useProStore((s) => s.players);
-  // Placar, scout e resumo mostram o apelido: é como o grupo chama a pessoa
+  // Placar, scout e resumo mostram o apelido: é como o grupo chama a pessoa.
+  // Desde a fase 2 o elenco do time também está em `amador`; o store antigo
+  // só tem alguém num aparelho que ainda não unificou
   return useMemo(
     () => [...amador.map((p) => ({ ...p, name: nomeDeExibicao(p) })), ...pro.map(proToPlayer)],
     [amador, pro],

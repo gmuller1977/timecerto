@@ -54,7 +54,7 @@ const TABS_PRO: Aba[] = [
     label: 'Jogo',
     icon: Volleyball,
     root: '/profissional/jogo',
-    prefixes: ['/profissional/jogo', '/historico', '/partida'],
+    prefixes: ['/profissional/jogo', '/jogo', '/historico', '/partida'],
   },
   {
     id: 'elenco',

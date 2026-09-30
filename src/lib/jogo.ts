@@ -19,6 +19,7 @@ export function novoJogo(input: {
   place: string;
   vagas: number | null;
   cobraDiaria?: boolean;
+  competicao?: Jogo['competicao'];
   remoteId?: string;
   migrado?: boolean;
 }): Jogo {

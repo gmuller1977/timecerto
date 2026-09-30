@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { comoPro } from '@/lib/pro';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ArrowLeft, LogOut, MessageCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
-import { useProStore } from '@/store/useProStore';
 import { useAuth } from '@/store/useAuth';
 import { useHydrated } from '@/store/useHydrated';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { athleteLink, createGroup, findMyGroup, shareOnWhatsApp, syncPro, type CloudGroup } from '@/lib/cloud';
+import { athleteLink, createGroup, findMyGroup, shareOnWhatsApp, syncAmador, type CloudGroup } from '@/lib/cloud';
 import { explain } from '@/components/cloud/partes';
 import { cn } from '@/lib/utils';
 
@@ -84,7 +84,7 @@ function Connected({ email }: { email: string }) {
     (async () => {
       try {
         const g = await findMyGroup('profissional');
-        if (g) await syncPro(g.id);
+        if (g) await syncAmador(g.id);
         if (alive) setGroup(g);
       } catch (e) {
         if (alive) {
@@ -103,7 +103,7 @@ function Connected({ email }: { email: string }) {
     setError(null);
     try {
       const g = await createGroup('profissional', name || 'Meu grupo');
-      await syncPro(g.id);
+      await syncAmador(g.id);
       setGroup(g);
     } catch (e) {
       setError(explain(e));
@@ -148,7 +148,9 @@ function Connected({ email }: { email: string }) {
 }
 
 function ProInvites({ group, onError }: { group: CloudGroup; onError: (m: string) => void }) {
-  const players = useProStore((s) => s.players);
+  // O cadastro único, visto como elenco (fase 2)
+  const todos = useAppStore((s) => s.players);
+  const players = useMemo(() => todos.filter((p) => !p.pending).map(comoPro), [todos]);
   const [busy, setBusy] = useState(false);
 
   const sorted = [...players].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
@@ -161,7 +163,7 @@ function ProInvites({ group, onError }: { group: CloudGroup; onError: (m: string
   async function refresh() {
     setBusy(true);
     try {
-      await syncPro(group.id);
+      await syncAmador(group.id);
     } catch (e) {
       onError(explain(e));
     }

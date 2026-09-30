@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { NOME_DA_COMPETICAO } from '@/types';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -16,6 +17,7 @@ import {
   RotateCcw,
   Search,
   Shuffle,
+  ClipboardList,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { FormJogo } from '@/components/jogo/FormJogo';
@@ -75,11 +77,12 @@ export function JogoPage() {
   const hydrated = useHydrated();
   const jogo = useJogo(id);
   const proximo = useProximoJogo();
+  const modo = useAppStore((s) => s.mode);
 
   // Espera o armazenamento: decidir "não existe" antes da leitura expulsaria
   // o usuário de um jogo que existe (Armadilhas, CLAUDE.md)
   if (!hydrated) return null;
-  if (!jogo) return <Navigate to="/amador" replace />;
+  if (!jogo) return <Navigate to={modo === 'profissional' ? '/profissional/jogo' : '/amador'} replace />;
 
   return <Pagina jogo={jogo} proximo={proximo} aba={aba} setAba={(a) => setParams({ aba: a }, { replace: true })} navigate={navigate} />;
 }
@@ -97,6 +100,8 @@ function Pagina({
   setAba: (a: Aba) => void;
   navigate: ReturnType<typeof useNavigate>;
 }) {
+  // No time (fase 2): escalar no lugar de sortear
+  const pro = (useAppStore((s) => s.mode) ?? 'amador') === 'profissional';
   const allPlayers = useAppStore((s) => s.players);
   const players = useMemo(() => allPlayers.filter((p) => !p.pending), [allPlayers]);
   const editarJogo = useJogoStore((s) => s.editarJogo);
@@ -129,8 +134,8 @@ function Pagina({
     let vivo = true;
     (async () => {
       try {
-        const { findMyGroup, saldosDoGrupo } = await import('@/lib/cloud');
-        const g = await findMyGroup('amador');
+        const { findActiveGroup, saldosDoGrupo } = await import('@/lib/cloud');
+        const g = await findActiveGroup();
         if (!g) return;
         const porRemoto = await saldosDoGrupo(g.id);
         if (!vivo) return;
@@ -208,9 +213,19 @@ function Pagina({
     if (status === 'encerrado' && jogo.remoteId && comSessao && jogo.cobraDiaria !== false) setDiarias(true);
   }
 
+  // No time (fase 2) não há sorteio: o técnico escala. A escalação com só os
+  // confirmados é a fase 3; por ora ela abre com o elenco, e a partida fica
+  // ligada a este jogo e ao tipo dele
+  const escalar = () =>
+    navigate('/profissional/escalacao', { state: { jogoId: jogo.id, competicao: jogo.competicao } });
+
   const rodape =
     aba === 'estatistica' || jogo.status !== 'aberto'
       ? null
+      : pro
+        ? liveDoJogo
+          ? { texto: 'Continuar a partida', icone: <Radio size={19} />, acao: () => navigate('/placar'), desabilitado: false }
+          : { texto: 'Escalar e começar', icone: <ClipboardList size={19} />, acao: escalar, desabilitado: Boolean(live) }
       : aba === 'confirmados' || !jogo.sorteio
         ? {
             texto:
@@ -228,14 +243,24 @@ function Pagina({
   return (
     <div className={cn('mx-auto flex min-h-full w-full max-w-lg flex-col px-4', rodape ? 'pb-32' : 'pb-10')}>
       <header className="safe-top flex items-start gap-2 pt-6 pb-3">
-        <button onClick={() => navigate('/amador')} className="-ml-1 p-1 pt-0.5 text-ink-400" aria-label="Voltar aos jogos">
+        <button
+          onClick={() => navigate(pro ? '/profissional/jogo' : '/amador')}
+          className="-ml-1 p-1 pt-0.5 text-ink-400"
+          aria-label="Voltar aos jogos"
+        >
           <ArrowLeft size={22} />
         </button>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-bold capitalize">{fmtDia(jogo)}</h1>
           <p className="flex items-center gap-1 truncate text-sm text-ink-400">
             <span aria-hidden>{SPORTS[jogo.sport].emoji}</span>
-            <span className="text-ink-300">{SPORTS[jogo.sport].name}</span>
+            {jogo.competicao ? (
+              <span className={jogo.competicao === 'campeonato' ? 'text-amber-300' : 'text-brand-300'}>
+                {NOME_DA_COMPETICAO[jogo.competicao]}
+              </span>
+            ) : (
+              <span className="text-ink-300">{SPORTS[jogo.sport].name}</span>
+            )}
             <span className="text-ink-600">·</span>
             {jogo.time}
             {jogo.place && (
@@ -405,7 +430,7 @@ function Pagina({
                 : 'Nenhuma partida ainda. Sorteie os times e comece.'}
             </p>
           )}
-          {jogo.status === 'aberto' && (
+          {jogo.status === 'aberto' && !pro && (
             <button
               onClick={() => navigate(`/partida?jogo=${jogo.id}`)}
               className="mt-1 self-start text-xs text-ink-500 underline"

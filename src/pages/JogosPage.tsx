@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { NOME_DA_COMPETICAO } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, ChevronDown, ChevronRight, History, MapPin, Radio, Swords, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -56,6 +57,8 @@ let filtrosGuardados: Filtros = { sport: null, dia: '', status: null };
  */
 export function JogosPage() {
   const navigate = useNavigate();
+  // No time (fase 2): sem partida direta nem filtro de esporte
+  const pro = (useAppStore((s) => s.mode) ?? 'amador') === 'profissional';
   const jogos = useJogoStore((s) => s.jogos);
   // Antes da migração do antigo `present`, "sem jogo" não quer dizer nada
   const migrado = useJogoStore((s) => Boolean(s.migracoes.present));
@@ -148,20 +151,23 @@ export function JogosPage() {
             <CalendarPlus size={19} />
             Novo jogo
           </Button>
-          <Button
-            variant="secondary"
-            size="lg"
-            className="shrink-0 px-4"
-            onClick={() => navigate('/partida')}
-            aria-label="Partida direta, sem jogo marcado"
-          >
-            <Swords size={18} />
-            Partida direta
-          </Button>
+          {/* No time não há partida direta: o jogo é escalado */}
+          {!pro && (
+            <Button
+              variant="secondary"
+              size="lg"
+              className="shrink-0 px-4"
+              onClick={() => navigate('/partida')}
+              aria-label="Partida direta, sem jogo marcado"
+            >
+              <Swords size={18} />
+              Partida direta
+            </Button>
+          )}
         </div>
       )}
 
-      {migrado && jogos.length > 0 && (
+      {migrado && jogos.length > 0 && !pro && (
         <FiltroBar filtros={filtros} setFiltros={setFiltros} filtrando={filtrando} />
       )}
 
@@ -334,7 +340,13 @@ function CartaoJogo({
           {fmtDia(jogo)} · {jogo.time}
         </span>
         <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-400">
-          <span className="shrink-0 font-medium text-ink-300">{esporte.name}</span>
+          {jogo.competicao ? (
+            <span className={cn('shrink-0 font-medium', jogo.competicao === 'campeonato' ? 'text-amber-300' : 'text-brand-300')}>
+              {NOME_DA_COMPETICAO[jogo.competicao]}
+            </span>
+          ) : (
+            <span className="shrink-0 font-medium text-ink-300">{esporte.name}</span>
+          )}
           {jogo.place && (
             <>
               <span className="text-ink-600">·</span>
