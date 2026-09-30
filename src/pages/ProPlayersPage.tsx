@@ -195,6 +195,7 @@ export function ProPlayersPage() {
       {editing && (
         <ProPlayerSheet
           player={editing === 'novo' ? undefined : editing}
+          doTime={time ? { ageGroup: time.ageGroup ?? null, naipe: time.naipe ?? null } : undefined}
           defaults={{
             // O filtro da tela manda; sem filtro, o padrão do time (migração 024)
             ageGroup: filter.ageGroup ?? time?.ageGroup ?? null,

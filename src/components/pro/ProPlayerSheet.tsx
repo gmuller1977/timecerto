@@ -13,6 +13,8 @@ interface Props {
   player?: ProPlayer;
   /** Categoria e naipe do filtro atual, para o atleta novo já nascer nele */
   defaults: { ageGroup: AgeGroup | null; naipe: Naipe | null };
+  /** Categoria e naipe do TIME (migração 024) */
+  doTime?: { ageGroup: AgeGroup | null; naipe: Naipe | null };
   onSave: (draft: Draft) => void;
   onDelete?: () => void;
   onClose: () => void;
@@ -44,7 +46,7 @@ const pill = (active: boolean) =>
       : 'border-ink-800 bg-ink-950 text-ink-400',
   );
 
-export function ProPlayerSheet({ player, defaults, onSave, onDelete, onClose }: Props) {
+export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onClose }: Props) {
   const [name, setName] = useState(player?.name ?? '');
   const [birthDate, setBirthDate] = useState(player?.birthDate ?? '');
   const [ageGroup, setAgeGroup] = useState<AgeGroup>(
@@ -55,6 +57,12 @@ export function ProPlayerSheet({ player, defaults, onSave, onDelete, onClose }: 
     Boolean(player) || defaults.ageGroup !== null,
   );
   const [naipe, setNaipe] = useState<Naipe>(player?.naipe ?? defaults.naipe ?? 'feminino');
+  // O time já tem categoria e naipe (pedido do Guilherme, 30/09/2026): o
+  // atleta segue o time e os dois campos nem aparecem. Só aparecem para quem
+  // já está diferente do time (cadastro de antes da categoria do time)
+  const [verCategoria] = useState(
+    () => !(doTime?.ageGroup && doTime.naipe && ageGroup === doTime.ageGroup && naipe === doTime.naipe),
+  );
   const [height, setHeight] = useState(
     player?.heightCm ? (player.heightCm / 100).toFixed(2).replace('.', ',') : '',
   );
@@ -131,6 +139,10 @@ export function ProPlayerSheet({ player, defaults, onSave, onDelete, onClose }: 
           </p>
         </div>
 
+        {/* Com o time definido, a categoria e o naipe são os dele: quem joga
+            em duas categorias é cadastrado em cada grupo (Guilherme, 30/09) */}
+        {!verCategoria ? null : (
+        <>
         <p className="mt-4 text-xs font-medium text-ink-400">
           Categoria
           {suggested && suggested !== ageGroup && (
@@ -167,6 +179,8 @@ export function ProPlayerSheet({ player, defaults, onSave, onDelete, onClose }: 
             </button>
           ))}
         </div>
+        </>
+        )}
 
         <div className="mt-4 flex gap-3">
           <div className="min-w-0 flex-1">
