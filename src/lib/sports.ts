@@ -62,6 +62,12 @@ export function getPositionLabel(sport: SportId, positionId?: string): string {
   return SPORTS[sport].positions.find((p) => p.id === positionId)?.short ?? '—';
 }
 
+/** O nome inteiro da posição ("Ponteiro"); getPositionLabel dá a sigla */
+export function nomeDaPosicao(sport: SportId, positionId?: string): string {
+  if (!positionId) return '';
+  return SPORTS[sport].positions.find((p) => p.id === positionId)?.label ?? '';
+}
+
 /** Posição que funciona como "goleiro" (distribuída 1 por time) */
 export const KEEPER_POSITION: Record<SportId, string | null> = {
   futebol: 'goleiro',

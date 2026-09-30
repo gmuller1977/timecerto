@@ -1,4 +1,5 @@
 import type { AgeGroup, Naipe, Player, ProPlayer } from '@/types';
+import { nomeDaPosicao } from '@/lib/sports';
 
 export const AGE_GROUPS: { id: AgeGroup; label: string; /** idade máxima no ano */ maxAge?: number }[] = [
   { id: 'sub13', label: 'Sub-13', maxAge: 12 },
@@ -77,6 +78,7 @@ export function comoPro(p: Player): ProPlayer {
     heightCm: p.heightCm,
     weightKg: p.weightKg,
     position: p.positions.volei,
+    outrasPosicoes: p.outrasPosicoes,
     createdAt: p.createdAt,
     remoteId: p.remoteId,
     inviteToken: p.inviteToken,
@@ -92,12 +94,23 @@ export function camposDoPro(d: Partial<ProPlayer>, atual?: Player): Partial<Play
   if (d.naipe !== undefined) out.naipe = d.naipe;
   if ('heightCm' in d) out.heightCm = d.heightCm;
   if ('weightKg' in d) out.weightKg = d.weightKg;
+  if ('outrasPosicoes' in d) out.outrasPosicoes = d.outrasPosicoes?.length ? d.outrasPosicoes : undefined;
   if ('position' in d) {
     const { volei: _v, ...outras } = atual?.positions ?? {};
     void _v;
     out.positions = d.position ? { ...outras, volei: d.position } : outras;
   }
   return out;
+}
+
+/** "Ponteiro · também oposto e levantador" — a principal e as outras */
+export function linhaDePosicoes(principal?: string, outras?: string[]): string {
+  const nome = (id: string) => nomeDaPosicao('volei', id);
+  if (!principal) return '';
+  if (!outras?.length) return nome(principal);
+  const resto = outras.map(nome);
+  const lista = resto.length === 1 ? resto[0] : `${resto.slice(0, -1).join(', ')} e ${resto.at(-1)}`;
+  return `${nome(principal)} · também ${lista.toLowerCase()}`;
 }
 
 /** "1,85 m · 78 kg" — só o que foi preenchido */

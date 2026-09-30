@@ -69,7 +69,12 @@ export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onC
   const [weight, setWeight] = useState(
     player?.weightKg ? String(player.weightKg).replace('.', ',') : '',
   );
-  const [position, setPosition] = useState(player?.position ?? '');
+  // Em ordem de preferência: a primeira é a principal (migração 026)
+  const [posicoes, setPosicoes] = useState<string[]>(() =>
+    player?.position ? [player.position, ...(player.outrasPosicoes ?? [])] : [],
+  );
+  const alternar = (id: string) =>
+    setPosicoes((atual) => (atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id]));
   const [error, setError] = useState<string | null>(null);
 
   const age = birthDate ? ageOn(birthDate) : null;
@@ -94,7 +99,8 @@ export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onC
       naipe,
       heightCm,
       weightKg,
-      position: position || undefined,
+      position: posicoes[0],
+      outrasPosicoes: posicoes.slice(1),
     });
   }
 
@@ -205,18 +211,35 @@ export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onC
           </div>
         </div>
 
-        <p className="mt-4 text-xs font-medium text-ink-400">Posição</p>
+        <p className="mt-4 text-xs font-medium text-ink-400">
+          Posições <span className="font-normal text-ink-500">— toque na ordem: a primeira é a principal</span>
+        </p>
         <div className="mt-1 flex flex-wrap gap-2">
-          {SPORTS.volei.positions.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setPosition(position === p.id ? '' : p.id)}
-              className={pill(position === p.id)}
-            >
-              {p.label}
-            </button>
-          ))}
+          {SPORTS.volei.positions.map((p) => {
+            const ordem = posicoes.indexOf(p.id);
+            return (
+              <button key={p.id} onClick={() => alternar(p.id)} className={cn(pill(ordem >= 0), 'flex items-center gap-1.5')}>
+                {ordem >= 0 && (
+                  <span
+                    className={cn(
+                      'flex size-4 items-center justify-center rounded-full text-[10px] font-bold',
+                      ordem === 0 ? 'bg-brand-500 text-ink-950' : 'bg-ink-700 text-ink-200',
+                    )}
+                  >
+                    {ordem + 1}
+                  </span>
+                )}
+                {p.label}
+              </button>
+            );
+          })}
         </div>
+        {posicoes.length > 1 && (
+          <p className="mt-1 text-[11px] text-ink-500">
+            Principal: {SPORTS.volei.positions.find((x) => x.id === posicoes[0])?.label}. As outras são onde quebra
+            galho — na escalação, aparecem como improviso.
+          </p>
+        )}
 
         {error && <p className="mt-4 text-sm text-red-300">{error}</p>}
 

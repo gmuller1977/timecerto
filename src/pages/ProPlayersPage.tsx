@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { ProPlayerSheet } from '@/components/pro/ProPlayerSheet';
 import { useProStore, matchesFilter } from '@/store/useProStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { AGE_GROUPS, AGE_GROUP_LABEL, NAIPES, NAIPE_LABEL, ageOn, bodyLine } from '@/lib/pro';
-import { getPositionLabel } from '@/lib/sports';
+import { AGE_GROUPS, AGE_GROUP_LABEL, NAIPES, NAIPE_LABEL, ageOn, bodyLine, linhaDePosicoes } from '@/lib/pro';
 import type { ProPlayer } from '@/types';
 import { cn, initials } from '@/lib/utils';
 
@@ -125,7 +124,7 @@ export function ProPlayersPage() {
         {shown.map((p) => {
           const age = p.birthDate ? ageOn(p.birthDate) : null;
           const details = [
-            p.position && getPositionLabel('volei', p.position),
+            p.position && linhaDePosicoes(p.position, p.outrasPosicoes),
             age !== null && `${age} anos`,
             bodyLine(p),
           ].filter(Boolean);

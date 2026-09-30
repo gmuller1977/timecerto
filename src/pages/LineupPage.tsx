@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { camposDoPro, comoPro } from '@/lib/pro';
+import { camposDoPro, comoPro, linhaDePosicoes } from '@/lib/pro';
 import type { TipoDeJogo } from '@/types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -376,7 +376,7 @@ function LineupEditor() {
                 >
                   {p.name}
                   <span className="ml-1.5 text-ink-600">
-                    {getPositionLabel('volei', p.positions.volei)}
+                    {linhaDePosicoes(p.positions.volei, p.outrasPosicoes) || getPositionLabel('volei', p.positions.volei)}
                   </span>
                 </span>
               );

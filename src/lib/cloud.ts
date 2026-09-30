@@ -523,6 +523,7 @@ async function enviarAtletas(groupId: string) {
     naipe: p.naipe ?? null,
     height_cm: p.heightCm ?? null,
     weight_kg: p.weightKg ?? null,
+    outras_posicoes: p.outrasPosicoes ?? [],
     deleted_at: null,
     updated_at: p.updatedAt,
   });
@@ -560,7 +561,7 @@ async function enviarAtletas(groupId: string) {
 
 const PLAYER_SYNC_COLS =
   'id, name, nickname, skills, positions, is_keeper, kind, pending, birth_date, phone, ' +
-  'age_group, naipe, height_cm, weight_kg, invite_token, ' +
+  'age_group, naipe, height_cm, weight_kg, invite_token, outras_posicoes, ' +
   'added_via_link, active, deleted_at, updated_at, synced_at, created_at';
 
 interface LinhaJogador {
@@ -579,6 +580,7 @@ interface LinhaJogador {
   height_cm: number | null;
   weight_kg: number | string | null;
   invite_token: string | null;
+  outras_posicoes: string[] | null;
   added_via_link: boolean | null;
   active: boolean;
   deleted_at: string | null;
@@ -603,6 +605,7 @@ const doJogador = (r: LinhaJogador) => ({
   heightCm: r.height_cm ?? undefined,
   weightKg: r.weight_kg != null ? Number(r.weight_kg) : undefined,
   inviteToken: r.invite_token ?? undefined,
+  outrasPosicoes: r.outras_posicoes?.length ? r.outras_posicoes : undefined,
   remoteId: r.id,
   updatedAt: r.updated_at,
   enviadoEm: r.updated_at,

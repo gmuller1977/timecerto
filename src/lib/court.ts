@@ -8,6 +8,7 @@ import type {
   SportId,
 } from '@/types';
 import { ROTATIONS } from '@/lib/rotation';
+import { nomeDaPosicao } from '@/lib/sports';
 
 /**
  * Numeração oficial da quadra de vôlei.
@@ -130,14 +131,31 @@ export function validateLineup(
   }
 
   const cfg = ROTATIONS[lineup.system];
-  const setters = onCourt.filter(
+  const principais = onCourt.filter(
     (id) => byId.get(id)?.positions[sport] === 'levantador',
   );
+  // Quem tem levantador como OUTRA posição (migração 026) completa o sistema
+  // como improviso: aviso, nunca erro — pode ser de propósito, mas o técnico
+  // precisa ver (docs/telas-profissional.md, "Múltiplas posições")
+  const falta = Math.max(0, cfg.setters - principais.length);
+  const improvisados = onCourt
+    .filter((id) => !principais.includes(id) && byId.get(id)?.outrasPosicoes?.includes('levantador'))
+    .slice(0, falta);
+  const setters = [...principais, ...improvisados];
 
   if (cfg.setters > 0 && setters.length < cfg.setters) {
     problems.push({
       severity: 'erro',
       message: `O sistema ${cfg.name} precisa de ${cfg.setters} levantador${cfg.setters > 1 ? 'es' : ''} em quadra — há ${setters.length}.`,
+    });
+  }
+  for (const id of improvisados) {
+    const p = byId.get(id);
+    problems.push({
+      severity: 'aviso',
+      message: `${p?.name ?? 'Um atleta'} vai levantar improvisado — a posição principal é ${
+        p?.positions[sport] ? nomeDaPosicao(sport, p.positions[sport]).toLowerCase() : 'outra'
+      }.`,
     });
   }
   if (cfg.setters > 0 && setters.length > cfg.setters) {
@@ -207,13 +225,17 @@ export function autoFill(
   };
 
   const needed = ROTATIONS[system].setters;
+  // Primeiro quem tem levantador como principal; só sem nenhum, quem levanta
+  // como outra posição (migração 026)
+  const levantador = () =>
+    take((p) => p.positions[sport] === 'levantador') ?? take((p) => Boolean(p.outrasPosicoes?.includes('levantador')));
   if (needed >= 1) {
-    const s1 = take((p) => p.positions[sport] === 'levantador');
+    const s1 = levantador();
     // No levantador fixo ele fica parado no meio da rede
     if (s1) court[system === 'fixo' ? 3 : 1] = s1;
   }
   if (needed >= 2) {
-    const s2 = take((p) => p.positions[sport] === 'levantador');
+    const s2 = levantador();
     if (s2) court[4] = s2; // oposta à 1 no rodízio
   }
 

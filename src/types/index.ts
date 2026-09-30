@@ -71,6 +71,11 @@ export interface Player {
   /** Token do link pessoal do atleta — vem do banco, nunca nasce no aparelho */
   inviteToken?: string;
   /**
+   * Vôlei (migração 026): onde o atleta quebra galho, em ordem de preferência.
+   * A principal continua em `positions.volei`.
+   */
+  outrasPosicoes?: string[];
+  /**
    * ISO — quando o cadastro foi editado pela última vez, NESTE aparelho ou no
    * que a nuvem trouxe. Decide quem vence entre aparelhos (lib/cloud.ts,
    * `sincronizarAtletas`).
@@ -376,8 +381,10 @@ export interface ProPlayer {
   naipe: Naipe;
   heightCm?: number;
   weightKg?: number;
-  /** Id de posição do vôlei (`lib/sports.ts`) */
+  /** Id de posição do vôlei (`lib/sports.ts`) — a principal */
   position?: string;
+  /** As outras posições, em ordem de preferência (migração 026) */
+  outrasPosicoes?: string[];
   createdAt: string;
   /** Id na nuvem (players.id), depois que o grupo foi criado no banco */
   remoteId?: string;
