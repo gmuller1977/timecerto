@@ -44,6 +44,9 @@ const FinanceiroAjustes = lazy(() =>
 const SairDaConta = lazy(() =>
   import('@/components/cloud/SairDaConta').then((m) => ({ default: m.SairDaConta })),
 );
+const PlanoDoGrupo = lazy(() =>
+  import('@/components/cloud/PlanoDoGrupo').then((m) => ({ default: m.PlanoDoGrupo })),
+);
 const NomeDoGrupo = lazy(() =>
   import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })),
 );
@@ -150,11 +153,12 @@ export default function App() {
                 element={
                   <EmBrevePage
                     title="Ajustes"
-                    text="Nome do grupo, financeiro, administradores e avisos. Local, horário e vagas padrão, e os padrões do sorteio, chegam aqui depois."
+                    text="Nome do grupo, plano, financeiro, administradores e avisos. Local, horário e vagas padrão, e os padrões do sorteio, chegam aqui depois."
                   >
                     {hasSavedSession() && (
                       <Suspense fallback={null}>
                         <NomeDoGrupo />
+                        <PlanoDoGrupo />
                         <FinanceiroAjustes />
                         <Administradores />
                         <AvisosDoAdmin />

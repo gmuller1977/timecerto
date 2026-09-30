@@ -1,4 +1,6 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
+import { avisoDeLimite } from '@/lib/plano';
+import { usePremium } from '@/store/usePlano';
 import { ChevronRight, Plus, Search, Send, X } from 'lucide-react';
 import { PlayerSheet } from '@/components/players/PlayerSheet';
 import { StarRating } from '@/components/ui/StarRating';
@@ -47,7 +49,16 @@ export function RosterPage() {
    * a marca de exclusão do pedido (removePlayer), que viaja — por isso não
    * precisam mais de internet na hora, e o pedido não volta.
    */
+  // Plano grátis: até 20 mensalistas (migração 021). O banco recusaria o
+  // 21º, e a sincronização travaria; por isso a tela avisa antes
+  const premium = usePremium();
+  const mensalistasAtuais = allPlayers.filter((p) => !p.pending && p.kind !== 'convidado').length;
   function approve(p: Player) {
+    const aviso = p.kind === 'convidado' ? null : avisoDeLimite(premium, mensalistasAtuais);
+    if (aviso) {
+      window.alert(aviso);
+      return;
+    }
     updatePlayer(p.id, { pending: false });
   }
   function reject(p: Player) {
@@ -107,6 +118,11 @@ export function RosterPage() {
       .split(/[,\n]/)
       .map((n) => n.trim())
       .filter(Boolean);
+    const aviso = kind === 'convidado' ? null : avisoDeLimite(premium, mensalistasAtuais, names.length);
+    if (aviso) {
+      window.alert(aviso);
+      return;
+    }
     names.forEach((n) => addPlayer({ name: n, skill, position: position || undefined, kind }));
     setName('');
     setPosition('');

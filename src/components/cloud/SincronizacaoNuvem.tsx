@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { useAuth } from '@/store/useAuth';
+import { usePlano } from '@/store/usePlano';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
 import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
@@ -70,7 +71,10 @@ async function rodar(): Promise<void> {
     // Confere a CADA rodada: o acesso pode acabar a qualquer momento. Erro de
     // rede cai no catch lá embaixo, sem limpar nada — só a resposta do banco
     // dizendo "não é mais seu" limpa
-    const grupo = (await findMyGroup('amador'))?.id ?? null;
+    const achado = await findMyGroup('amador');
+    // O plano (migração 021) vem junto: é daqui que as telas sabem o que travar
+    usePlano.getState().definir(achado, useAuth.getState().session?.user.id ?? null);
+    const grupo = achado?.id ?? null;
     const anterior = lerMarca();
     // Sem marca — aparelho de antes desta correção —, a pista é a cópia já ter
     // passado pela nuvem (`enviadoEm`; o `remoteId` não serve, o jogo nasce

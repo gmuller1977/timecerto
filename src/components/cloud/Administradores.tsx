@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { situacaoDoPlano } from '@/lib/plano';
 import { ShieldCheck, UserMinus, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
@@ -173,9 +174,16 @@ export function Administradores() {
                   />
                 </div>
               ))}
-              <Button variant="secondary" className="mt-3 w-full" disabled={busy} onClick={convidar}>
-                {busy ? 'Gerando…' : 'Convidar administrador'}
-              </Button>
+              {/* Mais de um administrador é do plano pago (migração 021) */}
+              {situacaoDoPlano(group.plano).premium ? (
+                <Button variant="secondary" className="mt-3 w-full" disabled={busy} onClick={convidar}>
+                  {busy ? 'Gerando…' : 'Convidar administrador'}
+                </Button>
+              ) : (
+                <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-100">
+                  Mais de um administrador é do plano pago. Veja Ajustes › Plano.
+                </p>
+              )}
               <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
                 O administrador cuida dos atletas, do jogo, dos convites e do sorteio.
                 Convidar e remover administradores fica só com você. Cada link vale para uma

@@ -299,6 +299,47 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.
 
+### Plano grátis e plano pago (fase 1: sem cobrança)
+
+Decidido pelo Guilherme em 29/09/2026, migração 021. O plano é do GRUPO, quem
+paga é o organizador, R$ 14,90/mês pelo Mercado Pago (fase 2, pendente). O
+pago libera **Financeiro**, **mais de um administrador** e **mais de 20
+mensalistas** (convidado nunca conta). Todo grupo nasce com **30 dias** do
+pago; os que existiam ganharam os 30 dias a partir da migração; os do
+Guilherme são **cortesia**.
+
+**Quando acaba, nada se perde, só trava** — e quem trava é o banco:
+
+- `can_manage_group` (a regra de EDITAR, que todas as políticas de escrita e
+  os `salvar_*` já usavam) passou a exigir o plano do organizador; o dono
+  edita sempre. As leituras usam `is_group_member` e não mudaram. O
+  Financeiro lê por `e_admin_do_grupo`, porque o papel `jogador` também é
+  membro e não pode ver dinheiro.
+- Financeiro: gatilho antes de inserir em cobrancas, pagamentos, despesas e
+  lembretes. A mensalidade e a diária antecipada, que o SISTEMA lança, somem
+  em silêncio (`return null`) — erro ali quebraria a confirmação do
+  convidado no link. Cancelar à mão também trava; o cancelamento do sistema
+  (`cancelada_por` nulo) não.
+- Convite de administrador e novo organizador: gatilho.
+- Mensalista: gatilho recusa quem ENTRA na conta (cadastro, aprovação,
+  reativação, virar mensalista). Quem já contava continua editável —
+  `salvar_jogadores` faz insert-on-conflict, e o gatilho confere se o id já
+  contava antes de recusar. Um grupo com 25 que perde o plano não perde
+  ninguém.
+- As três colunas do plano (`teste_ate`, `pago_ate`, `cortesia`) só
+  mudam pelo SQL Editor ou pela Edge Function: o gatilho `proteger_plano`
+  recusa quem entra como `anon`/`authenticated`, e força o teste padrão
+  em grupo novo.
+
+Na tela: Ajustes › Plano (`PlanoDoGrupo`); Financeiro vira só consulta;
+Administradores troca o convite por um aviso; Atletas e a ficha avisam antes
+do 21º (`avisoDeLimite`), porque o banco recusaria e a sincronização
+travaria. O plano chega às telas por `usePlano`, preenchido pela rodada da
+`SincronizacaoNuvem`; enquanto não se sabe, nada trava.
+
+Limite conhecido: o organizador sem plano ainda consegue editar no aparelho,
+e a edição não sobe. Ajustes › Plano avisa, mas as outras telas não.
+
 ### Perder o acesso limpa o aparelho
 
 Bug de 29/09/2026: o administrador removido continuava vendo jogos e atletas.

@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { PlanoDoGrupo } from '@/lib/plano';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
 import { useJogoStore } from '@/store/useJogoStore';
@@ -40,6 +41,10 @@ export interface CloudGroup {
   guestCode: string | null;
   /** Link de cadastro de mensalistas (só amador) */
   registerCode: string | null;
+  /** Quem criou o grupo: o dono, que é quem assina */
+  ownerId: string;
+  /** Migração 021 */
+  plano: PlanoDoGrupo;
 }
 
 export interface CloudEvent {
@@ -78,19 +83,25 @@ export interface PublishedTeams {
 /** Resposta de cada jogador, pelo id da NUVEM */
 export type Attendance = Record<string, { status: 'vou' | 'nao_vou'; answeredAt: string }>;
 
-const GROUP_COLS = 'id, name, invite_code, guest_code, register_code';
+const GROUP_COLS = 'id, name, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia';
 const toGroup = (d: {
   id: string;
   name: string;
   invite_code: string;
   guest_code: string | null;
   register_code: string | null;
+  owner_id: string;
+  teste_ate: string | null;
+  pago_ate: string | null;
+  cortesia: boolean | null;
 }): CloudGroup => ({
   id: d.id,
   name: d.name,
   code: d.invite_code,
   guestCode: d.guest_code,
   registerCode: d.register_code,
+  ownerId: d.owner_id,
+  plano: { testeAte: d.teste_ate, pagoAte: d.pago_ate, cortesia: Boolean(d.cortesia) },
 });
 const EVENT_COLS = 'id, title, starts_at, slots, location, list_closed, teams';
 const toEvent = (d: {

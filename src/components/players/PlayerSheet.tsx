@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { avisoDeLimite } from '@/lib/plano';
+import { usePremium } from '@/store/usePlano';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, MessageCircle, Trash2, X } from 'lucide-react';
 import type { Player, PlayerKind, SkillLevel } from '@/types';
@@ -19,6 +21,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
   const navigate = useNavigate();
   const sport = useAppStore((s) => s.sport);
   const updatePlayer = useAppStore((s) => s.updatePlayer);
+  const premium = usePremium();
   const removePlayer = useAppStore((s) => s.removePlayer);
 
   const [name, setName] = useState(player.name);
@@ -36,6 +39,12 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
   function save() {
     if (name.trim().length < 2) return setError('Falta o nome.');
     if (fone && !isValidPhone(fone)) return setError('Telefone inválido — use DDD e número.');
+    // Convidado virando mensalista entra na conta do plano grátis (migração 021)
+    if (kind !== 'convidado' && player.kind === 'convidado' && !player.pending) {
+      const atuais = useAppStore.getState().players.filter((x) => !x.pending && x.kind !== 'convidado').length;
+      const aviso = avisoDeLimite(premium, atuais);
+      if (aviso) return setError(aviso);
+    }
     updatePlayer(player.id, {
       name: name.trim(),
       nickname: nickname.trim() || undefined,

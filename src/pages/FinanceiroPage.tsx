@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Plus, RotateCcw, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -33,6 +33,7 @@ import { hoje } from '@/lib/jogo';
 import { whatsappTo } from '@/lib/phone';
 import { cn, formatBRL } from '@/lib/utils';
 import { explain } from '@/components/cloud/partes';
+import { situacaoDoPlano } from '@/lib/plano';
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 const nomeDoMes = (mes: string) => {
@@ -228,6 +229,12 @@ function abrirWhatsApp(texto: string, phone?: string | null) {
  * Nada se apaga: pagamento e despesa errados ganham estorno (linha negativa
  * visível); cobrança indevida é cancelada.
  */
+/**
+ * Sem o plano pago (migração 021), o Financeiro fica só para consulta: nada
+ * se perde, só não se lança. Os botões de lançar somem; o banco recusaria.
+ */
+const SoLeitura = createContext(false);
+
 export function FinanceiroPage() {
   const ready = useAuth((s) => s.ready);
   const session = useAuth((s) => s.session);
@@ -276,7 +283,20 @@ export function FinanceiroPage() {
         <p className="mt-4 text-sm leading-relaxed text-ink-400">Crie o grupo na aba Jogo para usar o financeiro.</p>
       )}
       {grupo && !dados && !erro && <p className="mt-6 text-center text-sm text-ink-500">Carregando…</p>}
-      {grupo && dados && <Conteudo grupo={grupo} dados={dados} mes={mes} setMes={setMes} recarregar={recarregar} />}
+      {grupo && dados && !situacaoDoPlano(grupo.plano).premium && (
+        <div className="mb-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm font-semibold text-amber-100">Financeiro só para consulta</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-amber-100/80">
+            O Financeiro é do plano pago. Tudo o que foi lançado continua aqui, mas para lançar de novo o grupo
+            precisa do plano — veja Ajustes › Plano.
+          </p>
+        </div>
+      )}
+      {grupo && dados && (
+        <SoLeitura.Provider value={!situacaoDoPlano(grupo.plano).premium}>
+          <Conteudo grupo={grupo} dados={dados} mes={mes} setMes={setMes} recarregar={recarregar} />
+        </SoLeitura.Provider>
+      )}
     </div>
   );
 }
@@ -311,6 +331,7 @@ function Conteudo({
   const mesAtual = mes === hoje().slice(0, 7);
   const nome = (id: string) => dados.jogadores.get(id)?.nome ?? 'Jogador';
   const [novaCobranca, setNovaCobranca] = useState(false);
+  const soLeitura = useContext(SoLeitura);
   /*
    * Confirmação de baixa pendente (pedido do Guilherme, 29/09/2026): aparece
    * no próprio cartão, logo depois de "Registrar pagamento". Mora aqui, e não
@@ -396,7 +417,7 @@ function Conteudo({
           <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">
             Cobranças do mês ({devedores.length})
           </p>
-          {!novaCobranca && (
+          {!novaCobranca && !soLeitura && (
             <button
               onClick={() => setNovaCobranca(true)}
               className="flex items-center gap-1 text-xs font-medium text-brand-300"
@@ -660,6 +681,7 @@ function Devedor({
 }) {
   const [aberto, setAberto] = useState(false);
   const [recebendo, setRecebendo] = useState(false);
+  const soLeitura = useContext(SoLeitura);
   const [valor, setValor] = useState('');
   const [metodo, setMetodo] = useState<'pix' | 'dinheiro'>('pix');
   const [data, setData] = useState(hoje());
@@ -758,13 +780,15 @@ function Devedor({
                 </span>
               </span>
               <span className="shrink-0 tabular-nums text-ink-200">{formatBRL(a.faltaCents)}</span>
-              <button
-                onClick={() => cancelar(a.cobranca.id, a.cobranca.descricao)}
-                className="shrink-0 p-1 text-ink-500"
-                aria-label={`Cancelar ${a.cobranca.descricao}`}
-              >
-                <X size={15} />
-              </button>
+              {!soLeitura && (
+                <button
+                  onClick={() => cancelar(a.cobranca.id, a.cobranca.descricao)}
+                  className="shrink-0 p-1 text-ink-500"
+                  aria-label={`Cancelar ${a.cobranca.descricao}`}
+                >
+                  <X size={15} />
+                </button>
+              )}
             </li>
           ))}
           {enviados.length > 0 && (
@@ -889,22 +913,24 @@ function Devedor({
           </div>
         </div>
       ) : (
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className={cn('mt-3 grid gap-2', soLeitura ? 'grid-cols-1' : 'grid-cols-2')}>
           <Button size="sm" variant="secondary" onClick={cobrar}>
             <MessageCircle size={15} />
             Cobrar
           </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              setValor(centavosParaCampo(saldo.saldoCents));
-              setData(hoje());
-              setErro(null);
-              setRecebendo(true);
-            }}
-          >
-            Recebi
-          </Button>
+          {!soLeitura && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setValor(centavosParaCampo(saldo.saldoCents));
+                setData(hoje());
+                setErro(null);
+                setRecebendo(true);
+              }}
+            >
+              Recebi
+            </Button>
+          )}
         </div>
       )}
       {!recebendo && erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
@@ -932,6 +958,7 @@ function ComCredito({
   recarregar: () => void;
 }) {
   const [erro, setErro] = useState<string | null>(null);
+  const soLeitura = useContext(SoLeitura);
   const credores = [...saldos.values()].filter((s) => s.saldoCents < 0).sort((a, b) => a.saldoCents - b.saldoCents);
   if (credores.length === 0) return null;
   const estornados = new Set(dados.pagamentos.filter((p) => p.estornoDe).map((p) => p.estornoDe));
@@ -969,10 +996,12 @@ function ComCredito({
               Pagou a mais — em geral, uma diária de jogo em que desistiu. Deixando de crédito, a próxima cobrança
               dele já aparece paga.
             </p>
-            <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={() => devolver(s)}>
-              <RotateCcw size={14} />
-              Devolver (estornar)
-            </Button>
+            {!soLeitura && (
+              <Button size="sm" variant="secondary" className="mt-2 w-full" onClick={() => devolver(s)}>
+                <RotateCcw size={14} />
+                Devolver (estornar)
+              </Button>
+            )}
           </div>
         ))}
       </div>
@@ -995,6 +1024,7 @@ function Recebimentos({
   recarregar: () => void;
 }) {
   const [erro, setErro] = useState<string | null>(null);
+  const soLeitura = useContext(SoLeitura);
   const estornados = new Set(dados.pagamentos.filter((p) => p.estornoDe).map((p) => p.estornoDe));
   const doMes = dados.pagamentos
     .filter((p) => p.pagoEm.startsWith(mes))
@@ -1028,7 +1058,7 @@ function Recebimentos({
             <span className={cn('shrink-0 tabular-nums', p.valorCents < 0 ? 'text-red-300' : 'text-brand-300')}>
               {formatBRL(p.valorCents)}
             </span>
-            {p.valorCents > 0 && !estornados.has(p.id) && (
+            {p.valorCents > 0 && !estornados.has(p.id) && !soLeitura && (
               <button
                 onClick={() => estornar(p.id, nome(p.playerId), p.valorCents)}
                 className="shrink-0 p-1 text-ink-500"
@@ -1059,6 +1089,7 @@ function Despesas({
   recarregar: () => void;
 }) {
   const [nova, setNova] = useState(false);
+  const soLeitura = useContext(SoLeitura);
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState('');
   const [data, setData] = useState(hoje());
@@ -1104,7 +1135,7 @@ function Despesas({
     <section className="mt-6">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs font-semibold tracking-wide text-ink-500 uppercase">Despesas do mês</p>
-        {!nova && (
+        {!nova && !soLeitura && (
           <button onClick={() => setNova(true)} className="flex items-center gap-1 text-xs font-medium text-brand-300">
             <Plus size={14} />
             Nova despesa
@@ -1162,7 +1193,7 @@ function Despesas({
               <span className={cn('shrink-0 tabular-nums', d.valorCents < 0 ? 'text-brand-300' : 'text-ink-200')}>
                 {formatBRL(d.valorCents)}
               </span>
-              {d.valorCents > 0 && !estornadas.has(d.id) && (
+              {d.valorCents > 0 && !estornadas.has(d.id) && !soLeitura && (
                 <button
                   onClick={() => estornar(d.id, d.descricao)}
                   className="shrink-0 p-1 text-ink-500"
