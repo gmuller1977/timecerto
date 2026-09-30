@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase';
+import { lerGrupoAtivo } from '@/lib/grupoAtivo';
+import { ativarGrupo, lembrarNome } from '@/store/trocarGrupo';
 import type { PlanoDoGrupo } from '@/lib/plano';
 import { useAppStore } from '@/store/useAppStore';
 import { useProStore } from '@/store/useProStore';
@@ -140,6 +142,15 @@ async function uid(): Promise<string> {
  * aceita administrar outro continua vendo o próprio.
  */
 export async function findMyGroup(mode: AppMode): Promise<CloudGroup | null> {
+  // Etapa 8: com um grupo ativo daquele tipo, é ELE — e só ele. Sem acesso,
+  // a resposta é null, e nunca outro grupo no lugar: é o que permite à
+  // sincronização perceber que o acesso acabou
+  const ativo = lerGrupoAtivo();
+  if (ativo && ativo.mode === mode) {
+    const { data, error } = await db().from('groups').select(GROUP_COLS).eq('id', ativo.id).maybeSingle();
+    if (error) throw error;
+    return data ? toGroup(data) : null;
+  }
   const eu = await uid();
   const { data, error } = await db()
     .from('groups')
@@ -177,7 +188,14 @@ export async function findMyGroup(mode: AppMode): Promise<CloudGroup | null> {
  * cada um. O tipo é do grupo, não da pessoa (docs/telas-amador.md, etapa 7):
  * é daqui que a abertura sabe se o app é amador ou profissional.
  */
-export async function meusGrupos(): Promise<{ id: string; name: string; mode: AppMode }[]> {
+export interface MeuGrupo {
+  id: string;
+  name: string;
+  mode: AppMode;
+  papel: 'dono' | 'administrador';
+}
+
+export async function meusGrupos(): Promise<MeuGrupo[]> {
   const eu = await uid();
   const [donos, membros] = await Promise.all([
     db().from('groups').select('id, name, mode, created_at').eq('owner_id', eu).order('created_at'),
@@ -185,12 +203,12 @@ export async function meusGrupos(): Promise<{ id: string; name: string; mode: Ap
   ]);
   if (donos.error) throw donos.error;
   if (membros.error) throw membros.error;
-  const lista = (donos.data ?? []).map((g) => ({ id: g.id, name: g.name, mode: g.mode as AppMode }));
+  const lista: MeuGrupo[] = (donos.data ?? []).map((g) => ({ id: g.id, name: g.name, mode: g.mode as AppMode, papel: 'dono' }));
   const outros = (membros.data ?? []).map((m) => m.group_id).filter((id) => !lista.some((g) => g.id === id));
   if (outros.length) {
     const { data, error } = await db().from('groups').select('id, name, mode').in('id', outros);
     if (error) throw error;
-    lista.push(...(data ?? []).map((g) => ({ id: g.id, name: g.name, mode: g.mode as AppMode })));
+    lista.push(...(data ?? []).map((g) => ({ id: g.id, name: g.name, mode: g.mode as AppMode, papel: 'administrador' as const })));
   }
   return lista;
 }
@@ -288,7 +306,11 @@ export async function createGroup(mode: AppMode, name: string): Promise<CloudGro
     .select(GROUP_COLS)
     .single();
   if (error) throw error;
-  return toGroup(data);
+  const g = toGroup(data);
+  // O grupo novo vira o ativo (etapa 8). O primeiro de cada tipo leva o que o
+  // aparelho já tinha daquele tipo; os seguintes nascem vazios
+  await ativarGrupo({ id: g.id, mode, name: g.name });
+  return g;
 }
 
 /**
@@ -302,6 +324,7 @@ export async function renomearGrupo(groupId: string, nome: string): Promise<stri
   const { data, error } = await db().from('groups').update({ name: limpo }).eq('id', groupId).select('name');
   if (error) throw error;
   if (!data || data.length === 0) throw new Error('Só o dono ou um administrador do grupo pode trocar o nome.');
+  lembrarNome(groupId, data[0].name as string);
   return data[0].name as string;
 }
 

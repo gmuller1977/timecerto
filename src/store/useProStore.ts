@@ -1,3 +1,4 @@
+import { BASES, chaveInicial } from '@/lib/grupoAtivo';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AgeGroup, Lineup, Naipe, ProPlayer } from '@/types';
@@ -54,7 +55,7 @@ export const useProStore = create<ProState>()(
 
       saveLineup: (lineup) => set({ lastLineup: lineup }),
     }),
-    { name: 'timecerto:pro:v1' },
+    { name: chaveInicial(BASES.pro) },
   ),
 );
 

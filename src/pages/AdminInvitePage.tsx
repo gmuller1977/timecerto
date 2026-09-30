@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ativarGrupo } from '@/store/trocarGrupo';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -6,6 +7,7 @@ import { useAuth } from '@/store/useAuth';
 import { useAppStore } from '@/store/useAppStore';
 import {
   aceitarConviteAdmin,
+  meusGrupos,
   conviteAdminInfo,
   findMyGroup,
   syncAmador,
@@ -57,7 +59,14 @@ export function AdminInvitePage() {
     setError(null);
     try {
       const r = await aceitarConviteAdmin(token);
-      setMode(r.mode);
+      // Etapa 8: o grupo que convidou vira o ATIVO — mesmo que a pessoa tenha
+      // um grupo próprio. O aceite devolve nome e tipo; o id sai da lista de
+      // grupos em que ela é administradora
+      const convidou = (await meusGrupos()).find(
+        (g) => g.papel === 'administrador' && g.mode === r.mode && g.name === r.group,
+      );
+      if (convidou) await ativarGrupo({ id: convidou.id, mode: convidou.mode, name: convidou.name });
+      else setMode(r.mode);
       // Traz os atletas já: a sincronização automática procurou o grupo quando o
       // app abriu, antes do aceite, e só tentaria de novo na rodada seguinte
       if (r.mode === 'amador') {

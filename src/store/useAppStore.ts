@@ -1,3 +1,4 @@
+import { BASES, chaveInicial } from '@/lib/grupoAtivo';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
@@ -187,7 +188,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ players: [], excluidos: [...s.excluidos, ...marcasDeExclusao(s.players)] })),
     }),
     {
-      name: 'timecerto:v1',
+      // Etapa 8: a chave é do grupo ativo (lib/grupoAtivo.ts)
+      name: chaveInicial(BASES.app),
       partialize: (s) => ({
         mode: s.mode,
         sport: s.sport,

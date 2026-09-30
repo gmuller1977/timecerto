@@ -1,3 +1,4 @@
+import { BASES, chaveInicial } from '@/lib/grupoAtivo';
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -154,7 +155,7 @@ export const useJogoStore = create<JogoState>()(
       },
     }),
     {
-      name: 'timecerto:jogos:v1',
+      name: chaveInicial(BASES.jogos),
       partialize: (s) => ({ jogos: s.jogos, migracoes: s.migracoes, leituraJogos: s.leituraJogos }),
     },
   ),

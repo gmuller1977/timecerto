@@ -370,9 +370,15 @@ A `HomePage` saiu da abertura e virou `/modo`, que aparece só sem grupo, com os
 dois tipos, ou por Ajustes › Trocar de modo — e mostra o grupo de cada tipo.
 O seletor no cabeçalho fica para a etapa 8, porque só serve a quem tem dois.
 
-**8. Multi-grupo.** Só quando aparecer o primeiro usuário real com dois grupos.
-Particionar os stores por grupo, seletor no cabeçalho, tela de escolha só no
-primeiro login. Não é para esta semana.
+**8. Multi-grupo.** ✓ Feita em 30/09/2026, a pedido do Guilherme. Um grupo
+ativo lembrado no aparelho (`lib/grupoAtivo.ts`), e cada store persistido
+numa chave do grupo (`timecerto:v1@<id>`); trocar de grupo é trocar de chave
+(`store/trocarGrupo.ts`). O conteúdo de antes — com os dois modos misturados
+— é ADOTADO por tipo: o primeiro grupo amador leva o que era da pelada, o
+primeiro profissional leva o elenco e as partidas do profissional, e o segundo
+grupo de um tipo nasce vazio. O nome do grupo no alto de Jogo e do elenco
+profissional é o seletor; `/modo` virou a lista dos grupos, com "Criar novo
+grupo". Perder o acesso ao grupo ativo apaga só a cópia dele.
 
 ### Para o Claude Code
 

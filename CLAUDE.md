@@ -340,6 +340,33 @@ travaria. O plano chega às telas por `usePlano`, preenchido pela rodada da
 Limite conhecido: o organizador sem plano ainda consegue editar no aparelho,
 e a edição não sobe. Ajustes › Plano avisa, mas as outras telas não.
 
+### Multi-grupo (etapa 8, 30/09/2026)
+
+O aparelho guarda um GRUPO ATIVO (`timecerto:grupo-ativo`) e cada store
+persistido numa chave dele: `timecerto:v1@<id>`, `...jogos:v1@<id>`,
+`...matches:v1@<id>`, `...pro:v1@<id>`. Os stores nascem com
+`chaveInicial(base)`; trocar de grupo é `ativarGrupo` em
+`store/trocarGrupo.ts`. `findMyGroup(modo)` devolve o grupo ativo daquele
+tipo, ou null — nunca outro no lugar, senão a perda de acesso não seria vista.
+
+**Zerar grava.** O persist salva a cada `setState`: zerar o store na chave
+nova apagava o que o grupo tinha guardado. Custou o elenco profissional no
+teste de 30/09. `reler` zera numa chave de rascunho, e só depois aponta e lê.
+
+**O legado é adotado por TIPO, uma vez.** As chaves antigas misturavam os dois
+modos (as partidas de ambos no mesmo store). O primeiro grupo de cada tipo
+leva a parte dele (`adotarLegado`), copiando antes de tirar da chave antiga,
+e `timecerto:legado-adotado` impede a segunda vez. O legado amador só vai
+para o grupo da marca antiga (`timecerto:grupo-nuvem`), quando ela existe.
+
+**Sem grupo ativo, a chave é a antiga** — quem usa só no aparelho, ou escolheu
+um tipo em que ainda não tem grupo (`sairDoGrupo`). Criar o grupo adota o
+que o aparelho tinha daquele tipo, que é o "os jogadores deste aparelho vão
+junto" de sempre.
+
+O banco de teste (`mock-persistente.js`) não aplica RLS: para testar perda
+de acesso nele, o grupo tem de sumir da tabela, não só mudar de dono.
+
 ### Perder o acesso limpa o aparelho
 
 Bug de 29/09/2026: o administrador removido continuava vendo jogos e atletas.

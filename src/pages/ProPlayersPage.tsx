@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SeletorDeGrupo } from '@/components/ui/SeletorDeGrupo';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, ClipboardList, History, Radio, Send, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -54,6 +55,7 @@ export function ProPlayersPage() {
           </button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Elenco</h1>
+            <SeletorDeGrupo />
             <p className="mt-0.5 text-sm text-ink-400">
               🏐 {players.length} {players.length === 1 ? 'atleta' : 'atletas'}
             </p>

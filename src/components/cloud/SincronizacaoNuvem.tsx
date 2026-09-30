@@ -6,6 +6,8 @@ import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
 import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
+import { lerGrupoAtivo } from '@/lib/grupoAtivo';
+import { ativarGrupo, esquecerGrupo, lembrarNome } from '@/store/trocarGrupo';
 
 const naoEnviado = (x: { remoteId?: string; enviadoEm?: string; updatedAt?: string }) =>
   !x.remoteId || x.enviadoEm !== x.updatedAt;
@@ -71,38 +73,28 @@ async function rodar(): Promise<void> {
     // Confere a CADA rodada: o acesso pode acabar a qualquer momento. Erro de
     // rede cai no catch lá embaixo, sem limpar nada — só a resposta do banco
     // dizendo "não é mais seu" limpa
-    const achado = await findMyGroup('amador');
-    // O plano (migração 021) vem junto: é daqui que as telas sabem o que travar
-    usePlano.getState().definir(achado, useAuth.getState().session?.user.id ?? null);
-    const grupo = achado?.id ?? null;
-    const anterior = lerMarca();
-    // Sem marca — aparelho de antes desta correção —, a pista é a cópia já ter
-    // passado pela nuvem (`enviadoEm`; o `remoteId` não serve, o jogo nasce
-    // com ele) e a conta não ter grupo nenhum
-    const veioDaNuvem =
-      useAppStore.getState().players.some((x) => x.enviadoEm) || useJogoStore.getState().jogos.some((j) => j.enviadoEm);
-    let perdeu = (anterior && anterior !== grupo) || (!anterior && !grupo && veioDaNuvem);
-    // Sem marca e COM grupo: a conta pode ter um grupo próprio e o aparelho
-    // guardar a cópia do grupo de onde ela foi removida (achado no teste do
-    // Guilherme em 29/09/2026). Confere uma vez; depois a marca responde
-    if (!perdeu && !anterior && grupo && veioDaNuvem) {
-      const atletas = useAppStore
-        .getState()
-        .players.filter((x) => x.enviadoEm && x.remoteId)
-        .map((x) => x.remoteId!);
-      const jogos = useJogoStore
-        .getState()
-        .jogos.filter((j) => j.enviadoEm && j.remoteId)
-        .map((j) => j.remoteId!);
-      perdeu = !(await copiaEDoGrupo(grupo, atletas, jogos));
-    }
-    if (perdeu) {
-      console.warn('sem acesso ao grupo sincronizado antes: limpando a cópia do aparelho');
-      limparCopiaDoGrupo();
-      gravarMarca(null);
+    const meuId = useAuth.getState().session?.user.id ?? null;
+    const ativo = lerGrupoAtivo();
+    let grupo: string | null;
+    if (ativo) {
+      // Etapa 8: o grupo é o ATIVO, e findMyGroup devolve ele ou nada
+      const g = await findMyGroup(ativo.mode);
+      // O plano (migração 021) vem junto: é daqui que as telas sabem o que travar
+      usePlano.getState().definir(ativo.mode === 'amador' ? g : null, meuId);
+      if (!g) {
+        console.warn('sem acesso ao grupo ativo: limpando a cópia dele deste aparelho');
+        await esquecerGrupo(ativo.id);
+        window.location.hash = '#/';
+        return;
+      }
+      lembrarNome(g.id, g.name);
+      // O profissional sincroniza pela tela de convites dele
+      if (ativo.mode !== 'amador') return;
+      grupo = g.id;
+    } else {
+      grupo = await grupoDoLegado(meuId);
     }
     if (grupo) {
-      gravarMarca(grupo);
       await syncAmador(grupo);
       await sincronizarJogos(grupo);
       await sincronizarPartidas(grupo);
@@ -123,6 +115,53 @@ async function rodar(): Promise<void> {
       void rodar();
     }
   }
+}
+
+/**
+ * Aparelho de antes da etapa 8, ainda sem grupo ativo: acha o grupo amador da
+ * conta, confere se a cópia do aparelho é dele — e, sendo, ADOTA: o grupo
+ * vira o ativo e a cópia passa para a chave dele. Daí em diante a rodada é a
+ * de cima.
+ */
+async function grupoDoLegado(meuId: string | null): Promise<string | null> {
+  const achado = await findMyGroup('amador');
+  usePlano.getState().definir(achado, meuId);
+  const grupo = achado?.id ?? null;
+  const anterior = lerMarca();
+  // Sem marca — aparelho de antes desta correção —, a pista é a cópia já ter
+  // passado pela nuvem (`enviadoEm`; o `remoteId` não serve, o jogo nasce
+  // com ele) e a conta não ter grupo nenhum
+  const veioDaNuvem =
+    useAppStore.getState().players.some((x) => x.enviadoEm) || useJogoStore.getState().jogos.some((j) => j.enviadoEm);
+  let perdeu = (anterior && anterior !== grupo) || (!anterior && !grupo && veioDaNuvem);
+  // Sem marca e COM grupo: a conta pode ter um grupo próprio e o aparelho
+  // guardar a cópia do grupo de onde ela foi removida (achado no teste do
+  // Guilherme em 29/09/2026). Confere uma vez; depois a marca responde
+  if (!perdeu && !anterior && grupo && veioDaNuvem) {
+    const atletas = useAppStore
+      .getState()
+      .players.filter((x) => x.enviadoEm && x.remoteId)
+      .map((x) => x.remoteId!);
+    const jogos = useJogoStore
+      .getState()
+      .jogos.filter((j) => j.enviadoEm && j.remoteId)
+      .map((j) => j.remoteId!);
+    perdeu = !(await copiaEDoGrupo(grupo, atletas, jogos));
+  }
+  if (perdeu) {
+    console.warn('sem acesso ao grupo sincronizado antes: limpando a cópia do aparelho');
+    limparCopiaDoGrupo();
+    gravarMarca(null);
+  }
+  if (grupo && achado) {
+    gravarMarca(grupo);
+    // Quem estava no profissional continua lá: adotar agora trocaria a tela
+    // debaixo dele. A pelada segue sincronizando pela chave antiga
+    if (useAppStore.getState().mode !== 'profissional') {
+      await ativarGrupo({ id: grupo, mode: 'amador', name: achado.name });
+    }
+  }
+  return grupo;
 }
 
 /**

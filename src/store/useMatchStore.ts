@@ -1,3 +1,4 @@
+import { BASES, chaveInicial } from '@/lib/grupoAtivo';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
@@ -365,7 +366,7 @@ export const useMatchStore = create<MatchState>()(
         }),
     }),
     {
-      name: 'timecerto:matches:v1',
+      name: chaveInicial(BASES.partidas),
       partialize: (s) => ({
         live: s.live,
         matches: s.matches,
