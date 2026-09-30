@@ -3,6 +3,7 @@ import { situacaoDoPlano } from '@/lib/plano';
 import { ShieldCheck, UserMinus, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
+import type { AppMode } from '@/types';
 import {
   adminLink,
   administradores,
@@ -26,7 +27,13 @@ const validoAte = (iso: string) =>
  * único, 48 h — e remove; o administrador convidado vê a lista e pode sair.
  * Carregado sob demanda: traz o Supabase.
  */
-export function Administradores() {
+/*
+ * O convite é do grupo em que a pessoa está (pedido do Guilherme, 30/09/2026):
+ * em Ajustes da pelada, do grupo amador; no convite do profissional, do time.
+ * O cartão diz o nome do grupo, para ninguém achar que o administrador é
+ * "geral" — no banco ele sempre foi de um grupo só.
+ */
+export function Administradores({ mode = 'amador' }: { mode?: AppMode }) {
   const ready = useAuth((s) => s.ready);
   const session = useAuth((s) => s.session);
   const [group, setGroup] = useState<CloudGroup | null | undefined>(undefined);
@@ -48,7 +55,7 @@ export function Administradores() {
     let alive = true;
     (async () => {
       try {
-        const g = await findMyGroup('amador');
+        const g = await findMyGroup(mode);
         if (!alive) return;
         setGroup(g);
         if (g) await carregar(g);
@@ -59,7 +66,7 @@ export function Administradores() {
     return () => {
       alive = false;
     };
-  }, [ready, session, carregar]);
+  }, [ready, session, carregar, mode]);
 
   async function convidar() {
     if (!group) return;
@@ -105,7 +112,9 @@ export function Administradores() {
     <section className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
       <p className="flex items-center gap-2 text-[15px] font-semibold text-ink-50">
         <ShieldCheck size={17} className="text-brand-400" />
-        Administradores
+        <span className="min-w-0 truncate">
+          Administradores{group ? <span className="font-normal text-ink-400"> · {group.name}</span> : null}
+        </span>
       </p>
       {error && <p className="mt-2 text-sm text-red-300">{error}</p>}
 
@@ -113,7 +122,9 @@ export function Administradores() {
         <p className="mt-2 text-sm text-ink-500">Carregando…</p>
       ) : !group ? (
         <p className="mt-2 text-sm leading-relaxed text-ink-400">
-          Crie o grupo na aba Jogo para poder ter mais administradores.
+          {mode === 'profissional'
+            ? 'Crie o time para poder ter mais administradores.'
+            : 'Crie o grupo na aba Jogo para poder ter mais administradores.'}
         </p>
       ) : (
         <>
@@ -175,7 +186,7 @@ export function Administradores() {
                 </div>
               ))}
               {/* Mais de um administrador é do plano pago (migração 021) */}
-              {situacaoDoPlano(group.plano).premium ? (
+              {mode === 'profissional' || situacaoDoPlano(group.plano).premium ? (
                 <Button variant="secondary" className="mt-3 w-full" disabled={busy} onClick={convidar}>
                   {busy ? 'Gerando…' : 'Convidar administrador'}
                 </Button>
@@ -185,9 +196,11 @@ export function Administradores() {
                 </p>
               )}
               <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-                O administrador cuida dos atletas, do jogo, dos convites e do sorteio.
-                Convidar e remover administradores fica só com você. Cada link vale para uma
-                pessoa e por 48 horas.
+                {mode === 'profissional'
+                  ? 'O administrador cuida do elenco, das escalações e das partidas deste time.'
+                  : 'O administrador cuida dos atletas, do jogo, dos convites e do sorteio deste grupo.'}{' '}
+                Ele não ganha acesso a nenhum outro grupo seu. Convidar e remover administradores
+                fica só com você. Cada link vale para uma pessoa e por 48 horas.
               </p>
             </>
           ) : (

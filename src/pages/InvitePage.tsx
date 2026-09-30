@@ -9,6 +9,7 @@ import { useHydrated } from '@/store/useHydrated';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { athleteLink, createGroup, findMyGroup, shareOnWhatsApp, syncPro, type CloudGroup } from '@/lib/cloud';
 import { explain } from '@/components/cloud/partes';
+import { Administradores } from '@/components/cloud/Administradores';
 import { cn } from '@/lib/utils';
 
 /**
@@ -141,7 +142,11 @@ function Connected({ email }: { email: string }) {
           </Button>
         </div>
       ) : (
-        <ProInvites group={group} onError={setError} />
+        <>
+          <ProInvites group={group} onError={setError} />
+          {/* Administradores DESTE time, não os da pelada */}
+          <Administradores mode="profissional" />
+        </>
       )}
     </>
   );
