@@ -851,10 +851,39 @@ export interface GuestGroup {
   }[];
 }
 
-export async function guestRegisterInfo(code: string): Promise<{ name: string; sport: string }> {
+export interface InfoDoCadastro {
+  name: string;
+  sport: string;
+  /** Migração 027: o link também serve ao time */
+  mode?: AppMode;
+  ageGroup?: AgeGroup | null;
+  naipe?: Naipe | null;
+}
+
+export async function guestRegisterInfo(code: string): Promise<InfoDoCadastro> {
   const { data, error } = await db().rpc('guest_register_info', { code });
   if (error) throw error;
-  return data as { name: string; sport: string };
+  return data as InfoDoCadastro;
+}
+
+/**
+ * Pedido de cadastro do ATLETA do time (migração 027). Categoria e naipe
+ * vêm do time; as posições, em ordem — a primeira é a principal.
+ */
+export async function guestRegisterAtleta(
+  code: string,
+  input: { name: string; birthDate: string; phone: string; posicoes: string[]; heightCm?: number; weightKg?: number },
+): Promise<void> {
+  const { error } = await db().rpc('guest_register_atleta', {
+    code,
+    p_name: input.name,
+    p_birth: input.birthDate,
+    p_phone: input.phone,
+    p_posicoes: input.posicoes,
+    p_height: input.heightCm ?? null,
+    p_weight: input.weightKg ?? null,
+  });
+  if (error) throw error;
 }
 
 /** Pedido de cadastro do mensalista. Fica pendente até o administrador aprovar. */

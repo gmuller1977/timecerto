@@ -3,7 +3,7 @@ import { useGrupoAtivo } from '@/store/useGrupoAtivo';
 import { useAppStore } from '@/store/useAppStore';
 import { camposDoPro, comoPro } from '@/lib/pro';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Radio, Send, UserPlus } from 'lucide-react';
+import { ChevronRight, Link2, Radio, Send, UserPlus } from 'lucide-react';
 import { avisoDeLimite } from '@/lib/plano';
 import { usePremium } from '@/store/usePlano';
 import { Button } from '@/components/ui/Button';
@@ -27,6 +27,8 @@ export function ProPlayersPage() {
   // Fase 2: o elenco mora no cadastro único; a tela continua vendo ProPlayer
   const cadastro = useAppStore((s) => s.players);
   const players = useMemo(() => cadastro.filter((p) => !p.pending).map(comoPro), [cadastro]);
+  // Pedidos do link de cadastro (migração 027): aguardam o técnico aprovar
+  const pendentes = useMemo(() => cadastro.filter((p) => p.pending), [cadastro]);
   const filter = useProStore((s) => s.filter);
   const time = useGrupoAtivo();
   const setFilter = useProStore((s) => s.setFilter);
@@ -37,6 +39,35 @@ export function ProPlayersPage() {
   // Plano grátis: até 20 atletas no time (migração 022). O banco recusaria o
   // 21º e a sincronização do elenco travaria; a tela avisa antes
   const premium = usePremium();
+
+  // O pedido vira atleta do elenco. No grátis, o limite de 20 vale aqui também
+  function aprovar(id: string) {
+    const aviso = avisoDeLimite(premium, players.length);
+    if (aviso) return window.alert(aviso.replace('mensalistas', 'atletas').replace(' Convidados não contam.', ''));
+    updatePlayerUnico(id, { pending: false });
+  }
+  function recusar(id: string, nome: string) {
+    if (window.confirm(`Recusar o cadastro de ${nome}?`)) removePlayer(id);
+  }
+
+  // O link de cadastro do time (migração 027): o mesmo código da pelada
+  const [enviandoLink, setEnviandoLink] = useState(false);
+  async function enviarLinkDeCadastro() {
+    setEnviandoLink(true);
+    try {
+      const { findActiveGroup, registerLink, shareOnWhatsApp } = await import('@/lib/cloud');
+      const g = await findActiveGroup();
+      if (!g?.registerCode) throw new Error('sem código');
+      const link = registerLink(g.registerCode);
+      shareOnWhatsApp(
+        `📋 Cadastro de atleta — ${g.name}\n\nPreencha uma vez: nome, nascimento, telefone, altura, peso e posições. O técnico aprova e você entra no elenco.\n${link}`,
+      );
+    } catch (e) {
+      console.error('link de cadastro do time', e);
+      window.alert('Não deu para gerar o link agora. Confira a internet.');
+    }
+    setEnviandoLink(false);
+  }
 
   // null = fechado · 'novo' = cadastro · atleta = edição
   const [editing, setEditing] = useState<ProPlayer | 'novo' | null>(null);
@@ -73,6 +104,41 @@ export function ProPlayersPage() {
           </button>
         </div>
       </header>
+
+      {pendentes.length > 0 && (
+        <section className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3">
+          <p className="mb-2 text-xs font-semibold tracking-wide text-amber-200 uppercase">
+            Aguardando aprovação ({pendentes.length})
+          </p>
+          <div className="flex flex-col gap-2">
+            {pendentes.map((p) => {
+              const v = comoPro(p);
+              return (
+                <div key={p.id} className="rounded-xl border border-ink-800 bg-ink-950 px-3 py-2.5">
+                  <p className="truncate text-[15px] font-semibold text-ink-50">{p.name}</p>
+                  <p className="truncate text-xs text-ink-400">
+                    {[
+                      p.birthDate && ageOn(p.birthDate) !== null && `${ageOn(p.birthDate)} anos`,
+                      v.position && linhaDePosicoes(v.position, v.outrasPosicoes),
+                      bodyLine(v),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => recusar(p.id, p.name)}>
+                      Recusar
+                    </Button>
+                    <Button size="sm" className="flex-1" onClick={() => aprovar(p.id)}>
+                      Aprovar
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {live && (
         <button
@@ -176,6 +242,10 @@ export function ProPlayersPage() {
       {/* Acima da barra de abas; escalar e começar o jogo ficam na aba Jogo */}
       <div className="safe-bottom above-tabbar fixed inset-x-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-lg gap-2">
+          <Button variant="secondary" size="lg" disabled={enviandoLink} onClick={enviarLinkDeCadastro}>
+            <Link2 size={18} />
+            Link de cadastro
+          </Button>
           <Button
             size="lg"
             className="flex-1"
