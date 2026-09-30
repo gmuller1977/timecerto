@@ -4,6 +4,7 @@ import { useHydrated } from '@/store/useHydrated';
 import { useJogoStore } from '@/store/useJogoStore';
 import { HashRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { HomePage } from '@/pages/HomePage';
+import { AberturaPage } from '@/pages/AberturaPage';
 import { JogosPage } from '@/pages/JogosPage';
 import { JogoPage } from '@/pages/JogoPage';
 import { RosterPage } from '@/pages/RosterPage';
@@ -121,7 +122,10 @@ export default function App() {
         <Routes>
           <Route path="/entrar" element={<LoginPage />} />
           <Route element={<ExigeConta />}>
-            <Route path="/" element={<HomePage />} />
+            {/* Etapa 7: abre direto no tipo do grupo; a escolha é só para
+                a primeira entrada, ou para trocar, por Ajustes */}
+            <Route path="/" element={<AberturaPage />} />
+            <Route path="/modo" element={<HomePage />} />
             <Route path="/profissional" element={<ProPlayersPage />} />
             <Route path="/profissional/escalacao" element={<LineupPage />} />
             {/* Foco total: sem barra de abas */}
@@ -171,7 +175,7 @@ export default function App() {
                       <SairDaConta />
                     </Suspense>
                     <Link
-                      to="/"
+                      to="/modo"
                       className="mt-3 flex items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-[15px] font-medium text-ink-100"
                     >
                       Trocar de modo

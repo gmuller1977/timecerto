@@ -49,7 +49,7 @@ export function ProPlayersPage() {
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
       <header className="safe-top flex items-start justify-between pt-6 pb-4">
         <div className="flex items-start gap-2">
-          <button onClick={() => navigate('/')} className="p-1 pt-0.5 text-ink-400">
+          <button onClick={() => navigate('/modo')} className="p-1 pt-0.5 text-ink-400">
             <ArrowLeft size={22} />
           </button>
           <div>

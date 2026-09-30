@@ -172,6 +172,29 @@ export async function findMyGroup(mode: AppMode): Promise<CloudGroup | null> {
   return g ? toGroup(g) : null;
 }
 
+/**
+ * Os grupos que a conta administra — dona ou organizadora —, com o TIPO de
+ * cada um. O tipo é do grupo, não da pessoa (docs/telas-amador.md, etapa 7):
+ * é daqui que a abertura sabe se o app é amador ou profissional.
+ */
+export async function meusGrupos(): Promise<{ id: string; name: string; mode: AppMode }[]> {
+  const eu = await uid();
+  const [donos, membros] = await Promise.all([
+    db().from('groups').select('id, name, mode, created_at').eq('owner_id', eu).order('created_at'),
+    db().from('group_members').select('group_id').eq('user_id', eu).eq('role', 'organizador'),
+  ]);
+  if (donos.error) throw donos.error;
+  if (membros.error) throw membros.error;
+  const lista = (donos.data ?? []).map((g) => ({ id: g.id, name: g.name, mode: g.mode as AppMode }));
+  const outros = (membros.data ?? []).map((m) => m.group_id).filter((id) => !lista.some((g) => g.id === id));
+  if (outros.length) {
+    const { data, error } = await db().from('groups').select('id, name, mode').in('id', outros);
+    if (error) throw error;
+    lista.push(...(data ?? []).map((g) => ({ id: g.id, name: g.name, mode: g.mode as AppMode })));
+  }
+  return lista;
+}
+
 // ── Administradores (migração 012) ──────────────────────────
 
 export interface Administrador {

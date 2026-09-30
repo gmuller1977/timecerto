@@ -18,6 +18,8 @@ import { TabBar, rememberPath, savedScroll, tabOf } from '@/components/ui/TabBar
  */
 export function TabLayout() {
   const hydrated = useHydrated();
+  // O tipo do grupo (etapa 7), lembrado no aparelho pela abertura — é o que
+  // responde sem rede. Não é mais uma escolha feita a cada abertura
   const mode = useAppStore((s) => s.mode) ?? 'amador';
   const { pathname, search, state } = useLocation();
   const active = tabOf(pathname);

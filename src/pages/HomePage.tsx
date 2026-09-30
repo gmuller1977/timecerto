@@ -1,9 +1,10 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ClipboardList, Radio, Shuffle, UserRound } from 'lucide-react';
+import { ChevronRight, ClipboardList, Radio, Shuffle } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
 import { SPORT_LIST } from '@/lib/sports';
-import { hasSavedSession, isCloudAvailable as isSupabaseConfigured } from '@/lib/sessao';
+import { hasSavedSession } from '@/lib/sessao';
 import type { AppMode } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -39,10 +40,36 @@ const MODES: {
 ];
 
 
+/**
+ * A escolha do tipo (`/modo`). Desde a etapa 7 (docs/telas-amador.md) não é
+ * mais a abertura: aparece na primeira entrada, quando a conta ainda não tem
+ * grupo ou tem dos dois tipos, e por Ajustes › Trocar de modo. Cada cartão
+ * mostra o grupo daquele tipo — escolher o tipo é escolher o grupo.
+ */
 export function HomePage() {
   const navigate = useNavigate();
   const live = useMatchStore((s) => s.live);
   const setMode = useAppStore((s) => s.setMode);
+  const [grupos, setGrupos] = useState<Partial<Record<AppMode, string>>>({});
+
+  useEffect(() => {
+    if (!hasSavedSession()) return;
+    let vivo = true;
+    import('@/lib/cloud')
+      .then(({ meusGrupos }) => meusGrupos())
+      .then((lista) => {
+        if (!vivo) return;
+        const porTipo: Partial<Record<AppMode, string>> = {};
+        for (const g of lista) porTipo[g.mode] ??= g.name;
+        setGrupos(porTipo);
+      })
+      .catch(() => {
+        /* sem rede: os cartões ficam sem o nome do grupo */
+      });
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   function enter(mode: AppMode, to: string) {
     setMode(mode);
@@ -58,15 +85,6 @@ export function HomePage() {
           </h1>
           <p className="mt-1 text-sm text-ink-400">Como você joga hoje?</p>
         </div>
-        {isSupabaseConfigured && (
-          <button
-            onClick={() => navigate('/entrar')}
-            className="mt-1 flex shrink-0 items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2 text-xs font-medium text-ink-300"
-          >
-            <UserRound size={15} />
-            {hasSavedSession() ? 'Minha conta' : 'Entrar'}
-          </button>
-        )}
       </header>
 
       {live && (
@@ -109,6 +127,11 @@ export function HomePage() {
                     {m.title}
                   </span>
                   <span className="block text-xs text-ink-400">{m.tagline}</span>
+                  {grupos[m.id] && (
+                    <span className="mt-0.5 block truncate text-xs font-medium text-brand-300">
+                      Seu grupo: {grupos[m.id]}
+                    </span>
+                  )}
                 </span>
                 <span className="shrink-0 text-lg">{m.sports}</span>
               </div>
@@ -121,7 +144,7 @@ export function HomePage() {
       </div>
 
       <p className="mt-6 text-center text-xs leading-relaxed text-ink-600">
-        Dá para trocar de modo a qualquer momento.
+        Dá para trocar depois, em Ajustes.
         <br />
         Cada modo tem o seu próprio cadastro de jogadores.
       </p>

@@ -15,9 +15,9 @@ classificar mensalista ou convidado, marcar presença e lançar o jogo. O
 cadastro de uma pessoa acontece uma vez; a presença acontece toda semana. Hoje
 a tarefa frequente carrega o peso da tarefa rara.
 
-**`InvitePage` tem 30 KB** e virou um segundo centro acidental — convites,
-aprovações pendentes, links. Não cresceu por decisão: cresceu porque não havia
-outro lugar para pôr essas coisas.
+**`InvitePage` tem 32 KB** e virou um segundo centro acidental — convites,
+aprovações pendentes, links, e até o cadastro de mensalista. Não cresceu por
+decisão: cresceu porque não havia outro lugar para pôr essas coisas.
 
 **Não existe endereço para configuração nem financeiro.** Regra de vaga, valor
 da mensalidade, local, horário, conta: nada tem lugar. `Expense` e `Payment`
@@ -31,8 +31,8 @@ estava nas outras.
 
 | Aba | Ícone | O que responde |
 | --- | --- | --- |
-| Jogo | `Volleyball` | Quem vem hoje e o que vai acontecer agora |
-| Elenco | `Users` | Quem é do grupo |
+| Jogo | `Volleyball` | O jogo de hoje: criar, convidar, sortear, pontuar |
+| Atletas | `Users` | Quem é do grupo, e quem entra nele |
 | Financeiro | `Wallet` | Quem pagou e quanto entrou |
 | Ajustes | `Settings` | Como o grupo funciona |
 
@@ -50,57 +50,95 @@ não merece bloquear a abertura toda vez.
 
 ## Aba Jogo
 
-Responde "quem vem hoje e o que acontece agora". É a tela mais usada do app e a
-única que precisa funcionar com o celular numa mão, na beira da quadra.
+Responde "o jogo de hoje". É a tela mais usada do app e a única que precisa
+funcionar com o celular numa mão, na beira da quadra.
 
-**A separação que resolve a bagunça:** confirmar presença deixa de morar na
-lista de cadastro. Aqui a linha do jogador tem nome, um selo de mensalista ou
-convidado, e um toque. Sem estrela, sem seletor de posição, sem lixeira. Quem
-quiser mudar nível ou função vai ao Elenco — e quase nunca quer, no minuto
-antes do jogo.
+O jogo tem ciclo: **criar → convidar → confirmar → sortear → pontuar**. A aba
+acompanha esse ciclo e mostra só o que importa no estágio em que o jogo está.
+
+### O jogo é uma entidade, não uma lista
+
+Hoje presença é um booleano no jogador (`Player.present`) — existe um estado de
+presença, nunca um jogo. Isso não sustenta o que a aba precisa fazer: convidar
+para uma data, receber confirmações, e começar de novo na semana seguinte sem
+apagar o histórico.
+
+Precisa existir um **`Jogo`** com data, local, horário, vagas e a lista de
+confirmações. `Player.present` deixa de ser a verdade e vira uma consequência
+do jogo aberto. É a mudança de domínio desta etapa — sem ela, convite de jogo
+não tem a que se referir.
+
+### Os dois tipos de convite
+
+São coisas diferentes e moram em abas diferentes:
+
+| | Convite de jogo | Convite de cadastro |
+| --- | --- | --- |
+| Aba | **Jogo** | **Atletas** |
+| Diz | "Tem jogo quinta, você vem?" | "Entra para o grupo" |
+| Para quem | Quem já está cadastrado | Quem ainda não existe no app |
+| Resultado | Uma confirmação | Um cadastro novo |
+| Validade | Aquele jogo | Permanente |
+
+Hoje os dois estão misturados na `InvitePage`, e o cadastro de mensalista
+acabou morando dentro de "convites" — que por sua vez é alcançado pelo Elenco.
+É essa cadeia que precisa ser desfeita.
 
 ### Blocos, de cima para baixo
 
 1. **Partida em andamento**, quando existe. Faixa verde com o placar atual,
-   leva ao placar. Some quando não há jogo.
-2. **Cabeçalho do dia** — data, local e horário vindos de Ajustes. Tocável
-   para mudar só nesta data.
-3. **Contador de vagas** — `12 confirmados · 2 vagas · 3 na fila`. É a leitura
-   de `lib/vagas.ts` em uma linha.
-4. **Lista de confirmação**, em três grupos: confirmados, fila de convidados,
-   ausentes. Toque alterna presença; arrastar não faz nada (gesto perigoso em
-   tela de pressa).
+   leva ao placar.
+2. **O jogo** — data, local, horário e vagas. Sem jogo aberto, este bloco é um
+   botão "Criar jogo" que já vem preenchido com os padrões de Ajustes.
+3. **Convidar** — botão que dispara o convite do jogo no WhatsApp. Dois
+   destinos: mensalistas (todos de uma vez) e convidados (escolhidos da base).
+4. **Confirmações** — `12 confirmados · 2 vagas · 3 na fila`, e a lista em três
+   grupos: confirmados, fila de convidados, sem resposta. Toque alterna a
+   confirmação manualmente, para quem respondeu por fora.
 5. **Botão de ação fixo** — `Sortear (12)` como primário e `Partida direta`
-   como secundário, como hoje.
-6. **Últimas partidas** — três linhas, só placar e data, com "ver todas". Não é
-   estatística; é memória curta de quem quer saber quanto deu semana passada.
+   como secundário.
+6. **Últimas partidas** — três linhas, só placar e data, com "ver todas".
 
 ### Decisões
 
-**O seletor de esporte sai daqui.** Vira uma configuração do grupo em Ajustes.
-Um grupo de pelada joga um esporte; trocar futebol por vôlei toda semana não é
-o caso real, e o seletor no topo custa espaço em toda abertura.
+**A linha do jogador aqui é mínima:** nome, selo de mensalista ou convidado, e
+um toque. Sem estrela, sem seletor de posição, sem lixeira. Quem quiser mudar
+nível ou função vai em Atletas — e quase ninguém quer, no minuto antes do jogo.
+
+**O seletor de esporte sai daqui.** Vira configuração do grupo em Ajustes.
 
 **Adicionar avulso continua aqui**, como botão discreto no fim da lista: chega
-alguém de última hora e ninguém quer sair da tela para cadastrar. Ele cria um
-convidado com o mínimo — só nome — e o resto se completa depois no Elenco.
+alguém de última hora e ninguém quer sair da tela. Cria um convidado só com o
+nome; o resto se completa depois em Atletas.
 
-## Aba Elenco
+## Aba Atletas
 
-Responde "quem é do grupo". Tela de manutenção, usada sentado, sem pressa — o
-oposto da aba Jogo. Aqui cabe formulário, campo longo e confirmação.
+Responde "quem é do grupo, e quem entra nele". Tela de manutenção, usada
+sentado, sem pressa — o oposto da aba Jogo. Aqui cabe formulário, campo longo e
+confirmação.
+
+O nome é **Atletas**, não Elenco: elenco é quem foi escalado, e isso é conceito
+do modo profissional. Aqui são as pessoas do grupo, escaladas ou não.
+
+### Desfazer a cadeia atual
+
+Hoje o cadastro de mensalista mora dentro da `InvitePage`, que por sua vez é
+alcançada pelo Elenco. Cadastrar alguém exige atravessar uma tela de convites —
+duas ideias diferentes empilhadas porque o link precisava de um lugar.
+
+O certo é o inverso: o cadastro é a tela, e o convite é um botão dentro dela.
 
 ### Duas listas, não uma
 
-**Mensalistas** e **base de convidados** são cadastros com naturezas
-diferentes e merecem seções separadas, com contagem própria em cada cabeçalho.
+**Mensalistas** e **base de convidados** são cadastros de naturezas diferentes
+e merecem seções separadas, com contagem própria.
 
 O mensalista tem vínculo: paga fixo, tem vaga garantida quando confirma, e o
 grupo conta com ele. O convidado é um conhecido que joga quando sobra vaga — e
-a base existe justamente para não redigitar o nome dele toda semana.
+a base existe para não redigitar o nome dele toda semana.
 
-A distinção já é a régua de duas coisas: `lib/vagas.ts` decide quem entra, e o
-Financeiro decide quem cobra de que jeito. Mover alguém de convidado para
+A distinção já é a régua de duas coisas: `lib/vagas.ts` decide quem entra no
+jogo, e o Financeiro decide quem cobra de que jeito. Promover um convidado a
 mensalista é uma ação de uma linha na ficha, e deve ficar visível — é o momento
 em que o grupo ganha um membro.
 
@@ -108,12 +146,19 @@ em que o grupo ganha um membro.
 
 1. **Busca**, acima de tudo, a partir de ~10 pessoas.
 2. **Pendentes de aprovação**, quando houver. Bloco no topo, em âmbar, com
-   aprovar e recusar na própria linha. Vem da `InvitePage`, que deixa de
-   existir como tela.
-3. **Mensalistas** — lista com nome, apelido, função e nível.
-4. **Base de convidados** — mesma linha, selo diferente.
-5. **Botão Convidar** no cabeçalho, que gera e compartilha o link. É uma ação,
-   não uma tela.
+   aprovar e recusar na própria linha. Vem da `InvitePage`.
+3. **Mensalistas** — lista com nome, apelido, função e nível. Cabeçalho da
+   seção tem **Convidar mensalista**, que gera o link de cadastro.
+4. **Convidados** — mesma linha, selo diferente. Cabeçalho tem **Adicionar
+   convidado**, cadastro direto, sem link.
+5. **Botão de cadastro manual** fixo no rodapé, para quem prefere digitar a
+   ficha inteira.
+
+### Por que o convite de cadastro fica aqui
+
+Ele produz um cadastro, e cadastro é o assunto desta aba. O convite de jogo
+produz uma confirmação e fica na aba Jogo. A regra para decidir qualquer dúvida
+futura: **o convite mora onde mora a coisa que ele cria.**
 
 ### A ficha do jogador
 
@@ -123,7 +168,7 @@ lista e a `PlayerSheet`; consolidar numa folha só tira os seletores de dentro
 da lista, que é metade da poluição visual da tela atual.
 
 Telefone e nascimento continuam visíveis apenas para o administrador, como já
-estão marcados nos tipos.
+está marcado nos tipos.
 
 ## Aba Financeiro
 
@@ -212,8 +257,8 @@ Nenhuma tela é jogada fora. Quase tudo muda de endereço.
 | Tela atual | Vai para | Observação |
 | --- | --- | --- |
 | `HomePage` | Ajustes › Modo | Deixa de ser a abertura |
-| `PlayersPage` | Divide em duas | Presença → Jogo; cadastro → Elenco |
-| `InvitePage` (30 KB) | Dissolve | Pendentes → Elenco; link → botão |
+| `PlayersPage` | Divide em duas | Confirmação → Jogo; cadastro → Atletas |
+| `InvitePage` (32 KB) | Divide em três | Cadastro e link → Atletas; convite de jogo → Jogo; pendentes → Atletas |
 | `LoginPage` | Ajustes › Conta | Rota `/entrar` continua, para links |
 | `DrawPage` | Jogo, com padrões de Ajustes | Vira um toque na maioria das vezes |
 | `ResultPage` | Jogo | Sem mudança |
@@ -221,10 +266,11 @@ Nenhuma tela é jogada fora. Quase tudo muda de endereço.
 | `ScoreboardPage` | Jogo, sem barra de abas | Tela de foco total |
 | `MatchSummaryPage` | Jogo | Chegada natural do placar |
 | `HistoryPage` | Jogo › ver todas | Não vira aba |
-| `PlayerProfilePage` | Elenco | Some do modo amador se não houver scout |
+| `PlayerProfilePage` | Atletas | Some do amador se não houver scout |
 | `GuestGroupPage` e irmãs | Fora das abas | São páginas públicas de link |
 | — | **Financeiro** | Aba nova |
 | — | **Ajustes** | Aba nova |
+| — | **`Jogo` no domínio** | Entidade nova: data, vagas, confirmações |
 
 ### O caso das páginas de convidado
 
@@ -232,43 +278,105 @@ Nenhuma tela é jogada fora. Quase tudo muda de endereço.
 do WhatsApp. Elas não mostram barra de abas nem menu — quem chega ali tem uma
 tarefa só e não é dono de nada. Continuam como estão, fora da estrutura.
 
+## O grupo é o contexto
+
+O app assume um grupo só, e guardava o modo na pessoa (`useAppStore.mode`).
+As duas coisas estão erradas, e a segunda é a que trava a primeira.
+
+### O modo pertence ao grupo
+
+"Pelada de quinta" é um grupo amador. "Sub-17 feminino" é um time
+profissional. O tipo é característica do grupo, não de quem o administra — a
+mesma pessoa pode ter uma pelada e treinar um time.
+
+Com o modo na pessoa, trocar de contexto exige dois passos: mudar o modo e
+depois achar o grupo. Com o modo no grupo, é um passo: escolher o grupo. O app
+se configura sozinho, com as abas e o vocabulário daquele tipo.
+
+### O fluxo
+
+Entrar → escolher o grupo → o app se configura. Sem tela de modo no meio.
+
+### A escolha não pode ser pedágio
+
+A maioria dos administradores tem um grupo. Obrigar essa maioria a atravessar
+uma tela de seleção em toda abertura, para servir a minoria que tem dois, é
+cobrar de todos pelo caso raro — o mesmo erro do menu de modos.
+
+- O app abre no último grupo usado.
+- O nome do grupo no cabeçalho é o seletor. Toca e troca.
+- A tela de escolha aparece só no primeiro login, ou quando não há grupo
+  lembrado.
+
+### Como isso encaixa no plano
+
+O plano já é do grupo (`lib/plano.ts`): preço acompanhando valor, e o técnico
+com quatro times pagando quatro vezes. Com o tipo também no grupo, os dois
+andam juntos — e abre a porta para faixas diferentes por tipo.
+
+## Multi-grupo: o que fazer agora e o que adiar
+
+**O banco já aguenta.** `group_members` é muitos-para-muitos e não há trava
+obrigando um grupo por pessoa. Multi-grupo é problema exclusivamente do app.
+
+**O que trava do lado do app.** Todo store persistido assume "o grupo":
+`useAppStore` guarda um elenco, `useJogoStore` um conjunto de jogos, o
+financeiro um caixa. Nenhum deles sabe a qual grupo pertence. Fazer multi-grupo
+é particionar cada store por grupo e migrar o que existe sem perder nada — um
+refactor transversal.
+
+**Por que adiar.** Ninguém tem dois grupos ainda; colide com o trabalho em
+andamento; e o banco já suporta, então nada está sendo fechado.
+
+**Quando entrar.** O gatilho é o primeiro usuário real com dois grupos — não
+uma data: um `grupoAtivo` lembrado entre sessões, cada store com a chave do
+localStorage incluindo o id, o conteúdo atual virando o do único grupo
+existente, seletor no cabeçalho.
+
 ## Ordem de implementação
 
-Cinco etapas. Cada uma deixa o app funcionando — nenhuma depende da seguinte
-para fazer sentido.
+Cada etapa deixa o app funcionando — nenhuma depende da seguinte para fazer
+sentido. O financeiro e o plano vieram fora de ordem.
 
-**1. A barra de abas, com as telas de hoje.** Criar
-`components/ui/TabBar.tsx` e um layout com `<Outlet>`. As abas apontam para o
-que já existe: Jogo → `PlayersPage`, Elenco → `PlayersPage`, Financeiro e
-Ajustes → placeholders. Nada quebra, e a navegação nova já pode ser sentida.
-Esconder a barra em `/placar` e `/sortear`.
+**1. A barra de abas, com as telas de hoje.** ✓ Feita. `TabBar`, `TabLayout` e
+`EmBrevePage`, com a barra escondida em `/placar` e `/sortear` e respeitando a
+hidratação.
 
-**2. Quebrar a `PlayersPage` em duas.** `TodayPage` fica com presença, vagas e
-os botões de ação; `RosterPage` fica com cadastro, mensalistas e base de
-convidados. Nenhuma funcionalidade nova — só separar. Esta etapa é a que
-resolve a queixa original.
+**2. Quebrar a `PlayersPage` em duas.** ✓ Feita. `JogoPage` fica com
+confirmação e os botões de ação; `AtletasPage` fica com cadastro, mensalistas e
+convidados. Aba Elenco renomeada para **Atletas**.
 
-**3. Dissolver a `InvitePage`.** Pendentes vão para o topo do Elenco; gerar
-link vira botão. É a etapa com maior risco de regressão, porque os links do
-WhatsApp dependem dela — conferir os quatro fluxos de convidado antes de
-fechar.
+**3. A entidade `Jogo`.** ✓ Feita. Data, local, horário, vagas e confirmações.
+`Player.present` migrado para confirmação do jogo aberto.
 
-**4. Ajustes.** Grupo, vagas, valores, sorteio, conta, modo. Muitos dos valores
-já existem em `useAppStore`; aqui eles ganham tela e passam a ser editáveis.
-Tirar o seletor de esporte da aba Jogo só nesta etapa, quando já houver onde
-configurá-lo.
+**4. Separar os dois convites.** ✓ Feita. Convite de cadastro em Atletas
+(Convidar, com mensalista ou convidado); convite de jogo na aba Jogo.
 
-**5. Financeiro.** Store novo, telas novas, e a ligação com `lib/vagas.ts` no
-fechamento do jogo. É a maior das cinco e a única que cria domínio novo — por
-isso vem por último, com a navegação já estável embaixo dela.
+**5. Ajustes.** Em parte. Já tem nome do grupo, plano, financeiro,
+administradores, avisos, sair da conta e trocar de modo. Faltam local, horário
+e vagas padrão, os padrões do sorteio, e levar o seletor de esporte da aba Jogo
+para cá.
+
+**6. Financeiro.** ✓ Feita (migrações 017 a 020). Mensalidade, diária, avulsa,
+Pix, cobrança no WhatsApp, recebimentos, despesas, caixa.
+
+**7. O tipo do grupo.** ✓ Feita em 30/09/2026. A coluna já existia:
+`groups.mode` ('amador' | 'profissional') sempre guardou o tipo, e cada grupo
+nasceu com o certo — criar `tipo` seria duplicá-la, então não houve migração.
+`/` é a `AberturaPage`: abre direto no tipo lembrado (`useAppStore.mode`, que
+agora é a lembrança do tipo do último grupo, e responde sem rede); sem
+lembrança, pergunta à nuvem (`meusGrupos`) e, com grupos de um tipo só, é esse.
+A `HomePage` saiu da abertura e virou `/modo`, que aparece só sem grupo, com os
+dois tipos, ou por Ajustes › Trocar de modo — e mostra o grupo de cada tipo.
+O seletor no cabeçalho fica para a etapa 8, porque só serve a quem tem dois.
+
+**8. Multi-grupo.** Só quando aparecer o primeiro usuário real com dois grupos.
+Particionar os stores por grupo, seletor no cabeçalho, tela de escolha só no
+primeiro login. Não é para esta semana.
 
 ### Para o Claude Code
 
-Uma etapa por sessão. As duas primeiras são reorganização pura e devem sair sem
-nenhum comportamento novo — se aparecer funcionalidade nova na etapa 1 ou 2,
-alguma coisa saiu do trilho.
-
-Rodar a revisão do projeto ao fim de cada etapa. Prestar atenção especial à
-hidratação: a barra de abas monta antes do `localStorage` terminar de ser lido,
-e decidir qual aba mostrar antes disso repete o bug que já custou a perda de
-partida em andamento.
+Uma etapa por sessão. Rodar a revisão do projeto ao fim de cada etapa. Prestar
+atenção especial à hidratação: a barra de abas monta antes do localStorage
+terminar de ser lido, e decidir qual aba mostrar antes disso repete o bug que
+já custou a perda de partida em andamento.
