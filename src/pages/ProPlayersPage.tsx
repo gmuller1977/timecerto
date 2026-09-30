@@ -8,19 +8,10 @@ import { avisoDeLimite } from '@/lib/plano';
 import { usePremium } from '@/store/usePlano';
 import { Button } from '@/components/ui/Button';
 import { ProPlayerSheet } from '@/components/pro/ProPlayerSheet';
-import { useProStore, matchesFilter } from '@/store/useProStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { AGE_GROUPS, AGE_GROUP_LABEL, NAIPES, NAIPE_LABEL, ageOn, bodyLine, linhaDePosicoes } from '@/lib/pro';
+import { AGE_GROUP_LABEL, NAIPE_LABEL, ageOn, bodyLine, linhaDePosicoes } from '@/lib/pro';
 import type { ProPlayer } from '@/types';
-import { cn, initials } from '@/lib/utils';
-
-const chip = (active: boolean) =>
-  cn(
-    'shrink-0 rounded-xl border px-3 py-2 text-sm font-medium',
-    active
-      ? 'border-brand-500 bg-brand-500/15 text-brand-300'
-      : 'border-ink-800 bg-ink-900 text-ink-400',
-  );
+import { initials } from '@/lib/utils';
 
 export function ProPlayersPage() {
   const navigate = useNavigate();
@@ -29,9 +20,7 @@ export function ProPlayersPage() {
   const players = useMemo(() => cadastro.filter((p) => !p.pending).map(comoPro), [cadastro]);
   // Pedidos do link de cadastro (migração 027): aguardam o técnico aprovar
   const pendentes = useMemo(() => cadastro.filter((p) => p.pending), [cadastro]);
-  const filter = useProStore((s) => s.filter);
   const time = useGrupoAtivo();
-  const setFilter = useProStore((s) => s.setFilter);
   const addPlayerCompleto = useAppStore((s) => s.addPlayerCompleto);
   const updatePlayerUnico = useAppStore((s) => s.updatePlayer);
   const removePlayer = useAppStore((s) => s.removePlayer);
@@ -73,15 +62,8 @@ export function ProPlayersPage() {
   const [editing, setEditing] = useState<ProPlayer | 'novo' | null>(null);
 
   const shown = players
-    .filter((p) => matchesFilter(p, filter))
     .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
 
-  const scope = [
-    filter.ageGroup && AGE_GROUP_LABEL[filter.ageGroup],
-    filter.naipe && NAIPE_LABEL[filter.naipe],
-  ]
-    .filter(Boolean)
-    .join(' ');
 
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
@@ -89,6 +71,18 @@ export function ProPlayersPage() {
         <div className="flex items-start gap-2">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Atletas</h1>
+            {/* Em qual grupo se está (pedido do Guilherme, 30/09/2026) */}
+            {time?.name && (
+              <p className="mt-0.5 truncate text-sm font-semibold text-brand-300">
+                {time.name}
+                {time.ageGroup && time.naipe && (
+                  <span className="font-normal text-ink-400">
+                    {' '}
+                    · {AGE_GROUP_LABEL[time.ageGroup]} {NAIPE_LABEL[time.naipe]}
+                  </span>
+                )}
+              </p>
+            )}
             <p className="mt-0.5 text-sm text-ink-400">
               🏐 {players.length} {players.length === 1 ? 'atleta' : 'atletas'}
             </p>
@@ -153,39 +147,6 @@ export function ProPlayersPage() {
         </button>
       )}
 
-      {players.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-            <button onClick={() => setFilter({ ageGroup: null })} className={chip(!filter.ageGroup)}>
-              Todas
-            </button>
-            {AGE_GROUPS.map((g) => (
-              <button
-                key={g.id}
-                onClick={() => setFilter({ ageGroup: g.id })}
-                className={chip(filter.ageGroup === g.id)}
-              >
-                {g.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button onClick={() => setFilter({ naipe: null })} className={chip(!filter.naipe)}>
-              Todos
-            </button>
-            {NAIPES.map((n) => (
-              <button
-                key={n.id}
-                onClick={() => setFilter({ naipe: n.id })}
-                className={chip(filter.naipe === n.id)}
-              >
-                {n.label}
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       <div className="mt-4 flex flex-col gap-2">
         {shown.map((p) => {
           const age = p.birthDate ? ageOn(p.birthDate) : null;
@@ -231,13 +192,6 @@ export function ProPlayersPage() {
           </p>
         </div>
       )}
-      {players.length > 0 && shown.length === 0 && (
-        <p className="mt-8 text-center text-sm leading-relaxed text-ink-400">
-          Nenhum atleta em {scope}.
-          <br />
-          Troque o filtro ou cadastre um novo — ele já entra nessa categoria.
-        </p>
-      )}
 
       {/* Acima da barra de abas; escalar e começar o jogo ficam na aba Jogo */}
       <div className="safe-bottom above-tabbar fixed inset-x-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
@@ -267,8 +221,8 @@ export function ProPlayersPage() {
           doTime={time ? { ageGroup: time.ageGroup ?? null, naipe: time.naipe ?? null } : undefined}
           defaults={{
             // O filtro da tela manda; sem filtro, o padrão do time (migração 024)
-            ageGroup: filter.ageGroup ?? time?.ageGroup ?? null,
-            naipe: filter.naipe ?? time?.naipe ?? null,
+            ageGroup: time?.ageGroup ?? null,
+            naipe: time?.naipe ?? null,
           }}
           onClose={() => setEditing(null)}
           onSave={(draft) => {

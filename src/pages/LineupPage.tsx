@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { camposDoPro, comoPro, linhaDePosicoes } from '@/lib/pro';
+import { camposDoPro, linhaDePosicoes } from '@/lib/pro';
 import type { TipoDeJogo } from '@/types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -13,9 +13,8 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useProStore, matchesFilter } from '@/store/useProStore';
+import { useProStore } from '@/store/useProStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { AGE_GROUP_LABEL, NAIPE_LABEL, proToPlayer } from '@/lib/pro';
 import { useHydrated } from '@/store/useHydrated';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ROTATIONS, ROTATION_LIST } from '@/lib/rotation';
@@ -49,9 +48,7 @@ function LineupEditor() {
   const navigate = useNavigate();
   // Fase 2: o elenco mora no cadastro único
   const cadastro = useAppStore((s) => s.players);
-  const proPlayers = useMemo(() => cadastro.filter((p) => !p.pending).map(comoPro), [cadastro]);
   const updatePlayerUnico = useAppStore((s) => s.updatePlayer);
-  const filter = useProStore((s) => s.filter);
   const saved = useProStore((s) => s.lastLineup);
   const saveLineup = useProStore((s) => s.saveLineup);
   const live = useMatchStore((s) => s.live);
@@ -59,22 +56,13 @@ function LineupEditor() {
   const doJogo = useLocation().state as { competicao?: TipoDeJogo; jogoId?: string } | null;
   const competicao = doJogo?.competicao;
 
-  // A quadra, a validação e o sugerir falam `Player`
-  const players = useMemo(() => proPlayers.map(proToPlayer), [proPlayers]);
-  // Disponíveis = o recorte de categoria e naipe escolhido no elenco
-  const volleyPlayers = useMemo(() => {
-    const ids = new Set(
-      proPlayers.filter((p) => matchesFilter(p, filter)).map((p) => p.id),
-    );
-    return players.filter((p) => ids.has(p.id));
-  }, [proPlayers, players, filter]);
-  const scope =
-    [
-      filter.ageGroup && AGE_GROUP_LABEL[filter.ageGroup],
-      filter.naipe && NAIPE_LABEL[filter.naipe],
-    ]
-      .filter(Boolean)
-      .join(' ') || 'Todo o elenco';
+  // A quadra, a validação e o sugerir falam `Player` — o do cadastro único,
+  // INTEIRO: a conversão antiga (proToPlayer) descartava as outras posições,
+  // e o aviso de improviso nunca apareceria. Sem filtro: cada categoria é um
+  // grupo (Guilherme, 30/09/2026), então disponível é todo o elenco
+  const players = useMemo(() => cadastro.filter((p) => !p.pending), [cadastro]);
+  const volleyPlayers = players;
+  const scope = 'Todo o elenco';
 
   // Da escalação salva, só volta quem ainda está disponível hoje
   const [initial] = useState(() => {
