@@ -53,6 +53,9 @@ const PlanoDoGrupo = lazy(() =>
 const PerfilDoTime = lazy(() =>
   import('@/components/cloud/PerfilDoTime').then((m) => ({ default: m.PerfilDoTime })),
 );
+const ExcluirGrupo = lazy(() =>
+  import('@/components/cloud/ExcluirGrupo').then((m) => ({ default: m.ExcluirGrupo })),
+);
 const NomeDoGrupo = lazy(() =>
   import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })),
 );
@@ -180,6 +183,8 @@ export default function App() {
                         <SoNaPelada>
                           <AvisosDoAdmin />
                         </SoNaPelada>
+                        {/* Por último: é a ação que não tem volta */}
+                        <ExcluirGrupo />
                       </Suspense>
                     )}
                     {/* Com o login obrigatório, a conta só tem uma ação: sair.

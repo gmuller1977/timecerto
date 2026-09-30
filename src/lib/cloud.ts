@@ -344,6 +344,15 @@ export async function createGroup(
   return g;
 }
 
+/**
+ * Exclui o grupo e tudo dele, para sempre (migração 025). Só o dono, e só com
+ * o nome digitado — o banco confere as duas coisas de novo.
+ */
+export async function excluirGrupo(groupId: string, confirmacao: string): Promise<void> {
+  const { error } = await db().rpc('excluir_grupo', { p_group: groupId, p_confirmacao: confirmacao });
+  if (error) throw error;
+}
+
 /** Ajustes do time: categoria e naipe, o padrão de todo atleta novo */
 export async function salvarPerfilDoTime(
   groupId: string,
