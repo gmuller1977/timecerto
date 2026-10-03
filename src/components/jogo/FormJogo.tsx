@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { usePlano } from '@/store/usePlano';
-import { promoverEmPadrao, usaPromocao } from '@/lib/promocao';
+import { promoverEmPadrao, usaPromocao, type PromocaoDoGrupo } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO, type TipoDeJogo } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
@@ -58,7 +58,26 @@ export function FormJogo({
    * grupo — tantos dias antes, a tal hora — e pode ajustar. Grupo que não
    * configurou não vê nada disto, e o jogo segue a regra de sempre.
    */
-  const promoGrupo = usePlano((s) => s.grupo?.promocao);
+  const doPlano = usePlano((s) => s.grupo?.promocao);
+  // Também direto da nuvem, como em Ajustes: depender só da rodada de
+  // sincronização deixava o campo de fora quando ela não tinha trazido o grupo
+  const [daNuvem, setDaNuvem] = useState<PromocaoDoGrupo | null>(null);
+  useEffect(() => {
+    if (pro) return;
+    let vivo = true;
+    import('@/lib/cloud')
+      .then((m) => m.findActiveGroup())
+      .then((g) => {
+        if (vivo && g) setDaNuvem(g.promocao);
+      })
+      .catch(() => {
+        /* sem rede ou sem conta: fica o que a sincronização souber */
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [pro]);
+  const promoGrupo = daNuvem ?? doPlano;
   const comPromocao = !pro && (Boolean(jogo?.promoverEm) || usaPromocao(promoGrupo));
   const paraCampo = (iso: string) => {
     const d = new Date(iso);
