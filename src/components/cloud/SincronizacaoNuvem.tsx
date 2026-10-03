@@ -4,7 +4,7 @@ import { useAuth } from '@/store/useAuth';
 import { usePlano } from '@/store/usePlano';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador } from '@/lib/cloud';
+import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador, promoverVencidos } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 import { lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { ativarGrupo, esquecerGrupo, lembrarNome, lembrarPerfil } from '@/store/trocarGrupo';
@@ -97,6 +97,9 @@ async function rodar(): Promise<void> {
       grupo = await grupoDoLegado(meuId);
     }
     if (grupo) {
+      // Promoção preguiçosa (migração 028), antes de ler os jogos: a marca
+      // dispara a diária antecipada. Falhar aqui não trava a sincronização
+      await promoverVencidos(grupo).catch((e) => console.warn('promover jogos vencidos', e));
       await syncAmador(grupo);
       await sincronizarJogos(grupo);
       await sincronizarPartidas(grupo);

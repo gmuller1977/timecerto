@@ -280,8 +280,8 @@ tarefa só e não é dono de nada. Continuam como estão, fora da estrutura.
 
 ## O grupo é o contexto
 
-O app assume um grupo só, e guardava o modo na pessoa (`useAppStore.mode`).
-As duas coisas estão erradas, e a segunda é a que trava a primeira.
+O app assume um grupo só, e guarda o modo na pessoa (`useAppStore.mode`). As
+duas coisas estão erradas, e a segunda é a que trava a primeira.
 
 ### O modo pertence ao grupo
 
@@ -293,131 +293,283 @@ Com o modo na pessoa, trocar de contexto exige dois passos: mudar o modo e
 depois achar o grupo. Com o modo no grupo, é um passo: escolher o grupo. O app
 se configura sozinho, com as abas e o vocabulário daquele tipo.
 
+A tela de modo deixa de existir. A `HomePage` sai do fluxo de vez — o que já
+estava previsto, agora por um motivo mais forte.
+
 ### O fluxo
 
-Entrar → escolher o grupo → o app se configura. Sem tela de modo no meio.
+**Entrar → escolher o grupo → o app se configura.**
+
+Sem tela de modo no meio. O grupo escolhido define o tipo, as abas, o
+vocabulário e o plano.
 
 ### A escolha não pode ser pedágio
 
-A maioria dos administradores tem um grupo. Obrigar essa maioria a atravessar
-uma tela de seleção em toda abertura, para servir a minoria que tem dois, é
-cobrar de todos pelo caso raro — o mesmo erro do menu de modos.
+A maioria dos administradores tem **um** grupo. Obrigar essa maioria a
+atravessar uma tela de seleção em toda abertura, para servir a minoria que tem
+dois, é cobrar de todos pelo caso raro — o mesmo erro do menu de modos.
+
+O padrão certo:
 
 - O app abre no último grupo usado.
-- O nome do grupo no cabeçalho é o seletor. Toca e troca.
+- **O nome do grupo no cabeçalho é o seletor.** Toca e troca.
 - A tela de escolha aparece só no primeiro login, ou quando não há grupo
   lembrado.
 
 ### Como isso encaixa no plano
 
-O plano já é do grupo (`lib/plano.ts`): preço acompanhando valor, e o técnico
-com quatro times pagando quatro vezes. Com o tipo também no grupo, os dois
-andam juntos — e abre a porta para faixas diferentes por tipo.
+O plano já é do grupo (`lib/plano.ts`), o que está certo: preço acompanhando
+valor, e o técnico com quatro times pagando quatro vezes. Com o tipo também no
+grupo, os dois andam juntos — e abre a porta para faixas diferentes por tipo,
+se um dia o profissional valer mais que o amador.
 
 ## Multi-grupo: o que fazer agora e o que adiar
 
-**O banco já aguenta.** `group_members` é muitos-para-muitos e não há trava
-obrigando um grupo por pessoa. Multi-grupo é problema exclusivamente do app.
+### O banco já aguenta
 
-**O que trava do lado do app.** Todo store persistido assume "o grupo":
-`useAppStore` guarda um elenco, `useJogoStore` um conjunto de jogos, o
-financeiro um caixa. Nenhum deles sabe a qual grupo pertence. Fazer multi-grupo
-é particionar cada store por grupo e migrar o que existe sem perder nada — um
-refactor transversal.
+`group_members` é muitos-para-muitos e não há trava obrigando um grupo por
+pessoa. Um usuário já pode ser membro de vários grupos hoje, com papéis
+diferentes em cada um. Multi-grupo é problema exclusivamente do lado do app.
 
-**Por que adiar.** Ninguém tem dois grupos ainda; colide com o trabalho em
-andamento; e o banco já suporta, então nada está sendo fechado.
+### O que trava do lado do app
 
-**Quando entrar.** O gatilho é o primeiro usuário real com dois grupos — não
-uma data: um `grupoAtivo` lembrado entre sessões, cada store com a chave do
-localStorage incluindo o id, o conteúdo atual virando o do único grupo
-existente, seletor no cabeçalho.
+Todo store persistido assume "o grupo": `useAppStore` guarda um elenco,
+`useJogoStore` um conjunto de jogos, o financeiro um caixa. Nenhum deles sabe
+a qual grupo pertence.
+
+Fazer multi-grupo significa particionar cada store por grupo e migrar o que já
+existe sem perder nada. É um refactor transversal — toca em tudo de uma vez.
+
+### Por que adiar
+
+Três motivos, em ordem de peso:
+
+1. **Ninguém tem dois grupos ainda.** O app tem base pequena e nenhum caso real
+   de multi-grupo. Construir agora é resolver um problema que ninguém tem.
+2. **Colide com o que está em andamento.** Refactor transversal em paralelo com
+   trabalho ativo na mesma área é conflito garantido.
+3. **O banco já suporta, então nada está sendo fechado.** Adiar não cria dívida
+   técnica nova — só mantém a que já existe.
+
+### O que vale mover agora
+
+Uma coisa só: **o tipo do grupo sai da pessoa e vai para o grupo.**
+
+- Coluna `tipo` em `groups` (`'amador' | 'profissional'`), migração nova.
+- Grupos existentes recebem o tipo que a pessoa tem hoje em `useAppStore.mode`.
+- `useAppStore.mode` deixa de ser escolha do usuário e passa a derivar do grupo
+  carregado.
+- `TabLayout` lê o tipo do grupo, não o modo da pessoa.
+- A `HomePage` sai do fluxo de abertura.
+
+É uma migração pequena e contida, e tudo o mais assenta em cima dela. Quanto
+mais semanas passam com o modo na pessoa, mais telas passam a lê-lo de lá e
+mais caro fica arrancar.
+
+### Quando multi-grupo entrar
+
+O gatilho é o primeiro usuário real com dois grupos — não uma data. Quando
+vier, o trabalho é:
+
+- Um `grupoAtivo` (id) no topo, lembrado entre sessões.
+- Cada store persistido passa a guardar por grupo, com a chave do localStorage
+  incluindo o id.
+- Migração: o conteúdo atual vira o conteúdo do único grupo existente.
+- Seletor no cabeçalho; tela de escolha só no primeiro login.
 
 ## Ordem de implementação
 
 Cada etapa deixa o app funcionando — nenhuma depende da seguinte para fazer
-sentido. O financeiro e o plano vieram fora de ordem.
+sentido. As etapas 1 a 3 estão feitas; o financeiro e o plano vieram junto,
+fora de ordem.
 
 **1. A barra de abas, com as telas de hoje.** ✓ Feita. `TabBar`, `TabLayout` e
 `EmBrevePage`, com a barra escondida em `/placar` e `/sortear` e respeitando a
 hidratação.
 
-**2. Quebrar a `PlayersPage` em duas.** ✓ Feita. `JogoPage` fica com
-confirmação e os botões de ação; `AtletasPage` fica com cadastro, mensalistas e
-convidados. Aba Elenco renomeada para **Atletas**.
+**2. Quebrar a `PlayersPage` em duas.** `JogoPage` fica com confirmação e os
+botões de ação; `AtletasPage` fica com cadastro, mensalistas e convidados.
+Renomear a aba Elenco para **Atletas**. Nenhuma funcionalidade nova — só
+separar. Junto: tirar a seta de voltar das raízes de aba, usar o nome da aba
+como título, e corrigir o contador da `DrawPage`, que anuncia mais jogadores em
+quadra do que há presentes.
 
-**3. A entidade `Jogo`.** ✓ Feita. Data, local, horário, vagas e confirmações.
-`Player.present` migrado para confirmação do jogo aberto.
+**3. A entidade `Jogo`.** Data, local, horário, vagas e confirmações.
+`Player.present` deixa de ser a verdade e passa a derivar do jogo aberto.
+Migrar o estado atual: quem está `present` hoje vira confirmação de um jogo
+criado na migração, para ninguém perder a lista da semana.
 
-**4. Separar os dois convites.** ✓ Feita. Convite de cadastro em Atletas
-(Convidar, com mensalista ou convidado); convite de jogo na aba Jogo.
+**4. Separar os dois convites.** Convite de cadastro e seu link vão para
+Atletas; convite de jogo nasce na aba Jogo, apoiado na entidade da etapa 3. A
+`InvitePage` se dissolve. É a etapa de maior risco de regressão — os quatro
+fluxos de link do WhatsApp dependem dela e precisam ser conferidos um a um
+antes de fechar.
 
-**5. Ajustes.** Em parte. Já tem nome do grupo, plano, financeiro,
-administradores, avisos, sair da conta e trocar de modo. Faltam local, horário
-e vagas padrão, os padrões do sorteio, e levar o seletor de esporte da aba Jogo
-para cá.
+**5. Ajustes.** Grupo, vagas, valores, sorteio, conta, modo. Muitos valores já
+existem em `useAppStore`; aqui ganham tela. Tirar o seletor de esporte da aba
+Jogo só nesta etapa, quando já houver onde configurá-lo.
 
-**6. Financeiro.** ✓ Feita (migrações 017 a 020). Mensalidade, diária, avulsa,
-Pix, cobrança no WhatsApp, recebimentos, despesas, caixa.
+**6. Financeiro.** Store novo, telas novas, e a ligação com `lib/vagas.ts` no
+fechamento do jogo. A maior de todas e a única que cria domínio financeiro.
 
-**7. O tipo do grupo.** ✓ Feita em 30/09/2026. A coluna já existia:
-`groups.mode` ('amador' | 'profissional') sempre guardou o tipo, e cada grupo
-nasceu com o certo — criar `tipo` seria duplicá-la, então não houve migração.
-`/` é a `AberturaPage`: abre direto no tipo lembrado (`useAppStore.mode`, que
-agora é a lembrança do tipo do último grupo, e responde sem rede); sem
-lembrança, pergunta à nuvem (`meusGrupos`) e, com grupos de um tipo só, é esse.
-A `HomePage` saiu da abertura e virou `/modo`, que aparece só sem grupo, com os
-dois tipos, ou por Ajustes › Trocar de modo — e mostra o grupo de cada tipo.
-O seletor no cabeçalho fica para a etapa 8, porque só serve a quem tem dois.
+**7. O tipo do grupo.** Coluna `tipo` em `groups`, `useAppStore.mode` passa a
+derivar do grupo carregado, `TabLayout` lê de lá, e a `HomePage` sai do fluxo
+de abertura. Pequena e contida — e fica mais cara a cada semana que passa.
+Detalhe em **Multi-grupo: o que fazer agora e o que adiar**.
 
-**8. Multi-grupo.** ✓ Feita em 30/09/2026, a pedido do Guilherme. Um grupo
-ativo lembrado no aparelho (`lib/grupoAtivo.ts`), e cada store persistido
-numa chave do grupo (`timecerto:v1@<id>`); trocar de grupo é trocar de chave
-(`store/trocarGrupo.ts`). O conteúdo de antes — com os dois modos misturados
-— é ADOTADO por tipo: o primeiro grupo amador leva o que era da pelada, o
-primeiro profissional leva o elenco e as partidas do profissional, e o segundo
-grupo de um tipo nasce vazio. O nome do grupo no alto de Jogo e do elenco
-profissional é o seletor; `/modo` virou a lista dos grupos, com "Criar novo
-grupo". Perder o acesso ao grupo ativo apaga só a cópia dele.
-
-## O profissional com as mesmas abas
-
-Pedido do Guilherme em 30/09/2026: Jogo, Atletas, Financeiro e Ajustes também
-no profissional. Os dois cadastros de atleta são diferentes (a pelada tem
-nível, posição e mensalista/convidado; o time tem categoria, naipe, altura e
-peso), então em três fases:
-
-**Fase 1. A casca e o plano.** ✓ Feita em 30/09/2026. A barra de abas e a faixa
-do grupo no profissional. Jogo (`ProJogoPage`): "Novo jogo" pergunta
-**Amistoso** ou **Campeonato** e segue para a escalação, com a partida em
-andamento e as últimas. Atletas: o elenco do time (`/profissional`, com
-Convidar). Financeiro e Ajustes são os da pelada, olhando o grupo ativo
-(`findActiveGroup`). Migração 022: o profissional entra no plano, com 30
-dias de teste; no grátis, o elenco vai até 20.
-
-**Fase 2. Um cadastro só.** ✓ Feita em 30/09/2026 (migração 023). O atleta do
-time mora em `useAppStore.players`, o mesmo cadastro da pelada, com categoria,
-naipe, altura, peso e o link pessoal a mais. A tela do elenco continua falando
-`ProPlayer` — `comoPro` e `camposDoPro` em `lib/pro.ts` fazem a ponte.
-`unificarElenco` move o store antigo para o cadastro, uma vez por time, ao
-abrir e ao entrar no time; sem `updatedAt`, quem já estava na nuvem segue a
-versão de lá. O time sincroniza pelo `syncAmador` (o `syncPro` foi removido).
-A aba Jogo do time é a `JogosPage`: criar jogo pergunta Amistoso ou
-Campeonato (`events.competicao`), sem modalidade nem diária e sem limite de
-vagas; o jogo tem "Escalar e começar" no lugar de "Sortear", e a partida fica
-ligada ao jogo.
-
-Duas armadilhas achadas no teste: o link pessoal nasce no banco e não volta na
-leitura por `synced_at` — `trazerLinksPessoais` busca o de quem está sem; e
-`hidden` não esconde um `Button` (o `inline-flex` dele vence pela ordem do
-CSS) — o que some no time não é renderizado.
-
-**Fase 3. Da confirmação para a escalação.** "Escalar" no jogo do time abre a
-escalação já com os confirmados, no lugar do sorteio.
+**8. Multi-grupo.** Só quando aparecer o primeiro usuário real com dois grupos.
+Particionar os stores por grupo, seletor no cabeçalho, tela de escolha só no
+primeiro login. Não é para esta semana.
 
 ### Para o Claude Code
 
-Uma etapa por sessão. Rodar a revisão do projeto ao fim de cada etapa. Prestar
-atenção especial à hidratação: a barra de abas monta antes do localStorage
-terminar de ser lido, e decidir qual aba mostrar antes disso repete o bug que
-já custou a perda de partida em andamento.
+Uma etapa por sessão. A etapa 2 é reorganização pura e deve sair sem nenhum
+comportamento novo — se aparecer funcionalidade nova ali, alguma coisa saiu do
+trilho. Da etapa 3 em diante há domínio novo.
+
+Rodar a revisão do projeto ao fim de cada etapa. Prestar atenção especial à
+hidratação: telas que decidem o que mostrar antes de o `localStorage` terminar
+de ser lido repetem o bug que já custou a perda de partida em andamento.
+
+## Inscrição em duas fases
+
+O mensalista tem preferência para jogar. Hoje isso é implementado fora do app:
+o administrador manda o link dos mensalistas num grupo de WhatsApp na terça, e
+o dos convidados em outro grupo na quinta. A regra mora na disciplina dele de
+lembrar o dia certo, e a lista desatualiza em um grupo sem o outro saber.
+
+**A solução é abrir tudo de uma vez e promover depois.**
+
+### Como funciona
+
+```mermaid
+flowchart LR
+  A[Segunda<br/>abre para todos] --> B[Mensalista<br/>confirma = vaga]
+  A --> C[Convidado<br/>inscreve = espera]
+  B --> D[Quinta<br/>promocao]
+  C --> D
+  D --> E[Domingo<br/>jogo]
+```
+
+Na abertura, mensalista que confirma entra direto como confirmado; convidado
+que se inscreve entra na lista de espera. Na data da promoção, os convidados da
+espera sobem para as vagas que sobraram, por ordem de inscrição.
+
+### O que isso resolve
+
+**Um link, um aviso, um dia.** A comunicação em dias diferentes deixa de
+existir — e com ela a necessidade de dois grupos de WhatsApp. Os dois podem
+virar um, se o administrador quiser.
+
+**O convidado não leva um "volta quinta".** Ele se inscreve uma vez, na
+segunda, e espera. Ninguém precisa lembrar de voltar.
+
+**A demanda aparece desde o primeiro dia.** O administrador vê na terça quantos
+convidados querem jogar, e decide com antecedência se vale abrir mais vagas ou
+uma segunda quadra.
+
+**A promoção vira um evento com hora marcada** — e por isso pode disparar um
+aviso sozinha, que é a automação que hoje não existe.
+
+## As regras da promoção
+
+### Preferência vale até a promoção
+
+**Decidido em 01/10.** Depois que a promoção acontece, vale ordem de chegada
+para todos. O mensalista que confirma depois entra na lista de espera como
+qualquer um — ele teve os dias de exclusividade e não usou.
+
+A alternativa (mensalista sempre na frente, derrubando convidado já promovido)
+foi descartada: desconvidar alguém que estava confirmado desde quinta magoa
+mais do que nunca ter entrado.
+
+**Isso é configurável por grupo.** Grupos com cultura diferente podem querer a
+preferência permanente. O padrão é a regra acima.
+
+### Quem não respondeu libera a vaga
+
+Na hora da promoção, mensalista sem resposta **não segura vaga**. Sem isso,
+convidado nunca entra: sempre vai haver alguém que não respondeu, e a vaga fica
+presa.
+
+É o que faz o prazo significar alguma coisa.
+
+### O lembrete da véspera
+
+Na noite anterior à promoção, aviso automático para quem ainda não respondeu:
+*"falta você confirmar; amanhã sua vaga abre para convidados"*.
+
+Resolve o esquecimento antes de virar problema, e é o tipo de coisa que faz o
+organizador sentir que o app trabalha por ele.
+
+### Configuração do grupo
+
+Em Ajustes, valendo como padrão de todo jogo novo:
+
+- **Dias antes do jogo em que a promoção acontece** (ex.: 3 — jogo domingo,
+  promoção quinta).
+- **Hora da promoção** (ex.: 20h).
+- **Preferência do mensalista depois da promoção**: acaba (padrão) ou
+  permanece.
+
+Cada jogo nasce com esses valores e pode ajustá-los.
+
+### O que a promoção exige do servidor
+
+**Este é o ponto que decide se a automação é real.** A promoção acontece na
+quinta às 20h, com o celular de todo mundo fechado. Um PWA não roda nada nesse
+momento.
+
+Precisa acontecer no servidor: `pg_cron` no Supabase, ou função agendada. Já
+existe precedente com a `enviar-aviso`.
+
+**Sem agendador, a saída é promover de forma preguiçosa** — na primeira vez que
+alguém abre o link depois da hora marcada. A lista fica certa, mas o aviso não
+dispara sozinho, e o aviso é metade do valor. Vale como primeiro passo, não
+como solução final.
+
+### Casos de borda
+
+**Mais convidados do que vagas.** Promove por ordem de inscrição até encher; o
+resto continua na espera, agora com posição visível.
+
+**Desistência depois da promoção.** Já funciona: abre vaga e chama o próximo da
+espera.
+
+**Jogo criado em cima da hora**, com a data de promoção já no passado: promove
+na criação, sem esperar nada.
+
+**Administrador quer antecipar.** Botão de promover agora, para quando ele vê
+que faltam pessoas e não quer esperar a quinta.
+
+### Implementação
+
+**Etapa A, feita em 03/10/2026 (migração 028).** Nada muda para o grupo que
+não configurar: `promoverEm` nulo roda o caminho de sempre, no app e no
+banco.
+
+- **A regra** mora em `distribuirVagas` (lib/vagas.ts), que ganhou a
+  promoção como parâmetro, e na cópia do banco, `convidados_com_vaga`, que
+  ganhou um ramo. Nada de "quem foi promovido" é guardado: sai da hora da
+  promoção e da hora de cada resposta. Passada a hora marcada, a regra já vale
+  mesmo sem marca; a marca (`promovido_em`) é o que dispara a diária
+  antecipada e, na etapa B, os avisos. Com a preferência permanente, depois da
+  promoção vale a regra de sempre.
+- **A promoção preguiçosa**: a rodada de sincronização do administrador
+  (`promover_vencidos`) e a abertura do link (`guest_promover`) marcam o
+  jogo que passou da hora. Jogo criado depois da hora já nasce promovido.
+- **A diária antecipada** passa a nascer na promoção, nos grupos configurados.
+- **Tela**: Ajustes › Inscrição em duas fases; o formulário do jogo traz
+  "Convidados entram em" e a preferência, do padrão do grupo; o cartão e a
+  página do jogo mostram a fase, com "Promover agora"; o link explica a regra
+  e dá a posição na espera.
+- **Provas**: 18 regras em tsx (o script ficou fora do repositório, como os
+  outros `_teste`), 13 no Postgres contra o schema completo, e o fluxo
+  inteiro em 390×844 — criar o jogo, confirmar mensalistas, inscrever
+  convidados, promover, conferir a lista, e o mensalista atrasado entrando na
+  fila sem derrubar ninguém.
+
+**Etapa B, pendente**: o agendador (`pg_cron`) que promove sozinho na hora
+marcada, o push "abriu para convidados, N vagas", o aviso aos promovidos e aos
+que ficaram na espera, e o lembrete da véspera para quem não respondeu. A
+coluna `events.lembrete_promocao_em` já foi criada para ele.

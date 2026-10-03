@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { usePlano } from '@/store/usePlano';
+import { promoverEmPadrao, usaPromocao } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO, type TipoDeJogo } from '@/types';
 import { Button } from '@/components/ui/Button';
 import { useAppStore } from '@/store/useAppStore';
@@ -51,6 +53,29 @@ export function FormJogo({
   );
   // Migração 019: amistoso e treino saem sem cobrança de diária
   const [cobraDiaria, setCobraDiaria] = useState(jogo ? jogo.cobraDiaria !== false : true);
+  /*
+   * Inscrição em duas fases (migração 028): o jogo nasce com o padrão do
+   * grupo — tantos dias antes, a tal hora — e pode ajustar. Grupo que não
+   * configurou não vê nada disto, e o jogo segue a regra de sempre.
+   */
+  const promoGrupo = usePlano((s) => s.grupo?.promocao);
+  const comPromocao = !pro && (Boolean(jogo?.promoverEm) || usaPromocao(promoGrupo));
+  const paraCampo = (iso: string) => {
+    const d = new Date(iso);
+    const p2 = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  };
+  const [promoverEm, setPromoverEm] = useState(() =>
+    jogo?.promoverEm
+      ? paraCampo(jogo.promoverEm)
+      : usaPromocao(promoGrupo)
+        ? paraCampo(promoverEmPadrao(jogo?.date ?? hoje(), promoGrupo))
+        : '',
+  );
+  const [promoTocada, setPromoTocada] = useState(false);
+  const [preferenciaPermanente, setPreferenciaPermanente] = useState(
+    jogo?.preferenciaPermanente ?? promoGrupo?.preferenciaPermanente ?? false,
+  );
   const [error, setError] = useState<string | null>(null);
   const travado = Boolean(jogo?.sorteio);
 
@@ -60,6 +85,15 @@ export function FormJogo({
       setVagas(vagasPadrao(sp));
     }
     setSport(sp);
+  }
+
+  // Os campos da promoção, quando o jogo usa (vazio = sem promoção)
+  function promocaoDoForm() {
+    if (!comPromocao) return {};
+    return {
+      promoverEm: promoverEm ? new Date(promoverEm).toISOString() : null,
+      preferenciaPermanente,
+    };
   }
 
   function submit(e: React.FormEvent) {
@@ -82,6 +116,7 @@ export function FormJogo({
         vagas: n,
         cobraDiaria: pro ? false : cobraDiaria,
         ...(pro ? { competicao } : {}),
+        ...promocaoDoForm(),
       };
       editarJogo(jogo.id, patch);
       onDone({ ...jogo, ...patch });
@@ -95,6 +130,7 @@ export function FormJogo({
           vagas: n,
           cobraDiaria: pro ? false : cobraDiaria,
           ...(pro ? { competicao } : {}),
+          ...promocaoDoForm(),
         }),
       );
     }
@@ -166,7 +202,13 @@ export function FormJogo({
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              setDate(e.target.value);
+              // A promoção acompanha a data do jogo enquanto ninguém a mexeu à mão
+              if (!promoTocada && !jogo?.promoverEm && usaPromocao(promoGrupo) && e.target.value) {
+                setPromoverEm(paraCampo(promoverEmPadrao(e.target.value, promoGrupo)));
+              }
+            }}
             className={`${input} mt-1 [color-scheme:dark]`}
           />
         </label>
@@ -200,6 +242,39 @@ export function FormJogo({
           className={`${input} mt-1`}
         />
       </label>
+      {comPromocao && (
+        <div className="mt-1 rounded-xl bg-ink-800 px-3 py-3">
+          <label className="block">
+            <span className="block text-[15px] text-ink-50">Convidados entram em</span>
+            <span className="block text-[11px] text-ink-500">
+              Até lá, só mensalista tem vaga; convidado se inscreve e espera
+            </span>
+            <input
+              type="datetime-local"
+              value={promoverEm}
+              onChange={(e) => {
+                setPromoverEm(e.target.value);
+                setPromoTocada(true);
+              }}
+              className="mt-2 w-full rounded-xl bg-ink-900 px-3 py-2.5 text-[15px] text-ink-50 outline-none [color-scheme:dark]"
+            />
+          </label>
+          <label className="mt-3 flex items-center justify-between gap-3">
+            <span>
+              <span className="block text-[14px] text-ink-50">Mensalista mantém a preferência depois</span>
+              <span className="block text-[11px] text-ink-500">
+                Desligado: depois da promoção, ordem de chegada para todos
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={preferenciaPermanente}
+              onChange={(e) => setPreferenciaPermanente(e.target.checked)}
+              className="size-5 shrink-0 accent-brand-500"
+            />
+          </label>
+        </div>
+      )}
       {!pro && (
         <label className="mt-1 flex items-center justify-between gap-3 rounded-xl bg-ink-800 px-3 py-3">
           <span>

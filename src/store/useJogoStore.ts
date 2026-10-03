@@ -19,7 +19,20 @@ import { joga, vagasDoJogo } from '@/lib/vagas';
 
 /** Campos do jogo que o organizador edita — e que vão para a nuvem */
 type EdicaoDoJogo = Partial<
-  Pick<Jogo, 'sport' | 'date' | 'time' | 'place' | 'vagas' | 'status' | 'cobraDiaria' | 'competicao'>
+  Pick<
+    Jogo,
+    | 'sport'
+    | 'date'
+    | 'time'
+    | 'place'
+    | 'vagas'
+    | 'status'
+    | 'cobraDiaria'
+    | 'competicao'
+    | 'promoverEm'
+    | 'promovidoEm'
+    | 'preferenciaPermanente'
+  >
 >;
 
 interface JogoState {
@@ -38,6 +51,8 @@ interface JogoState {
     vagas: number | null;
     cobraDiaria: boolean;
     competicao?: TipoDeJogo;
+    promoverEm?: string | null;
+    preferenciaPermanente?: boolean;
   }) => Jogo;
   /** Edição do organizador: carimba a hora e vai para a nuvem */
   editarJogo: (id: string, patch: EdicaoDoJogo) => void;
@@ -79,6 +94,8 @@ export const useJogoStore = create<JogoState>()(
       // novos e existentes
       criarJogo: (input) => {
         const jogo = { ...novoJogo(input), remoteId: crypto.randomUUID(), updatedAt: agora() };
+        // Criado depois da hora da promoção: já nasce promovido (docs, "Casos de borda")
+        if (jogo.promoverEm && new Date(jogo.promoverEm).getTime() <= Date.now()) jogo.promovidoEm = agora();
         set((s) => ({ jogos: abrirJogo(s.jogos, jogo) }));
         return jogo;
       },

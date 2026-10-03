@@ -20,6 +20,8 @@ export function novoJogo(input: {
   vagas: number | null;
   cobraDiaria?: boolean;
   competicao?: Jogo['competicao'];
+  promoverEm?: string | null;
+  preferenciaPermanente?: boolean;
   remoteId?: string;
   migrado?: boolean;
 }): Jogo {

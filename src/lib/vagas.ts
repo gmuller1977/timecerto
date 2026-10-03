@@ -19,7 +19,43 @@ import type { ConfirmacaoStatus, Jogo, Player, PlayerKind } from '@/types';
  * É a ÚNICA implementação da regra. A tela do organizador, o link dos
  * mensalistas e o link de convidados chamam esta função — três contas
  * separadas acabariam dizendo "você tem vaga" num lugar e "fila" no outro.
+ *
+ * INSCRIÇÃO EM DUAS FASES (docs/telas-amador.md, decidido em 01/10/2026). Só
+ * quando o jogo tem `promoverEm`; sem ele, a regra acima roda intacta.
+ *
+ * - Antes da promoção: mensalista que confirma tem vaga; convidado espera,
+ *   na ordem de inscrição. Ninguém de fora entra ainda.
+ * - Na promoção: mensalista sem resposta não segura vaga; os convidados
+ *   sobem pela ordem de inscrição até encher.
+ * - Depois, com a preferência acabando (padrão): ordem de chegada para
+ *   todos. Mensalista que confirma depois da promoção entra na fila como
+ *   qualquer um, e NUNCA derruba convidado já promovido.
+ * - Com a preferência permanente: é a regra de sempre — o mensalista entra
+ *   na frente, e o último convidado volta para o topo da fila.
+ *
+ * Nada de "quem foi promovido" é guardado: sai da hora da promoção e da hora
+ * de cada resposta, a cada leitura. A cópia no banco (convidados_com_vaga,
+ * migração 028) faz a mesma conta.
  */
+
+/** A promoção de um jogo (migração 028). Sem `promoverEm`, não existe */
+export interface Promocao {
+  promoverEm?: string | null;
+  /** Quando aconteceu de fato (pelo agendador, pela abertura do link, ou à mão) */
+  promovidoEm?: string | null;
+  preferenciaPermanente?: boolean;
+}
+
+/**
+ * A partir de quando os convidados entram. null = ainda não (ou o jogo não
+ * usa a promoção). Passada a hora marcada, vale mesmo que ninguém tenha
+ * marcado ainda — a marca é para os avisos, não para a regra.
+ */
+export function momentoDaPromocao(p: Promocao | undefined, agora: Date = new Date()): string | null {
+  if (!p?.promoverEm) return null;
+  if (p.promovidoEm) return p.promovidoEm;
+  return agora.getTime() >= new Date(p.promoverEm).getTime() ? p.promoverEm : null;
+}
 
 export interface Resposta {
   id: string;
@@ -60,7 +96,122 @@ export interface Distribuicao {
   livres: number | null;
 }
 
-export function distribuirVagas(slots: number | null, respostas: Resposta[]): Distribuicao {
+export function distribuirVagas(
+  slots: number | null,
+  respostas: Resposta[],
+  promocao?: Promocao,
+  agora: Date = new Date(),
+): Distribuicao {
+  // Sem promoção, ou com a preferência permanente já promovida: a regra de sempre
+  if (promocao?.promoverEm) {
+    const momento = momentoDaPromocao(promocao, agora);
+    if (momento === null) return distribuirAntesDaPromocao(respostas);
+    if (!promocao.preferenciaPermanente) return distribuirPorChegada(slots, respostas, momento);
+  }
+  return distribuirClassico(slots, respostas);
+}
+
+// Empate desempata pelo id, para a ordem nunca oscilar entre telas
+const porChegada = (a: Resposta, b: Resposta) =>
+  (a.ordem != null && b.ordem != null
+    ? a.ordem - b.ordem
+    : (a.answeredAt ?? '').localeCompare(b.answeredAt ?? '')) || a.id.localeCompare(b.id);
+
+/** Respostas que não são 'vou' — iguais nas três fases */
+function completarResto(situacao: Map<string, Situacao>, respostas: Resposta[]) {
+  for (const r of respostas) {
+    if (situacao.has(r.id)) continue;
+    situacao.set(
+      r.id,
+      r.status === 'nao_vou' ? { tipo: 'nao_vou' } : r.status === 'pulado' ? { tipo: 'pulado' } : { tipo: 'sem_resposta' },
+    );
+  }
+}
+
+/** Espera e chamados da lista FECHADA (migração 015) — iguais nas três fases */
+function esperaEChamados(situacao: Map<string, Situacao>, respostas: Resposta[]) {
+  const chamados = respostas.filter((r) => r.status === 'chamado');
+  for (const r of chamados) situacao.set(r.id, { tipo: 'chamado', desde: r.chamadoEm ?? null });
+  const espera = respostas
+    .filter((r) => r.status === 'espera')
+    .sort(
+      (a, b) =>
+        Number(a.kind === 'convidado') - Number(b.kind === 'convidado') ||
+        (a.esperaDesde ?? a.answeredAt ?? '').localeCompare(b.esperaDesde ?? b.answeredAt ?? '') ||
+        a.id.localeCompare(b.id),
+    );
+  espera.forEach((r, i) => situacao.set(r.id, { tipo: 'espera', posicao: i + 1 }));
+  return { chamados: chamados.length, espera: espera.length };
+}
+
+/**
+ * Fase 1: só mensalista tem vaga. O convidado se inscreve e espera, com a
+ * posição que vai ter na promoção.
+ */
+function distribuirAntesDaPromocao(respostas: Resposta[]): Distribuicao {
+  const situacao = new Map<string, Situacao>();
+  const mensalistas = respostas.filter((r) => r.kind === 'mensalista' && r.status === 'vou');
+  for (const r of mensalistas) situacao.set(r.id, { tipo: 'confirmado' });
+  const { chamados, espera } = esperaEChamados(situacao, respostas);
+  const convidados = respostas.filter((r) => r.kind === 'convidado' && r.status === 'vou').sort(porChegada);
+  convidados.forEach((r, i) => situacao.set(r.id, { tipo: 'fila', posicao: i + 1 }));
+  completarResto(situacao, respostas);
+  return {
+    situacao,
+    mensalistasConfirmados: mensalistas.length,
+    convidadosComVaga: 0,
+    naFila: convidados.length,
+    naEspera: espera,
+    chamados,
+    // Antes da promoção não há vaga livre para quem é de fora
+    livres: 0,
+  };
+}
+
+/**
+ * Fase 2 com a preferência acabando: quem confirmou ANTES da promoção segue na
+ * frente (os mensalistas); depois, uma fila só por ordem de chegada — os
+ * convidados inscritos antes (que sobem na promoção) e quem chegou depois,
+ * de qualquer tipo. Como a fila só anda para a frente, convidado promovido
+ * nunca é derrubado.
+ */
+function distribuirPorChegada(slots: number | null, respostas: Resposta[], momento: string): Distribuicao {
+  const situacao = new Map<string, Situacao>();
+  const t = new Date(momento).getTime();
+  const antes = (r: Resposta) => r.answeredAt == null || new Date(r.answeredAt).getTime() <= t;
+
+  const fixos = respostas.filter((r) => r.kind === 'mensalista' && r.status === 'vou' && antes(r));
+  for (const r of fixos) situacao.set(r.id, { tipo: 'confirmado' });
+  const { chamados, espera } = esperaEChamados(situacao, respostas);
+
+  const fila = respostas
+    .filter((r) => r.status === 'vou' && !(r.kind === 'mensalista' && antes(r)))
+    .sort(porChegada);
+  const cabem = slots == null ? Infinity : Math.max(0, slots - fixos.length - chamados);
+  let mensalistas = fixos.length;
+  let convidados = 0;
+  fila.forEach((r, i) => {
+    if (i < cabem) {
+      situacao.set(r.id, r.kind === 'mensalista' ? { tipo: 'confirmado' } : { tipo: 'vaga' });
+      if (r.kind === 'mensalista') mensalistas++;
+      else convidados++;
+    } else situacao.set(r.id, { tipo: 'fila', posicao: i - cabem + 1 });
+  });
+  completarResto(situacao, respostas);
+  const entraram = Math.min(fila.length, cabem);
+  return {
+    situacao,
+    mensalistasConfirmados: mensalistas,
+    convidadosComVaga: convidados,
+    naFila: fila.length - entraram,
+    naEspera: espera,
+    chamados,
+    livres: slots == null ? null : Math.max(0, slots - fixos.length - entraram - chamados),
+  };
+}
+
+/** A regra de sempre (e a da preferência permanente depois da promoção) */
+function distribuirClassico(slots: number | null, respostas: Resposta[]): Distribuicao {
   const situacao = new Map<string, Situacao>();
 
   const mensalistas = respostas.filter((r) => r.kind === 'mensalista' && r.status === 'vou');
@@ -140,7 +291,7 @@ export function joga(s: Situacao | undefined): boolean {
  * ordem de chegada (`seq`). Situação por id LOCAL do jogador. Pendente de
  * aprovação não joga e não entra.
  */
-export function vagasDoJogo(jogo: Jogo, players: Player[]): Distribuicao {
+export function vagasDoJogo(jogo: Jogo, players: Player[], agora: Date = new Date()): Distribuicao {
   const porJogador = new Map(jogo.confirmations.map((c) => [c.playerId, c]));
   return distribuirVagas(
     jogo.vagas,
@@ -158,5 +309,7 @@ export function vagasDoJogo(jogo: Jogo, players: Player[]): Distribuicao {
           ordem: c?.seq,
         };
       }),
+    { promoverEm: jogo.promoverEm ?? null, promovidoEm: jogo.promovidoEm ?? null, preferenciaPermanente: jogo.preferenciaPermanente },
+    agora,
   );
 }

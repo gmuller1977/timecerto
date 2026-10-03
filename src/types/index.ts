@@ -143,6 +143,16 @@ export interface Jogo {
   cobraDiaria?: boolean;
   /** Profissional: amistoso ou campeonato (migração 023) */
   competicao?: TipoDeJogo;
+  /**
+   * Inscrição em duas fases (migração 028). Sem data, a regra de vagas é a de
+   * sempre. Com data: até ela, só mensalista tem vaga; nela, os convidados da
+   * fila sobem por ordem de inscrição (lib/vagas.ts).
+   */
+  promoverEm?: string | null;
+  /** Quando a promoção aconteceu de fato (agendador, link, ou "promover agora") */
+  promovidoEm?: string | null;
+  /** Depois da promoção o mensalista segue na frente (derruba o último convidado) */
+  preferenciaPermanente?: boolean;
   /** Nasceu da conversão do antigo `present` — ver lib/jogo.ts */
   migrado?: boolean;
   /** O sorteio deste jogo (o último feito) */

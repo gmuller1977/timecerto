@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { faseDoJogo, textoDaFase } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO } from '@/types';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -219,6 +220,8 @@ function Pagina({
   const escalar = () =>
     navigate('/profissional/escalacao', { state: { jogoId: jogo.id, competicao: jogo.competicao } });
 
+  const fase = faseDoJogo(jogo);
+
   const rodape =
     aba === 'estatistica' || jogo.status !== 'aberto'
       ? null
@@ -291,6 +294,45 @@ function Pagina({
         {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
         </span>
       </p>
+
+      {/*
+        Inscrição em duas fases (migração 028). Antes da promoção, o
+        administrador pode antecipar: viu que faltam pessoas e não quer
+        esperar a quinta.
+      */}
+      {jogo.status === 'aberto' && fase.tipo !== 'sem' && (
+        <div
+          className={cn(
+            'mt-3 flex items-center gap-2 rounded-xl px-3 py-2.5',
+            fase.tipo === 'mensalistas' ? 'bg-amber-500/10' : 'bg-brand-500/10',
+          )}
+        >
+          <span className="min-w-0 flex-1 text-sm">
+            <span className={cn('block font-medium', fase.tipo === 'mensalistas' ? 'text-amber-100' : 'text-brand-100')}>
+              {textoDaFase(fase)}
+            </span>
+            {fase.tipo === 'aberto' && (
+              <span className="block text-xs text-ink-400">
+                {fase.preferenciaPermanente
+                  ? 'O mensalista que confirmar ainda entra na frente.'
+                  : 'As vagas que sobrarem vão por ordem de chegada.'}
+              </span>
+            )}
+          </span>
+          {fase.tipo === 'mensalistas' && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                if (!window.confirm('Abrir agora para os convidados? Os da espera sobem pela ordem de inscrição.')) return;
+                editarJogo(jogo.id, { promovidoEm: new Date().toISOString() });
+              }}
+            >
+              Promover agora
+            </Button>
+          )}
+        </div>
+      )}
 
       {jogo.status === 'aberto' && jogo.sorteio && (
         <AjusteDosTimes jogo={jogo} players={players} dist={dist} comSessao={comSessao} navigate={navigate} />

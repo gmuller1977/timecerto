@@ -56,6 +56,9 @@ const PerfilDoTime = lazy(() =>
 const ExcluirGrupo = lazy(() =>
   import('@/components/cloud/ExcluirGrupo').then((m) => ({ default: m.ExcluirGrupo })),
 );
+const PromocaoAjustes = lazy(() =>
+  import('@/components/cloud/PromocaoAjustes').then((m) => ({ default: m.PromocaoAjustes })),
+);
 const NomeDoGrupo = lazy(() =>
   import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })),
 );
@@ -181,6 +184,7 @@ export default function App() {
                         <FinanceiroAjustes />
                         <Administradores />
                         <SoNaPelada>
+                          <PromocaoAjustes />
                           <AvisosDoAdmin />
                         </SoNaPelada>
                         {/* Por último: é a ação que não tem volta */}

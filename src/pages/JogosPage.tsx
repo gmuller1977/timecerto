@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { faseDoJogo, textoDaFase } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, ChevronDown, ChevronRight, History, MapPin, Radio, Swords, X } from 'lucide-react';
@@ -355,11 +356,18 @@ function CartaoJogo({
             </>
           )}
         </span>
+        {/* Inscrição em duas fases (migração 028): em que fase o jogo está */}
+        {textoDaFase(faseDoJogo(jogo)) && (
+          <span className="mt-1 block truncate text-xs font-medium text-amber-200">
+            {textoDaFase(faseDoJogo(jogo))}
+          </span>
+        )}
         <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-400">
           <SeloStatus status={status} />
           <span>
             <strong className="text-ink-200">{jogam}</strong> {jogam === 1 ? 'confirmado' : 'confirmados'}
             {jogo.vagas != null && ` de ${jogo.vagas}`}
+            {dist.naFila > 0 && ` · ${dist.naFila} esperando`}
             {dist.naFila > 0 && ` · ${dist.naFila} na fila`}
             {jogo.sorteio && ' · times sorteados'}
           </span>

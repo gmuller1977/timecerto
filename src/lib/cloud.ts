@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import type { PromocaoDoGrupo } from '@/lib/promocao';
 import { guardarGrupos, lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { ativarGrupo, lembrarNome, lembrarPerfil } from '@/store/trocarGrupo';
 import type { PlanoDoGrupo } from '@/lib/plano';
@@ -51,6 +52,8 @@ export interface CloudGroup {
   /** Do time (migração 024); nulos na pelada */
   ageGroup: AgeGroup | null;
   naipe: Naipe | null;
+  /** Inscrição em duas fases (migração 028); sem `dias`, o grupo não usa */
+  promocao: PromocaoDoGrupo;
 }
 
 export interface CloudEvent {
@@ -68,6 +71,10 @@ export interface CloudEvent {
    * Migração 019: com a diária antecipada e o jogo cobrando, o preço e o Pix
    * do grupo, para quem ganha a vaga pagar na hora. Nenhuma dívida vem aqui.
    */
+  /** Inscrição em duas fases (migração 028) */
+  promoverEm?: string | null;
+  promovidoEm?: string | null;
+  preferenciaPermanente?: boolean;
   cobrancaAntecipada?: {
     diariaCents: number;
     pixChave: string | null;
@@ -90,7 +97,7 @@ export interface PublishedTeams {
 export type Attendance = Record<string, { status: 'vou' | 'nao_vou'; answeredAt: string }>;
 
 const GROUP_COLS =
-  'id, name, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia, age_group, naipe';
+  'id, name, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia, age_group, naipe, promocao_dias, promocao_hora, preferencia_permanente';
 const toGroup = (d: {
   id: string;
   name: string;
@@ -103,6 +110,9 @@ const toGroup = (d: {
   cortesia: boolean | null;
   age_group: AgeGroup | null;
   naipe: Naipe | null;
+  promocao_dias: number | null;
+  promocao_hora: string | null;
+  preferencia_permanente: boolean | null;
 }): CloudGroup => ({
   id: d.id,
   name: d.name,
@@ -113,6 +123,11 @@ const toGroup = (d: {
   plano: { testeAte: d.teste_ate, pagoAte: d.pago_ate, cortesia: Boolean(d.cortesia) },
   ageGroup: d.age_group,
   naipe: d.naipe,
+  promocao: {
+    dias: d.promocao_dias,
+    hora: d.promocao_hora ? d.promocao_hora.slice(0, 5) : null,
+    preferenciaPermanente: Boolean(d.preferencia_permanente),
+  },
 });
 const EVENT_COLS = 'id, title, starts_at, slots, location, list_closed, teams';
 const toEvent = (d: {
@@ -354,6 +369,37 @@ export async function excluirGrupo(groupId: string, confirmacao: string): Promis
 }
 
 /** Ajustes do time: categoria e naipe, o padrão de todo atleta novo */
+/** Ajustes › Inscrição em duas fases: o padrão de todo jogo novo do grupo */
+export async function salvarPromocaoDoGrupo(groupId: string, p: PromocaoDoGrupo): Promise<void> {
+  const { data, error } = await db()
+    .from('groups')
+    .update({
+      promocao_dias: p.dias,
+      promocao_hora: p.dias == null ? null : (p.hora ?? '20:00'),
+      preferencia_permanente: p.preferenciaPermanente,
+    })
+    .eq('id', groupId)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Só o dono ou um administrador do grupo pode mudar isso.');
+}
+
+/**
+ * A promoção preguiçosa (migração 028): marca a dos jogos que já passaram da
+ * hora. A regra de vaga não depende dela; a marca dispara a diária e os avisos.
+ */
+export async function promoverVencidos(groupId: string): Promise<number> {
+  const { data, error } = await db().rpc('promover_vencidos', { p_group: groupId });
+  if (error) throw error;
+  return (data as number) ?? 0;
+}
+
+/** O mesmo, por quem abre o link */
+export async function guestPromover(code: string): Promise<void> {
+  const { error } = await db().rpc('guest_promover', { code });
+  if (error) throw error;
+}
+
 export async function salvarPerfilDoTime(
   groupId: string,
   perfil: { ageGroup: AgeGroup | null; naipe: Naipe | null },
@@ -1065,7 +1111,8 @@ function sorteioDaNuvem(s: SorteioNuvem | null, jogoId: string, eventId: string)
 }
 
 const EVENT_SYNC_COLS =
-  'id, title, starts_at, location, slots, sport, status, list_closed, teams, sorteio, cobra_diaria, competicao, updated_at, synced_at, created_at';
+  'id, title, starts_at, location, slots, sport, status, list_closed, teams, sorteio, cobra_diaria, competicao, ' +
+  'promover_em, promovido_em, preferencia_permanente, updated_at, synced_at, created_at';
 
 interface LinhaJogo {
   id: string;
@@ -1083,6 +1130,10 @@ interface LinhaJogo {
   cobra_diaria: boolean | null;
   /** Migração 023 */
   competicao: 'amistoso' | 'campeonato' | null;
+  /** Migração 028 */
+  promover_em: string | null;
+  promovido_em: string | null;
+  preferencia_permanente: boolean | null;
   updated_at: string;
   synced_at: string;
   created_at: string;
@@ -1107,6 +1158,9 @@ function doEvento(r: LinhaJogo, jogoId: string) {
     timesPublicados: r.teams != null,
     cobraDiaria: r.cobra_diaria !== false,
     ...(r.competicao ? { competicao: r.competicao } : {}),
+    promoverEm: r.promover_em,
+    promovidoEm: r.promovido_em,
+    preferenciaPermanente: Boolean(r.preferencia_permanente),
     sorteio: sorteioDaNuvem(r.sorteio, jogoId, r.id),
     updatedAt: r.updated_at,
     enviadoEm: r.updated_at,
@@ -1209,6 +1263,9 @@ async function enviarJogos(groupId: string) {
     sorteio: sorteioParaNuvem(j.sorteio),
     cobra_diaria: j.cobraDiaria !== false,
     competicao: j.competicao ?? null,
+    promover_em: j.promoverEm ?? null,
+    promovido_em: j.promovidoEm ?? null,
+    preferencia_permanente: Boolean(j.preferenciaPermanente),
     updated_at: j.updatedAt,
   }));
   const { error } = await db().rpc('salvar_jogos', { p_group: groupId, p_rows: rows });

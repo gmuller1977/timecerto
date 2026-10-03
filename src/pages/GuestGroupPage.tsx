@@ -4,6 +4,7 @@ import { BellRing, Check, Hourglass, Lock, MapPin, UserPlus, X } from 'lucide-re
 import {
   guestAddPlayer,
   guestGroup,
+  guestPromover,
   guestJoin,
   guestSetAttendance,
   type GuestGroup,
@@ -13,6 +14,7 @@ import {
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos } from '@/lib/juntar';
 import { textoDaLista } from '@/lib/listaDoJogo';
+import { faseDoJogo } from '@/lib/promocao';
 import { pixCopiaECola } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
@@ -119,6 +121,9 @@ export function GuestGroupPage() {
 
   const load = useCallback(async () => {
     try {
+      // Promoção preguiçosa (migração 028): passou da hora e ninguém marcou?
+      // Marca agora — é o que dispara a diária. A regra de vaga não depende disso
+      await guestPromover(code).catch((e) => console.warn('promover pelo link', e));
       setData(await guestGroup(code));
       setError(null);
     } catch (e) {
@@ -152,12 +157,18 @@ export function GuestGroupPage() {
   const viaConvidados = data.via === 'convidados';
   const event = data.event;
   const fechada = Boolean(event?.listClosed);
-  const dist = distribuirVagas(event?.slots ?? null, data.players);
+  const promocaoDoJogo = {
+    promoverEm: event?.promoverEm ?? null,
+    promovidoEm: event?.promovidoEm ?? null,
+    preferenciaPermanente: event?.preferenciaPermanente,
+  };
+  const dist = distribuirVagas(event?.slots ?? null, data.players, promocaoDoJogo);
+  const fase = faseDoJogo(promocaoDoJogo);
   const sit = (id: string) => dist.situacao.get(id);
 
   const mensalistas = data.players.filter((p) => p.kind === 'mensalista');
   const convidados = data.players.filter((p) => p.kind === 'convidado');
-  const fila = convidados
+  const fila = data.players
     .filter((p) => sit(p.id)?.tipo === 'fila')
     .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)));
   const comVaga = convidados.filter((p) => sit(p.id)?.tipo === 'vaga');
@@ -274,7 +285,13 @@ export function GuestGroupPage() {
   };
   const seEntrarAgora: { texto: string; detalhe: string | null; cheio: boolean } | null = !event
     ? null
-    : fechada
+    : fase.tipo === 'mensalistas' && !fechada
+      ? {
+          texto: `Mensalistas têm prioridade até ${fase.quando}.`,
+          detalhe: `Coloque seu nome agora: você entra na lista de espera e, ${fase.quando}, os convidados sobem para as vagas que sobrarem, por ordem de inscrição.`,
+          cheio: true,
+        }
+      : fechada
       ? encerradas
       : event.slots == null
         ? { texto: 'Para este jogo não há limite de vagas.', detalhe: null, cheio: false }
@@ -443,6 +460,21 @@ export function GuestGroupPage() {
               ? `${dist.mensalistasConfirmados + dist.convidadosComVaga} de ${event.slots} vagas preenchidas${dist.naFila ? ` · ${dist.naFila} na fila` : ''}${dist.naEspera ? ` · ${dist.naEspera} na fila de espera` : ''}`
               : `${dist.mensalistasConfirmados + dist.convidadosComVaga} confirmados`}
           </p>
+          {/* Inscrição em duas fases (migração 028): a regra, e não só a fila */}
+          {!fechada && fase.tipo === 'mensalistas' && (
+            <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm leading-relaxed text-amber-100">
+              <strong>Mensalistas confirmando até {fase.quando}.</strong> Convidados já podem colocar o nome: entram
+              na lista de espera e, {fase.quando}, sobem para as vagas que sobrarem, por ordem de inscrição.
+            </p>
+          )}
+          {!fechada && fase.tipo === 'aberto' && (
+            <p className="mt-3 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm leading-relaxed text-brand-100">
+              <strong>Aberto para todos.</strong>{' '}
+              {fase.preferenciaPermanente
+                ? 'Mensalista que confirmar ainda entra na frente; as outras vagas vão por ordem de chegada.'
+                : 'As vagas que sobrarem vão por ordem de chegada, para mensalista ou convidado.'}
+            </p>
+          )}
           {fechada && (
             <p className="mt-3 flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2.5 text-sm text-ink-300">
               <Lock size={15} className="shrink-0 text-ink-500" />
@@ -462,6 +494,7 @@ export function GuestGroupPage() {
               <>
                 <MyCard
                   name={mine.name}
+                  antesDaPromocao={fase.tipo === 'mensalistas' ? fase.quando : null}
                   situacao={sit(mine.id)}
                   convidado={viaConvidados}
                   fechada={fechada}
@@ -764,6 +797,7 @@ function posicao(s: Situacao | undefined): number {
 
 function MyCard({
   name,
+  antesDaPromocao,
   situacao,
   convidado,
   fechada,
@@ -772,6 +806,8 @@ function MyCard({
   onNotMe,
 }: {
   name: string;
+  /** "quinta às 20h": a fila ainda espera a promoção (migração 028) */
+  antesDaPromocao?: string | null;
   situacao: Situacao | undefined;
   convidado: boolean;
   /** Lista fechada: vale a fila de espera (migração 015) */
@@ -881,7 +917,9 @@ function MyCard({
       ? { text: 'Você tem vaga neste jogo', tone: 'ok' as const }
       : situacao?.tipo === 'fila'
         ? {
-            text: `Você é o ${situacao.posicao}º da fila. Se abrir vaga, você entra sozinho.`,
+            text: antesDaPromocao
+              ? `Você é o ${situacao.posicao}º da lista de espera. ${antesDaPromocao[0].toUpperCase()}${antesDaPromocao.slice(1)}, os convidados sobem por ordem de inscrição para as vagas que sobrarem.`
+              : `Você é o ${situacao.posicao}º da fila. Se abrir vaga, você entra sozinho.`,
             tone: 'wait' as const,
           }
         : situacao?.tipo === 'confirmado'
