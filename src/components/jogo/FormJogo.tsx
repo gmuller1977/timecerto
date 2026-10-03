@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePlano } from '@/store/usePlano';
 import { promoverEmPadrao, usaPromocao } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO, type TipoDeJogo } from '@/types';
@@ -73,6 +73,16 @@ export function FormJogo({
         : '',
   );
   const [promoTocada, setPromoTocada] = useState(false);
+  // O padrão do grupo chega da nuvem na primeira rodada de sincronização: se o
+  // formulário abriu antes, o campo aparecia vazio — e o jogo salvava sem
+  // promoção. Preenche quando chegar, se ninguém mexeu
+  const diasDoGrupo = promoGrupo?.dias ?? null;
+  const horaDoGrupo = promoGrupo?.hora ?? null;
+  useEffect(() => {
+    if (promoTocada || jogo?.promoverEm || !usaPromocao(promoGrupo)) return;
+    setPromoverEm((atual) => atual || paraCampo(promoverEmPadrao(date, promoGrupo)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diasDoGrupo, horaDoGrupo]);
   const [preferenciaPermanente, setPreferenciaPermanente] = useState(
     jogo?.preferenciaPermanente ?? promoGrupo?.preferenciaPermanente ?? false,
   );
