@@ -18,16 +18,26 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
-webpush.setVapidDetails(
-  Deno.env.get('VAPID_SUBJECT') ?? 'mailto:contato@timecerto.app',
-  Deno.env.get('VAPID_PUBLIC_KEY')!,
-  Deno.env.get('VAPID_PRIVATE_KEY')!,
-);
+// Segredo mal preenchido derrubava a função inteira antes de responder — e o
+// erro só aparecia nos logs. Agora ela responde dizendo QUAL é o problema (a
+// mensagem do web-push, nunca o valor da chave)
+let erroDeConfiguracao: string | null = null;
+try {
+  webpush.setVapidDetails(
+    Deno.env.get('VAPID_SUBJECT') ?? 'mailto:contato@timecerto.app',
+    Deno.env.get('VAPID_PUBLIC_KEY') ?? '',
+    Deno.env.get('VAPID_PRIVATE_KEY') ?? '',
+  );
+} catch (e) {
+  erroDeConfiguracao = (e as Error).message;
+  console.error('VAPID', erroDeConfiguracao);
+}
 
 const SERVICOS_DE_PUSH =
   /^https:\/\/(fcm\.googleapis\.com|updates\.push\.services\.mozilla\.com|[a-z0-9.-]+\.push\.apple\.com|[a-z0-9.-]+\.notify\.windows\.com)\//;
 
 Deno.serve(async (req) => {
+  if (erroDeConfiguracao) return new Response('VAPID: ' + erroDeConfiguracao, { status: 500 });
   const body = await req.json().catch(() => null);
   const id = body?.record?.id;
   if (!id) return new Response('aviso sem id', { status: 400 });
