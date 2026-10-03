@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Bell, BellOff, Share } from "lucide-react";
+import { useEffect, useState } from 'react';
+import { Bell, BellOff, Share } from 'lucide-react';
 import {
   ativarAvisos,
   avisosBloqueados,
@@ -10,16 +10,16 @@ import {
   iphoneSemInstalar,
   renovarInscricao,
   type InscricaoDeAviso,
-} from "@/lib/avisos";
+} from '@/lib/avisos';
 import {
   cancelarAvisoAdmin,
   findMyGroup,
   guestCancelarAviso,
   guestInscreverAviso,
   inscreverAdmin,
-} from "@/lib/cloud";
-import { useAuth } from "@/store/useAuth";
-import { cn } from "@/lib/utils";
+} from '@/lib/cloud';
+import { useAuth } from '@/store/useAuth';
+import { cn } from '@/lib/utils';
 
 /** Quem este aparelho avisa: por link, o atleta; `admin`, o grupo da conta */
 const chaveLocal = (dono: string) => `timecerto:aviso:${dono}`;
@@ -39,7 +39,7 @@ function gravarLocal(dono: string, valor: string | null) {
   }
 }
 
-type Estado = "carregando" | "ativo" | "inativo";
+type Estado = 'carregando' | 'ativo' | 'inativo';
 
 /**
  * O interruptor dos avisos, igual para o atleta e para o administrador. Só
@@ -53,7 +53,7 @@ function useInterruptor(
   /** Grava a inscrição renovada no banco e apaga a antiga */
   trocar: (nova: InscricaoDeAviso, antigo: string) => Promise<void>,
 ) {
-  const [estado, setEstado] = useState<Estado>("carregando");
+  const [estado, setEstado] = useState<Estado>('carregando');
   useEffect(() => {
     let vivo = true;
     (async () => {
@@ -63,13 +63,13 @@ function useInterruptor(
       // a pessoa precisar saber que houve troca de chave
       if (s && minha && s.chaveVelha) {
         const r = await renovarInscricao();
-        if (!r) return vivo && setEstado("inativo");
+        if (!r) return vivo && setEstado('inativo');
         await trocar(r.nova, r.antigo);
       }
-      if (vivo) setEstado(minha ? "ativo" : "inativo");
+      if (vivo) setEstado(minha ? 'ativo' : 'inativo');
     })().catch((e) => {
-      console.warn("conferir a inscrição dos avisos", e);
-      if (vivo) setEstado("inativo");
+      console.warn('conferir a inscrição dos avisos', e);
+      if (vivo) setEstado('inativo');
     });
     return () => {
       vivo = false;
@@ -84,10 +84,8 @@ function DicaIphone() {
     <p className="mt-3 flex items-start gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2.5 text-xs leading-relaxed text-ink-400">
       <Share size={15} className="mt-0.5 shrink-0 text-ink-500" />
       <span>
-        Para receber avisos no iPhone, toque em{" "}
-        <strong className="text-ink-200">Compartilhar</strong> ›{" "}
-        <strong className="text-ink-200">Adicionar à Tela de Início</strong> e
-        abra o TimeCerto por lá.
+        Para receber avisos no iPhone, toque em <strong className="text-ink-200">Compartilhar</strong> ›{' '}
+        <strong className="text-ink-200">Adicionar à Tela de Início</strong> e abra o TimeCerto por lá.
       </span>
     </p>
   );
@@ -110,15 +108,13 @@ function Interruptor({
   onAtivar: () => void;
   onDesativar: () => void;
 }) {
-  if (estado === "carregando") return null;
+  if (estado === 'carregando') return null;
   return (
     <div className="mt-3">
-      {estado === "ativo" ? (
+      {estado === 'ativo' ? (
         <div className="flex items-center gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5">
           <Bell size={16} className="shrink-0 text-brand-300" />
-          <span className="min-w-0 flex-1 text-sm text-brand-100">
-            Avisos ativados neste celular
-          </span>
+          <span className="min-w-0 flex-1 text-sm text-brand-100">Avisos ativados neste celular</span>
           <button
             disabled={busy}
             onClick={onDesativar}
@@ -134,15 +130,13 @@ function Interruptor({
             disabled={busy}
             onClick={onAtivar}
             className={cn(
-              "flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/50 text-sm font-semibold text-brand-200 active:scale-[0.99] disabled:opacity-50",
+              'flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/50 text-sm font-semibold text-brand-200 active:scale-[0.99] disabled:opacity-50',
             )}
           >
             <Bell size={17} />
-            {busy ? "Ativando…" : textoAtivar}
+            {busy ? 'Ativando…' : textoAtivar}
           </button>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-500">
-            {explicacao}
-          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-ink-500">{explicacao}</p>
         </>
       )}
       {erro && <p className="mt-2 text-xs text-red-300">{erro}</p>}
@@ -154,35 +148,23 @@ function Interruptor({
  * No link do grupo, depois que a pessoa diz quem é. Migração 016: ela passa a
  * receber vaga aberta, jogo novo, o time dela e os avisos do organizador.
  */
-export function AvisoDoAtleta({
-  code,
-  playerId,
-}: {
-  code: string;
-  playerId: string;
-}) {
+export function AvisoDoAtleta({ code, playerId }: { code: string; playerId: string }) {
   const dono = code.toUpperCase();
-  const [estado, setEstado] = useInterruptor(
-    dono,
-    playerId,
-    async (nova, antigo) => {
-      await guestInscreverAviso(code, playerId, nova);
-      if (antigo !== nova.endpoint)
-        await guestCancelarAviso(code, antigo).catch((e) =>
-          console.warn("apagar a inscrição antiga", e),
-        );
-    },
-  );
+  const [estado, setEstado] = useInterruptor(dono, playerId, async (nova, antigo) => {
+    await guestInscreverAviso(code, playerId, nova);
+    if (antigo !== nova.endpoint)
+      await guestCancelarAviso(code, antigo).catch((e) => console.warn('apagar a inscrição antiga', e));
+  });
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   if (!avisosConfigurados()) return null;
   if (!avisosDisponiveis()) return iphoneSemInstalar() ? <DicaIphone /> : null;
-  if (avisosBloqueados() && estado !== "ativo") {
+  if (avisosBloqueados() && estado !== 'ativo') {
     return (
       <p className="mt-3 text-xs leading-relaxed text-ink-500">
-        Os avisos deste site estão bloqueados no seu navegador. Para receber,
-        libere as notificações nos ajustes do navegador.
+        Os avisos deste site estão bloqueados no seu navegador. Para receber, libere as notificações nos
+        ajustes do navegador.
       </p>
     );
   }
@@ -194,10 +176,10 @@ export function AvisoDoAtleta({
       const s = await ativarAvisos();
       await guestInscreverAviso(code, playerId, s);
       gravarLocal(dono, playerId);
-      setEstado("ativo");
+      setEstado('ativo');
     } catch (e) {
-      console.error("ativar avisos", e);
-      setErro((e as Error).message || "Não deu para ativar. Tente de novo.");
+      console.error('ativar avisos', e);
+      setErro((e as Error).message || 'Não deu para ativar. Tente de novo.');
     }
     setBusy(false);
   }
@@ -209,10 +191,10 @@ export function AvisoDoAtleta({
       const endpoint = await desativarAvisos();
       if (endpoint) await guestCancelarAviso(code, endpoint);
       gravarLocal(dono, null);
-      setEstado("inativo");
+      setEstado('inativo');
     } catch (e) {
-      console.error("desativar avisos", e);
-      setErro("Não deu para desativar. Confira a internet.");
+      console.error('desativar avisos', e);
+      setErro('Não deu para desativar. Confira a internet.');
     }
     setBusy(false);
   }
@@ -238,25 +220,19 @@ export function AvisosDoAdmin() {
   const ready = useAuth((s) => s.ready);
   const session = useAuth((s) => s.session);
   const [grupo, setGrupo] = useState<string | null | undefined>(undefined);
-  const [estado, setEstado] = useInterruptor(
-    "admin",
-    grupo ?? null,
-    async (nova, antigo) => {
-      if (!grupo) return;
-      await inscreverAdmin(grupo, nova);
-      if (antigo !== nova.endpoint)
-        await cancelarAvisoAdmin(antigo).catch((e) =>
-          console.warn("apagar a inscrição antiga", e),
-        );
-    },
-  );
+  const [estado, setEstado] = useInterruptor('admin', grupo ?? null, async (nova, antigo) => {
+    if (!grupo) return;
+    await inscreverAdmin(grupo, nova);
+    if (antigo !== nova.endpoint)
+      await cancelarAvisoAdmin(antigo).catch((e) => console.warn('apagar a inscrição antiga', e));
+  });
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ready || !session) return;
     let vivo = true;
-    findMyGroup("amador")
+    findMyGroup('amador')
       .then((g) => vivo && setGrupo(g?.id ?? null))
       .catch(() => vivo && setGrupo(null));
     return () => {
@@ -273,11 +249,11 @@ export function AvisosDoAdmin() {
     try {
       const s = await ativarAvisos();
       await inscreverAdmin(grupo, s);
-      gravarLocal("admin", grupo);
-      setEstado("ativo");
+      gravarLocal('admin', grupo);
+      setEstado('ativo');
     } catch (e) {
-      console.error("ativar avisos do administrador", e);
-      setErro((e as Error).message || "Não deu para ativar. Tente de novo.");
+      console.error('ativar avisos do administrador', e);
+      setErro((e as Error).message || 'Não deu para ativar. Tente de novo.');
     }
     setBusy(false);
   }
@@ -288,11 +264,11 @@ export function AvisosDoAdmin() {
     try {
       const endpoint = await desativarAvisos();
       if (endpoint) await cancelarAvisoAdmin(endpoint);
-      gravarLocal("admin", null);
-      setEstado("inativo");
+      gravarLocal('admin', null);
+      setEstado('inativo');
     } catch (e) {
-      console.error("desativar avisos do administrador", e);
-      setErro("Não deu para desativar. Confira a internet.");
+      console.error('desativar avisos do administrador', e);
+      setErro('Não deu para desativar. Confira a internet.');
     }
     setBusy(false);
   }
@@ -307,9 +283,7 @@ export function AvisosDoAdmin() {
         iphoneSemInstalar() ? (
           <DicaIphone />
         ) : (
-          <p className="mt-2 text-sm text-ink-400">
-            Este navegador não recebe avisos.
-          </p>
+          <p className="mt-2 text-sm text-ink-400">Este navegador não recebe avisos.</p>
         )
       ) : (
         <Interruptor

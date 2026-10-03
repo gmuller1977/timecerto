@@ -19,11 +19,11 @@ export function avisosConfigurados(): boolean {
 export function avisosDisponiveis(): boolean {
   return (
     Boolean(CHAVE) &&
-    typeof navigator !== "undefined" &&
-    "serviceWorker" in navigator &&
-    typeof window !== "undefined" &&
-    "PushManager" in window &&
-    "Notification" in window
+    typeof navigator !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    typeof window !== 'undefined' &&
+    'PushManager' in window &&
+    'Notification' in window
   );
 }
 
@@ -32,19 +32,17 @@ export function avisosDisponiveis(): boolean {
  * tela de início. Nesse caso vale explicar como instalar em vez de esconder.
  */
 export function iphoneSemInstalar(): boolean {
-  if (typeof navigator === "undefined") return false;
+  if (typeof navigator === 'undefined') return false;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const instalado =
     (navigator as Navigator & { standalone?: boolean }).standalone === true ||
-    window.matchMedia?.("(display-mode: standalone)").matches;
+    window.matchMedia?.('(display-mode: standalone)').matches;
   return ios && !instalado;
 }
 
 /** A permissão foi negada: só o próprio usuário desfaz, nos ajustes do navegador */
 export function avisosBloqueados(): boolean {
-  return (
-    typeof Notification !== "undefined" && Notification.permission === "denied"
-  );
+  return typeof Notification !== 'undefined' && Notification.permission === 'denied';
 }
 
 export interface InscricaoDeAviso {
@@ -54,27 +52,20 @@ export interface InscricaoDeAviso {
 }
 
 function paraInscricao(s: PushSubscription): InscricaoDeAviso {
-  const json = s.toJSON() as {
-    endpoint: string;
-    keys: { p256dh: string; auth: string };
-  };
-  return {
-    endpoint: json.endpoint,
-    p256dh: json.keys.p256dh,
-    auth: json.keys.auth,
-  };
+  const json = s.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
+  return { endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth };
 }
 
 function chaveEmBytes(base64url: string): Uint8Array<ArrayBuffer> {
-  const pad = "=".repeat((4 - (base64url.length % 4)) % 4);
-  const bin = atob((base64url + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  const pad = '='.repeat((4 - (base64url.length % 4)) % 4);
+  const bin = atob((base64url + pad).replace(/-/g, '+').replace(/_/g, '/'));
   const bytes = new Uint8Array(new ArrayBuffer(bin.length));
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
 }
 
 async function registro(): Promise<ServiceWorkerRegistration> {
-  const reg = await navigator.serviceWorker.register("/sw.js");
+  const reg = await navigator.serviceWorker.register('/sw.js');
   return navigator.serviceWorker.ready.then(() => reg);
 }
 
@@ -92,11 +83,9 @@ function daChaveAtual(s: PushSubscription): boolean {
 }
 
 /** A inscrição deste aparelho, se já existe — sem pedir nada ao usuário */
-export async function inscricaoAtual(): Promise<
-  (InscricaoDeAviso & { chaveVelha: boolean }) | null
-> {
+export async function inscricaoAtual(): Promise<(InscricaoDeAviso & { chaveVelha: boolean }) | null> {
   if (!avisosDisponiveis()) return null;
-  const reg = await navigator.serviceWorker.getRegistration("/");
+  const reg = await navigator.serviceWorker.getRegistration('/');
   const s = await reg?.pushManager.getSubscription();
   return s ? { ...paraInscricao(s), chaveVelha: !daChaveAtual(s) } : null;
 }
@@ -106,21 +95,14 @@ export async function inscricaoAtual(): Promise<
  * permissão já foi dada, então o navegador não pede toque. Devolve a nova e o
  * endereço antigo, para apagar no banco.
  */
-export async function renovarInscricao(): Promise<{
-  nova: InscricaoDeAviso;
-  antigo: string;
-} | null> {
-  if (!avisosDisponiveis() || Notification.permission !== "granted")
-    return null;
-  const reg = await navigator.serviceWorker.getRegistration("/");
+export async function renovarInscricao(): Promise<{ nova: InscricaoDeAviso; antigo: string } | null> {
+  if (!avisosDisponiveis() || Notification.permission !== 'granted') return null;
+  const reg = await navigator.serviceWorker.getRegistration('/');
   const s = await reg?.pushManager.getSubscription();
   if (!reg || !s || daChaveAtual(s)) return null;
   const antigo = s.endpoint;
   await s.unsubscribe();
-  const nova = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: chaveEmBytes(CHAVE!),
-  });
+  const nova = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveEmBytes(CHAVE!) });
   return { nova: paraInscricao(nova), antigo };
 }
 
@@ -129,14 +111,13 @@ export async function renovarInscricao(): Promise<{
  * usuário: fora dele o navegador recusa o pedido de permissão.
  */
 export async function ativarAvisos(): Promise<InscricaoDeAviso> {
-  if (!avisosDisponiveis())
-    throw new Error("Este navegador não recebe avisos.");
+  if (!avisosDisponiveis()) throw new Error('Este navegador não recebe avisos.');
   const permissao = await Notification.requestPermission();
-  if (permissao !== "granted") {
+  if (permissao !== 'granted') {
     throw new Error(
-      permissao === "denied"
-        ? "Os avisos foram bloqueados. Libere as notificações deste site nos ajustes do navegador."
-        : "Sem permissão para avisar.",
+      permissao === 'denied'
+        ? 'Os avisos foram bloqueados. Libere as notificações deste site nos ajustes do navegador.'
+        : 'Sem permissão para avisar.',
     );
   }
   const reg = await registro();
@@ -149,16 +130,13 @@ export async function ativarAvisos(): Promise<InscricaoDeAviso> {
   }
   const s =
     existente ??
-    (await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: chaveEmBytes(CHAVE!),
-    }));
+    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveEmBytes(CHAVE!) }));
   return paraInscricao(s);
 }
 
 /** Cancela neste aparelho. Devolve o endereço, para apagar também no banco */
 export async function desativarAvisos(): Promise<string | null> {
-  const reg = await navigator.serviceWorker.getRegistration("/");
+  const reg = await navigator.serviceWorker.getRegistration('/');
   const s = await reg?.pushManager.getSubscription();
   if (!s) return null;
   const endpoint = s.endpoint;
