@@ -569,7 +569,24 @@ banco.
   convidados, promover, conferir a lista, e o mensalista atrasado entrando na
   fila sem derrubar ninguém.
 
-**Etapa B, pendente**: o agendador (`pg_cron`) que promove sozinho na hora
-marcada, o push "abriu para convidados, N vagas", o aviso aos promovidos e aos
-que ficaram na espera, e o lembrete da véspera para quem não respondeu. A
-coluna `events.lembrete_promocao_em` já foi criada para ele.
+**Etapa B, feita em 03/10/2026 (migração 029).** Os avisos saem pela caixa de
+sempre (`avisos` → Database Webhook → `enviar-aviso`), só para quem ativou
+o aviso no celular.
+
+- **Na promoção**, de um gatilho em `promovido_em` — então saem uma vez só,
+  venha a promoção do agendador, do link, da rodada do administrador ou do
+  "Promover agora": "você tem vaga" para quem subiu, "você é o Nº da espera"
+  para quem ficou (`fila_da_promocao`, a mesma conta de vagas), "abriu para
+  convidados, N vagas" para os convidados do grupo que não se inscreveram
+  (só se sobrou vaga), e o resumo para os administradores.
+- **Preferência permanente**: o convidado que um mensalista atrasado derrubou
+  recebe "você voltou para a espera".
+- **Véspera**: nas 24 h antes da promoção, o mensalista que não respondeu
+  recebe "falta você confirmar" — uma vez, marcado em
+  `lembrete_promocao_em`.
+- **O agendador**: `promover_e_lembrar()`, a cada 5 minutos pelo `pg_cron`.
+  A promoção preguiçosa da etapa A continua como rede de segurança, para
+  quando o agendador falhar.
+
+Provas: 15 no Postgres contra o schema completo, com todos os jogadores
+inscritos nos avisos para ver exatamente o que entra na caixa.
