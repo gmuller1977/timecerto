@@ -1827,7 +1827,15 @@ export interface MensalidadeDoLink {
   venceEm: string;
   valorCents: number;
   pix: { chave: string | null; nome: string | null; cidade: string | null };
-  mensalistas: { id: string; name: string; temCobranca: boolean; pago: boolean; informadoEm: string | null }[];
+  mensalistas: {
+    id: string;
+    name: string;
+    temCobranca: boolean;
+    pago: boolean;
+    informadoEm: string | null;
+    /** A mensalidade do mês foi cancelada: isento, leva ✅ (migração 032) */
+    isento?: boolean;
+  }[];
 }
 
 /** Null no link de convidados, ou com o grupo sem mensalidade */

@@ -661,5 +661,9 @@ Quando fizer o pagamento, entre no link abaixo e confirme o pagamento.
   Financeiro o cartão diz "Informou que pagou · a conferir"; o administrador
   confere no extrato e registra o pagamento. Se o dinheiro não chegou, "Não
   recebi" tira o ✅.
+- **Isento** (a mensalidade do mês foi cancelada) também leva ✅, e o link diz
+  "Isento neste mês" (migração 032, pedido do Guilherme no mesmo dia). Quem
+  ainda não tem mensalidade lançada vê "ainda não foi lançada. Avise o
+  organizador", em vez de o cartão sumir.
 - Grupo sem mensalidade continua com a mensagem de pendências antiga.
 

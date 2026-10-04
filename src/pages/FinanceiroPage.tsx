@@ -122,8 +122,8 @@ function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => stri
 
 /**
  * A cobrança do grupo quando há mensalidade (pedido do Guilherme, 05/10/2026):
- * todos os mensalistas do mês, com ✅ em quem já pagou (baixa) ou informou
- * pelo link. A mesma lista que o mensalista manda de volta depois de pagar.
+ * todos os mensalistas do mês, com ✅ em quem já pagou (baixa), informou
+ * pelo link ou está isento (mensalidade do mês cancelada). A mesma lista que o mensalista manda de volta depois de pagar.
  */
 function mensagemDoMes(grupo: CloudGroup, dados: DadosFinanceiros, saldos: Map<string, SaldoDoJogador>): string | null {
   const c = dados.config;
@@ -133,11 +133,14 @@ function mensagemDoMes(grupo: CloudGroup, dados: DadosFinanceiros, saldos: Map<s
     .filter((j) => j.kind === 'mensalista' && j.ativo)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
     .map((j) => {
-      const cob = dados.cobrancas.find(
-        (x) => x.playerId === j.id && x.tipo === 'mensalidade' && x.referencia === mes && !x.canceladaEm,
+      const doMes = dados.cobrancas.filter(
+        (x) => x.playerId === j.id && x.tipo === 'mensalidade' && x.referencia === mes,
       );
+      const cob = doMes.find((x) => !x.canceladaEm);
+      // Mensalidade do mês cancelada e nenhuma valendo: isento, leva ✅ (05/10/2026)
+      const isento = !cob && doMes.length > 0;
       const emAberto = cob ? saldos.get(j.id)?.abertas.some((a) => a.cobranca.id === cob.id) : true;
-      return { nome: j.nome, ok: Boolean(cob && (!emAberto || cob.informadoEm)) };
+      return { nome: j.nome, ok: isento || Boolean(cob && (!emAberto || cob.informadoEm)) };
     });
   return mensagemDaMensalidade({
     grupo: grupo.name,

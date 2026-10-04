@@ -890,7 +890,33 @@ function MinhaMensalidade({
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
   const eu = mensalidade.mensalistas.find((m) => m.id === meuId);
-  if (!eu || !eu.temCobranca) return null;
+  if (!eu) return null;
+  const titulo = (
+    <p className="text-[15px] font-semibold text-ink-50">Mensalidade de {rotuloDoMes(mensalidade.mes)}</p>
+  );
+  // Isento (mensalidade do mês cancelada) não tem o que pagar
+  if (eu.isento) {
+    return (
+      <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+        {titulo}
+        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-brand-200">
+          <Check size={16} className="shrink-0" />
+          Isento neste mês.
+        </p>
+      </div>
+    );
+  }
+  // Sem mensalidade lançada: dizer, em vez de sumir com o cartão
+  if (!eu.temCobranca) {
+    return (
+      <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+        {titulo}
+        <p className="mt-2 text-sm leading-relaxed text-ink-400">
+          Sua mensalidade deste mês ainda não foi lançada. Avise o organizador.
+        </p>
+      </div>
+    );
+  }
 
   const { chave, nome, cidade } = mensalidade.pix;
   const codigoPix =
@@ -905,7 +931,10 @@ function MinhaMensalidade({
     venceEm: mensalidade.venceEm,
     valorCents: mensalidade.valorCents,
     pixChave: chave,
-    lista: mensalidade.mensalistas.map((m) => ({ nome: m.name, ok: m.pago || Boolean(m.informadoEm) })),
+    lista: mensalidade.mensalistas.map((m) => ({
+      nome: m.name,
+      ok: m.pago || Boolean(m.informadoEm) || Boolean(m.isento),
+    })),
     link: `${location.origin}${location.pathname}#/c/${code.toUpperCase()}`,
   });
 
@@ -935,7 +964,7 @@ function MinhaMensalidade({
 
   return (
     <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-      <p className="text-[15px] font-semibold text-ink-50">Mensalidade de {rotuloDoMes(mensalidade.mes)}</p>
+      {titulo}
       <p className="mt-0.5 text-sm text-ink-400">
         Vence dia {vence} · {formatBRL(mensalidade.valorCents)}
       </p>
