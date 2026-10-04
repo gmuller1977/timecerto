@@ -1729,7 +1729,7 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
     db().from('players').select('id, name, nickname, kind, phone, active, pending, deleted_at').eq('group_id', groupId),
     db()
       .from('cobrancas')
-      .select('id, player_id, tipo, descricao, valor_cents, vence_em, cancelada_em, criada_em')
+      .select('id, player_id, tipo, referencia, descricao, valor_cents, vence_em, cancelada_em, criada_em, informado_em')
       .eq('group_id', groupId),
     db()
       .from('pagamentos')
@@ -1766,6 +1766,8 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
       venceEm: c.vence_em,
       canceladaEm: c.cancelada_em,
       criadaEm: c.criada_em,
+      referencia: c.referencia,
+      informadoEm: c.informado_em,
     })),
     pagamentos: (pag.data ?? []).map((p) => ({
       id: p.id,
@@ -1817,6 +1819,36 @@ export async function sincronizarDiarias(groupId: string): Promise<void> {
 }
 
 /** O que cada jogador deve (positivo) ou tem de crédito (negativo), por id da NUVEM */
+/** A mensalidade do mês, vista do link do jogo (migração 031) */
+export interface MensalidadeDoLink {
+  /** 'AAAA-MM' */
+  mes: string;
+  /** AAAA-MM-DD */
+  venceEm: string;
+  valorCents: number;
+  pix: { chave: string | null; nome: string | null; cidade: string | null };
+  mensalistas: { id: string; name: string; temCobranca: boolean; pago: boolean; informadoEm: string | null }[];
+}
+
+/** Null no link de convidados, ou com o grupo sem mensalidade */
+export async function guestMensalidade(code: string): Promise<MensalidadeDoLink | null> {
+  const { data, error } = await db().rpc('guest_mensalidade', { code });
+  if (error) throw error;
+  return (data as MensalidadeDoLink | null) ?? null;
+}
+
+/** "Já paguei": fica a conferir, não é baixa */
+export async function guestInformarPagamento(code: string, playerId: string): Promise<void> {
+  const { error } = await db().rpc('guest_informar_pagamento', { code, p_player: playerId });
+  if (error) throw error;
+}
+
+/** O administrador conferiu e o dinheiro não chegou */
+export async function desfazerInformado(cobrancaId: string): Promise<void> {
+  const { error } = await db().rpc('desfazer_informado', { p_cobranca: cobrancaId });
+  if (error) throw error;
+}
+
 export async function vencidosDoGrupo(groupId: string, hoje: string): Promise<Map<string, number>> {
   const dados = await lerFinanceiro(groupId);
   const { saldosPorJogador, vencidoCents } = await import('@/lib/financeiro');

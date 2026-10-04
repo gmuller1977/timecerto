@@ -631,3 +631,35 @@ nome fica preso à CONTA, não ao celular — resolve também quem chega primeir
 quem troca de celular. O preço é o atrito: muita gente de pelada não vai
 fazer login para marcar presença.
 
+## A mensalidade no grupo
+
+Decidido pelo Guilherme em 05/10/2026. Com mensalidade configurada, "Cobrar no
+grupo" manda a mensalidade do mês, não mais a lista de pendências:
+
+```
+⚡ Maverick · Mensalidade de Outubro/2026
+
+Vencimento: dia 10/10
+Valor: R$ 80,00
+
+• Ana ✅
+• Beto
+
+Pix: (chave do grupo)
+
+Quando fizer o pagamento, entre no link abaixo e confirme o pagamento.
+(link do jogo)
+```
+
+- **O ✅** vai em quem já pagou (baixa do administrador, inclusive em dinheiro)
+  e em quem informou pelo link. "Pago" segue a regra de sempre: o pagamento
+  abate as cobranças mais antigas primeiro.
+- **No link do jogo**, o mensalista vê a mensalidade do mês, copia o Pix já com
+  o valor e toca em **"Já paguei"**. Depois aparece "Mandar a lista da
+  mensalidade no grupo", com o ✅ no nome dele.
+- **Informar não é baixa** (migração 031, `cobrancas.informado_em`): no
+  Financeiro o cartão diz "Informou que pagou · a conferir"; o administrador
+  confere no extrato e registra o pagamento. Se o dinheiro não chegou, "Não
+  recebi" tira o ✅.
+- Grupo sem mensalidade continua com a mensagem de pendências antiga.
+

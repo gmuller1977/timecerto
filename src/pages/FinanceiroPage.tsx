@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import {
   cancelarCobranca,
+  desfazerInformado,
   estornarDespesa,
   estornarPagamento,
   findActiveGroup,
+  groupLink,
   lancarAvulsa,
   lancarDespesa,
   lerFinanceiro,
@@ -21,6 +23,7 @@ import {
   centavosParaCampo,
   emCaixa,
   fimDoMes,
+  mensagemDaMensalidade,
   pixCopiaECola,
   quemDeve,
   reaisParaCentavos,
@@ -115,6 +118,36 @@ function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => stri
     : `Ainda falta acertar: ${devedores.map((d) => nome(d.playerId)).join(', ')}.`;
   const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
   return `⚡ ${grupo.name} · pendências\n${lista}${pix}\n\nQuem já pagou, desconsidere. 🙏`;
+}
+
+/**
+ * A cobrança do grupo quando há mensalidade (pedido do Guilherme, 05/10/2026):
+ * todos os mensalistas do mês, com ✅ em quem já pagou (baixa) ou informou
+ * pelo link. A mesma lista que o mensalista manda de volta depois de pagar.
+ */
+function mensagemDoMes(grupo: CloudGroup, dados: DadosFinanceiros, saldos: Map<string, SaldoDoJogador>): string | null {
+  const c = dados.config;
+  if (!c.mensalidadeCents || !c.mensalidadeDia || !grupo.code) return null;
+  const mes = hoje().slice(0, 7);
+  const lista = [...dados.jogadores.values()]
+    .filter((j) => j.kind === 'mensalista' && j.ativo)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    .map((j) => {
+      const cob = dados.cobrancas.find(
+        (x) => x.playerId === j.id && x.tipo === 'mensalidade' && x.referencia === mes && !x.canceladaEm,
+      );
+      const emAberto = cob ? saldos.get(j.id)?.abertas.some((a) => a.cobranca.id === cob.id) : true;
+      return { nome: j.nome, ok: Boolean(cob && (!emAberto || cob.informadoEm)) };
+    });
+  return mensagemDaMensalidade({
+    grupo: grupo.name,
+    mes,
+    venceEm: `${mes}-${String(c.mensalidadeDia).padStart(2, '0')}`,
+    valorCents: c.mensalidadeCents,
+    pixChave: c.pixChave,
+    lista,
+    link: groupLink(grupo.code),
+  });
 }
 
 /**
@@ -520,7 +553,8 @@ function CobrarVarios({
   }
 
   if (modo === 'grupo') {
-    const texto = mensagemDoGrupo(devedores, nome, grupo, dados, valores);
+    const doMes = mensagemDoMes(grupo, dados, saldosPorJogador(dados.cobrancas, dados.pagamentos));
+    const texto = doMes ?? mensagemDoGrupo(devedores, nome, grupo, dados, valores);
     return (
       <div className="mb-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
         <div className="flex items-center justify-between gap-2">
@@ -529,20 +563,24 @@ function CobrarVarios({
             <X size={16} />
           </button>
         </div>
-        <label className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-sm text-ink-300">Mostrar os valores</span>
-          <input
-            type="checkbox"
-            checked={valores}
-            onChange={(e) => setValores(e.target.checked)}
-            className="size-5 accent-brand-500"
-          />
-        </label>
+        {!doMes && (
+          <label className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-sm text-ink-300">Mostrar os valores</span>
+            <input
+              type="checkbox"
+              checked={valores}
+              onChange={(e) => setValores(e.target.checked)}
+              className="size-5 accent-brand-500"
+            />
+          </label>
+        )}
         <p className="mt-3 whitespace-pre-wrap rounded-xl bg-ink-950 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
           {texto}
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-          O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.
+          {doMes
+            ? 'Quem pagar confirma no link e manda a lista de volta com o ✅. O pagamento fica a conferir aqui até você dar a baixa. No WhatsApp, escolha o grupo da pelada.'
+            : 'O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.'}
         </p>
         <Button
           className="mt-3 w-full"
@@ -691,6 +729,8 @@ function Devedor({
   const nome = jogador?.nome ?? 'Jogador';
   const hojeStr = hoje();
   const atrasada = saldo.abertas.some((a) => a.cobranca.venceEm < hojeStr);
+  // Informou pelo link e ainda não teve baixa (migração 031)
+  const aConferir = saldo.abertas.some((a) => a.cobranca.informadoEm);
 
   const [pixPendente, setPixPendente] = useState<string | null>(null);
 
@@ -730,6 +770,17 @@ function Devedor({
     setBusy(false);
   }
 
+  // Conferiu e o dinheiro não chegou: tira o ✅ da lista
+  async function naoRecebi(id: string) {
+    setErro(null);
+    try {
+      await desfazerInformado(id);
+      recarregar();
+    } catch (err) {
+      setErro(explain(err));
+    }
+  }
+
   async function cancelar(id: string, descricao: string) {
     if (!window.confirm(`Cancelar "${descricao}" de ${nome}? A cobrança some da conta dele, mas fica no histórico como cancelada.`)) return;
     try {
@@ -751,6 +802,9 @@ function Devedor({
               : `${saldo.abertas.length} cobranças`}
             {atrasada && ' · atrasada'}
           </span>
+          {aConferir && (
+            <span className="block truncate text-[11px] font-medium text-brand-300">Informou que pagou · a conferir</span>
+          )}
           {ultimo && (
             <span className="block truncate text-[11px] text-ink-500">
               Cobrado {haQuanto(ultimo.enviadoEm)}
@@ -779,6 +833,19 @@ function Devedor({
                   vence {dm(a.cobranca.venceEm)}
                   {a.faltaCents < a.cobranca.valorCents && ` · faltam ${formatBRL(a.faltaCents)} de ${formatBRL(a.cobranca.valorCents)}`}
                 </span>
+                {a.cobranca.informadoEm && (
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-brand-300">
+                    Informou que pagou em {dm(diaLocal(a.cobranca.informadoEm))}. Confira e registre o pagamento.
+                    {!soLeitura && (
+                      <button
+                        onClick={() => naoRecebi(a.cobranca.id)}
+                        className="ml-1.5 text-ink-400 underline"
+                      >
+                        Não recebi
+                      </button>
+                    )}
+                  </span>
+                )}
               </span>
               <span className="shrink-0 tabular-nums text-ink-200">{formatBRL(a.faltaCents)}</span>
               {!soLeitura && (

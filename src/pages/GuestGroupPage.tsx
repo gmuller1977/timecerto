@@ -4,6 +4,9 @@ import { BellRing, Check, Hourglass, Lock, MapPin, UserPlus, X } from 'lucide-re
 import {
   guestAddPlayer,
   guestGroup,
+  guestInformarPagamento,
+  guestMensalidade,
+  type MensalidadeDoLink,
   guestPromover,
   guestJoin,
   guestSetAttendance,
@@ -15,7 +18,7 @@ import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos, normalizar } from '@/lib/juntar';
 import { textoDaLista } from '@/lib/listaDoJogo';
 import { faseDoJogo } from '@/lib/promocao';
-import { pixCopiaECola } from '@/lib/financeiro';
+import { mensagemDaMensalidade, pixCopiaECola, rotuloDoMes } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
@@ -130,6 +133,8 @@ export function GuestGroupPage() {
   // Erro de resposta fica no cartão: "respondido de outro celular" não pode
   // apagar a página inteira
   const [respostaErro, setRespostaErro] = useState<string | null>(null);
+  // A mensalidade do mês (migração 031): só no link do jogo, e só se o grupo cobra
+  const [mensalidade, setMensalidade] = useState<MensalidadeDoLink | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -138,6 +143,10 @@ export function GuestGroupPage() {
       await guestPromover(code).catch((e) => console.warn('promover pelo link', e));
       setData(await guestGroup(code));
       setError(null);
+      // Falhar aqui não derruba o link: só some o cartão da mensalidade
+      guestMensalidade(code)
+        .then(setMensalidade)
+        .catch((e) => console.warn('mensalidade pelo link', e));
     } catch (e) {
       console.error('convite do grupo', e);
       setError(
@@ -259,6 +268,17 @@ export function GuestGroupPage() {
   const naLista = Boolean(mine && ['confirmado', 'vaga', 'fila', 'espera', 'chamado'].includes(tipoDe(mine.id) ?? ''));
   // Quem desistiu também avisa o grupo: a vaga abriu (pedido do Guilherme, 29/09/2026)
   const saiuDaLista = Boolean(mine && tipoDe(mine.id) === 'nao_vou');
+
+  const cartaoMensalidade =
+    mensalidade && mine?.kind === 'mensalista' ? (
+      <MinhaMensalidade
+        code={code}
+        grupo={data.group.name}
+        mensalidade={mensalidade}
+        meuId={mine.id}
+        onInformado={load}
+      />
+    ) : null;
 
   async function answer(status: 'vou' | 'nao_vou') {
     if (!event || !mine) return;
@@ -466,10 +486,13 @@ export function GuestGroupPage() {
       <h1 className="text-2xl font-bold tracking-tight">{data.group.name}</h1>
 
       {!event ? (
-        <p className="mt-6 rounded-2xl border border-ink-800 bg-ink-900 p-4 text-sm leading-relaxed text-ink-400">
-          Nenhum jogo marcado agora. Quando o organizador marcar, é neste mesmo
-          link que você {viaConvidados ? 'se inscreve' : 'confirma'}.
-        </p>
+        <>
+          <p className="mt-6 rounded-2xl border border-ink-800 bg-ink-900 p-4 text-sm leading-relaxed text-ink-400">
+            Nenhum jogo marcado agora. Quando o organizador marcar, é neste mesmo
+            link que você {viaConvidados ? 'se inscreve' : 'confirma'}.
+          </p>
+          {cartaoMensalidade}
+        </>
       ) : (
         <>
           <p className="mt-1 text-sm capitalize text-ink-300">
@@ -571,6 +594,7 @@ export function GuestGroupPage() {
                     </button>
                   </div>
                 )}
+                {cartaoMensalidade}
                 <AvisoDoAtleta code={code} playerId={mine.id} />
               </>
             ) : viaConvidados ? (
@@ -841,6 +865,128 @@ function gruposDeMensalistas(lista: Mensalista[]): { titulo: string; jogadores: 
     { titulo: 'Lista de espera', jogadores: de((p) => p.status === 'espera' || p.status === 'chamado') },
     { titulo: 'Não vão', jogadores: de((p) => p.status === 'nao_vou') },
   ].filter((g) => g.jogadores.length > 0);
+}
+
+/**
+ * A mensalidade do mês no link do jogo (migração 031, pedido do Guilherme em
+ * 05/10/2026): o Pix já com o valor, o "Já paguei" e, depois dele, a lista
+ * atualizada para mandar de volta no grupo — com o ✅ no nome de quem pagou.
+ * "Já paguei" não é baixa: o organizador confere e registra no Financeiro.
+ */
+function MinhaMensalidade({
+  code,
+  grupo,
+  mensalidade,
+  meuId,
+  onInformado,
+}: {
+  code: string;
+  grupo: string;
+  mensalidade: MensalidadeDoLink;
+  meuId: string;
+  onInformado: () => Promise<void> | void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [copiado, setCopiado] = useState(false);
+  const eu = mensalidade.mensalistas.find((m) => m.id === meuId);
+  if (!eu || !eu.temCobranca) return null;
+
+  const { chave, nome, cidade } = mensalidade.pix;
+  const codigoPix =
+    chave && nome && cidade
+      ? pixCopiaECola({ chave, nome, cidade, valorCents: mensalidade.valorCents })
+      : null;
+  const vence = `${mensalidade.venceEm.slice(8, 10)}/${mensalidade.venceEm.slice(5, 7)}`;
+  const feito = eu.pago || Boolean(eu.informadoEm);
+  const lista = mensagemDaMensalidade({
+    grupo,
+    mes: mensalidade.mes,
+    venceEm: mensalidade.venceEm,
+    valorCents: mensalidade.valorCents,
+    pixChave: chave,
+    lista: mensalidade.mensalistas.map((m) => ({ nome: m.name, ok: m.pago || Boolean(m.informadoEm) })),
+    link: `${location.origin}${location.pathname}#/c/${code.toUpperCase()}`,
+  });
+
+  async function informar() {
+    setBusy(true);
+    setErro(null);
+    try {
+      await guestInformarPagamento(code, meuId);
+      await onInformado();
+    } catch (e) {
+      console.error('informar pagamento', e);
+      setErro(dbMessage(e, 'Não deu para confirmar. Confira a internet e tente de novo.'));
+    }
+    setBusy(false);
+  }
+
+  async function copiar() {
+    if (!codigoPix) return;
+    try {
+      await navigator.clipboard.writeText(codigoPix);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      setErro('Não deu para copiar. Use a chave Pix do grupo.');
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+      <p className="text-[15px] font-semibold text-ink-50">Mensalidade de {rotuloDoMes(mensalidade.mes)}</p>
+      <p className="mt-0.5 text-sm text-ink-400">
+        Vence dia {vence} · {formatBRL(mensalidade.valorCents)}
+      </p>
+
+      {eu.pago ? (
+        <p className="mt-3 flex items-center gap-2 text-sm font-medium text-brand-200">
+          <Check size={16} className="shrink-0" />
+          Paga. Obrigado!
+        </p>
+      ) : eu.informadoEm ? (
+        <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-brand-200">
+          <Check size={16} className="mt-0.5 shrink-0" />
+          Você confirmou o pagamento. O organizador vai conferir.
+        </p>
+      ) : (
+        <>
+          {codigoPix ? (
+            <button
+              onClick={copiar}
+              className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-ink-700 text-sm font-medium text-ink-100 active:scale-[0.99]"
+            >
+              {copiado ? 'Pix copiado ✓' : `Copiar o Pix (${formatBRL(mensalidade.valorCents)})`}
+            </button>
+          ) : (
+            chave && <p className="mt-3 text-sm text-ink-300">Pix: {chave}</p>
+          )}
+          <button
+            disabled={busy}
+            onClick={informar}
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99] disabled:opacity-50"
+          >
+            <Check size={17} />
+            {busy ? 'Confirmando…' : 'Já paguei'}
+          </button>
+          <p className="mt-1.5 text-xs leading-relaxed text-ink-500">
+            Toque depois de fazer o Pix. O organizador confere e dá a baixa.
+          </p>
+        </>
+      )}
+
+      {feito && (
+        <button
+          onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(lista)}`, '_blank', 'noopener')}
+          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
+        >
+          Mandar a lista da mensalidade no grupo
+        </button>
+      )}
+      {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
+    </div>
+  );
 }
 
 function PagarDiaria({ cobranca }: { cobranca: NonNullable<CloudEvent['cobrancaAntecipada']> }) {

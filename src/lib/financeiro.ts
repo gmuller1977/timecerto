@@ -5,6 +5,8 @@
  * conta intermediária usa reais com vírgula.
  */
 
+import { formatBRL } from '@/lib/utils';
+
 export interface Cobranca {
   id: string;
   playerId: string;
@@ -15,6 +17,10 @@ export interface Cobranca {
   venceEm: string;
   canceladaEm: string | null;
   criadaEm: string;
+  /** 'AAAA-MM' na mensalidade */
+  referencia?: string;
+  /** O mensalista disse, pelo link, que pagou (migração 031). Não é baixa */
+  informadoEm?: string | null;
 }
 
 export interface Pagamento {
@@ -127,6 +133,44 @@ export function saldosPorJogador(cobrancas: Cobranca[], pagamentos: Pagamento[])
  */
 export function vencidoCents(s: SaldoDoJogador, hoje: string): number {
   return s.abertas.filter((a) => a.cobranca.venceEm < hoje).reduce((t, a) => t + a.faltaCents, 0);
+}
+
+// ── A mensalidade do mês, no grupo (migração 031) ──
+
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+/** 'AAAA-MM' → "Outubro/2026" */
+export function rotuloDoMes(mes: string): string {
+  const m = MESES[Number(mes.slice(5, 7)) - 1] ?? '';
+  return `${m.charAt(0).toUpperCase()}${m.slice(1)}/${mes.slice(0, 4)}`;
+}
+
+/**
+ * A mensagem do grupo, no texto do Guilherme (05/10/2026): o mês, o
+ * vencimento, o valor, os mensalistas — com ✅ em quem já pagou ou informou —,
+ * o Pix e o link para confirmar. Sai igual do Financeiro e do link, para a
+ * lista que o mensalista manda de volta ser a mesma que o organizador mandou.
+ */
+export function mensagemDaMensalidade(m: {
+  grupo: string;
+  /** 'AAAA-MM' */
+  mes: string;
+  /** AAAA-MM-DD */
+  venceEm: string;
+  valorCents: number;
+  pixChave: string | null;
+  lista: { nome: string; ok: boolean }[];
+  link: string;
+}): string {
+  const linhas = m.lista.map((x) => `• ${x.nome}${x.ok ? ' ✅' : ''}`).join('\n');
+  const pix = m.pixChave ? `\n\nPix: ${m.pixChave}` : '';
+  return (
+    `⚡ ${m.grupo} · Mensalidade de ${rotuloDoMes(m.mes)}\n\n` +
+    `Vencimento: dia ${m.venceEm.slice(8, 10)}/${m.venceEm.slice(5, 7)}\n` +
+    `Valor: ${formatBRL(m.valorCents)}\n\n` +
+    `${linhas}${pix}\n\n` +
+    `Quando fizer o pagamento, entre no link abaixo e confirme o pagamento.\n${m.link}`
+  );
 }
 
 /** Quem deve, do maior valor para o menor */
