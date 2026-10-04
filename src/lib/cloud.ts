@@ -1,3 +1,4 @@
+import { meuAparelho } from '@/lib/aparelho';
 import { supabase } from '@/lib/supabase';
 import type { PromocaoDoGrupo } from '@/lib/promocao';
 import { guardarGrupos, lerGrupoAtivo } from '@/lib/grupoAtivo';
@@ -968,6 +969,7 @@ export async function guestJoin(
     p_event: eventId,
     p_name: name,
     p_position: position,
+    p_aparelho: meuAparelho(),
   });
   if (error) throw error;
   return data as string;
@@ -992,6 +994,7 @@ export async function guestAddPlayer(
     p_name: name,
     p_invited_by: invitedBy,
     p_position: position,
+    p_aparelho: meuAparelho(),
   });
   if (error) throw error;
   return data as string;
@@ -1014,6 +1017,8 @@ export async function guestSetAttendance(
     p_event: eventId,
     p_player: playerId,
     p_status: status,
+    // Migração 030: o primeiro celular que responde por um nome fica com ele
+    p_aparelho: meuAparelho(),
   });
   if (error) throw error;
 }

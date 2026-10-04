@@ -12,7 +12,7 @@ import {
   type PublishedTeams,
 } from '@/lib/cloud';
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
-import { nomesParecidos } from '@/lib/juntar';
+import { nomesParecidos, normalizar } from '@/lib/juntar';
 import { textoDaLista } from '@/lib/listaDoJogo';
 import { faseDoJogo } from '@/lib/promocao';
 import { pixCopiaECola } from '@/lib/financeiro';
@@ -89,9 +89,14 @@ const fmtEvent = (iso: string) =>
 /**
  * Os dois links do WhatsApp, sem conta:
  *
- * - `/c/CÓDIGO` — mensalistas: escolhe o nome, vou / não vou, e pode levar
- *   alguém de fora (entra na fila de convidados);
- * - `/v/CÓDIGO` — convidados: põe o nome e entra na fila.
+ * - `/c/CÓDIGO` — o link do jogo (migração 030): o mensalista procura o nome
+ *   e confirma, e pode levar alguém de fora; quem não é mensalista se inscreve
+ *   como convidado ali mesmo. A maioria dos grupos tem um grupo de WhatsApp só;
+ * - `/v/CÓDIGO` — só convidados: põe o nome e entra na fila. Continua vivo
+ *   para quem tem dois grupos.
+ *
+ * Em cada jogo, o primeiro celular que responde por um nome fica com ele
+ * (lib/aparelho.ts): outro celular não muda aquela resposta.
  *
  * Vaga e fila saem de `distribuirVagas`, a mesma função da tela do
  * organizador — as três telas não podem discordar sobre quem joga.
@@ -118,6 +123,13 @@ export function GuestGroupPage() {
   // sorteio não sabe se ele é levantador ou goleiro
   const [newPosition, setNewPosition] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  // No link do jogo o formulário serve a duas coisas: o convidado se inscrever
+  // (eu) ou o mensalista levar alguém (levar)
+  const [formModo, setFormModo] = useState<'eu' | 'levar'>('levar');
+  const [busca, setBusca] = useState('');
+  // Erro de resposta fica no cartão: "respondido de outro celular" não pode
+  // apagar a página inteira
+  const [respostaErro, setRespostaErro] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -176,6 +188,21 @@ export function GuestGroupPage() {
   // Os convidados que ESTE celular já usou — só eles no "Já jogou com a gente?"
   const usados = readUsados(code);
   const usadosAqui = convidados.filter((p) => usados.has(p.id));
+  // No link do jogo, o histórico do celular vale para todo mundo
+  const usadosNoLink = data.players.filter((p) => usados.has(p.id));
+  const termo = normalizar(busca);
+  const mensalistasVisiveis = termo
+    ? mensalistas.filter((p) => normalizar(p.name).includes(termo))
+    : mensalistas;
+  // Convidado só aparece quando a pessoa digita: a lista inteira de convidados
+  // não fica exposta (decisão de 29/09/2026, a mesma do "Você é…?")
+  const convidadosDaBusca =
+    termo.length >= 3
+      ? convidados
+          .filter((p) => normalizar(p.name).includes(termo) || nomesParecidos(busca, [p]).length > 0)
+          .slice(0, 3)
+      : [];
+  const souEu = viaConvidados || formModo === 'eu';
 
   /*
    * "Você é…?" enquanto digita: o nome bate com alguém do grupo? No link de
@@ -227,10 +254,8 @@ export function GuestGroupPage() {
       })
     : '';
 
-  // No link de convidados, "eu" só pode ser um convidado; no dos mensalistas, um mensalista
-  const mine = data.players.find(
-    (p) => p.id === me && (viaConvidados ? p.kind === 'convidado' : p.kind === 'mensalista'),
-  );
+  // No link de convidados, "eu" só pode ser um convidado; no do jogo, qualquer um
+  const mine = data.players.find((p) => p.id === me && (!viaConvidados || p.kind === 'convidado'));
   const naLista = Boolean(mine && ['confirmado', 'vaga', 'fila', 'espera', 'chamado'].includes(tipoDe(mine.id) ?? ''));
   // Quem desistiu também avisa o grupo: a vaga abriu (pedido do Guilherme, 29/09/2026)
   const saiuDaLista = Boolean(mine && tipoDe(mine.id) === 'nao_vou');
@@ -238,12 +263,13 @@ export function GuestGroupPage() {
   async function answer(status: 'vou' | 'nao_vou') {
     if (!event || !mine) return;
     setSaving(true);
+    setRespostaErro(null);
     try {
       await guestSetAttendance(code, event.id, mine.id, status);
       await load();
     } catch (e) {
       console.error('resposta de presença', e);
-      setError(dbMessage(e, 'Não deu para salvar. Confira a internet e tente de novo.'));
+      setRespostaErro(dbMessage(e, 'Não deu para salvar. Confira a internet e tente de novo.'));
     }
     setSaving(false);
   }
@@ -254,7 +280,7 @@ export function GuestGroupPage() {
     setSaving(true);
     setFormError(null);
     try {
-      if (viaConvidados) {
+      if (souEu) {
         const id = await guestJoin(code, event.id, newName, newPosition);
         writeMe(code, id);
         setMe(id);
@@ -264,6 +290,7 @@ export function GuestGroupPage() {
       setFormOpen(false);
       setNewName('');
       setNewPosition('');
+      setBusca('');
       await load();
     } catch (err) {
       console.error('incluir pelo link', err);
@@ -307,7 +334,7 @@ export function GuestGroupPage() {
   const nameForm = (
     <form onSubmit={submitName} className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
       <p className="text-[15px] font-semibold text-ink-50">
-        {viaConvidados ? 'Qual é o seu nome?' : 'Quem você vai levar?'}
+        {souEu ? 'Qual é o seu nome?' : 'Quem você vai levar?'}
       </p>
       {seEntrarAgora && (
         <div
@@ -336,7 +363,7 @@ export function GuestGroupPage() {
           className="mt-2 flex items-center gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5"
         >
           <span className="min-w-0 flex-1 text-sm text-brand-100">
-            {viaConvidados ? (
+            {souEu ? (
               <>
                 Você é <strong>{p.name}</strong>?
               </>
@@ -349,7 +376,7 @@ export function GuestGroupPage() {
           <button
             type="button"
             onClick={() => {
-              if (viaConvidados) {
+              if (souEu) {
                 writeMe(code, p.id);
                 setMe(p.id);
                 setNewName('');
@@ -360,16 +387,16 @@ export function GuestGroupPage() {
             }}
             className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-ink-950"
           >
-            {viaConvidados ? 'Sou eu' : 'É ela'}
+            {souEu ? 'Sou eu' : 'É ela'}
           </button>
         </div>
       ))}
       {mensalistaParecido && (
         <p className="mt-2 rounded-xl bg-ink-800 px-3 py-2.5 text-xs leading-relaxed text-ink-300">
-          {viaConvidados ? (
+          {souEu ? (
             <>
               <strong className="text-ink-100">{mensalistaParecido.name}</strong> está na lista de mensalistas. Se
-              for você, confirme pelo link dos mensalistas.
+              for você, {viaConvidados ? 'confirme pelo link dos mensalistas' : 'toque no seu nome na lista acima'}.
             </>
           ) : (
             <>
@@ -380,7 +407,7 @@ export function GuestGroupPage() {
         </p>
       )}
       <p className="mt-4 text-xs font-medium text-ink-400">
-        {viaConvidados ? 'Sua posição' : 'Posição de quem você vai levar'}
+        {souEu ? 'Sua posição' : 'Posição de quem você vai levar'}
       </p>
       <div className="mt-1.5 flex flex-wrap gap-2" role="group" aria-label="Posição">
         {(SPORTS[data.group.sport as SportId]?.positions ?? []).map((pos) => (
@@ -423,7 +450,7 @@ export function GuestGroupPage() {
             ? 'Enviando…'
             : fechada
               ? 'Entrar na fila de espera'
-              : viaConvidados
+              : souEu
                 ? 'Quero jogar'
                 : 'Incluir convidado'}
         </button>
@@ -434,7 +461,7 @@ export function GuestGroupPage() {
   return (
     <Frame>
       <p className="text-xs font-semibold tracking-wide text-brand-400 uppercase">
-        {viaConvidados ? 'Lista de convidados' : 'Mensalistas'}
+        {viaConvidados ? 'Lista de convidados' : 'Lista do jogo'}
       </p>
       <h1 className="text-2xl font-bold tracking-tight">{data.group.name}</h1>
 
@@ -496,15 +523,21 @@ export function GuestGroupPage() {
                   name={mine.name}
                   antesDaPromocao={fase.tipo === 'mensalistas' ? fase.quando : null}
                   situacao={sit(mine.id)}
-                  convidado={viaConvidados}
+                  convidado={mine.kind === 'convidado'}
                   fechada={fechada}
                   saving={saving}
                   onAnswer={answer}
                   onNotMe={() => {
                     writeMe(code, null);
                     setMe(null);
+                    setRespostaErro(null);
                   }}
                 />
+                {respostaErro && (
+                  <p className="mt-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm leading-relaxed text-red-200">
+                    {respostaErro}
+                  </p>
+                )}
                 {/*
                   Pedido do Guilherme em 29/09/2026: junto da confirmação, o
                   convite para mandar a lista atualizada no grupo. O app não
@@ -557,8 +590,35 @@ export function GuestGroupPage() {
               <>
                 <p className="text-[15px] font-semibold text-ink-50">Quem é você?</p>
                 <p className="mt-1 text-xs text-ink-500">
-                  Toque no seu nome. Este celular lembra da próxima vez.
+                  Procure seu nome e toque nele. Este celular lembra da próxima vez.
                 </p>
+                {/* O histórico deste celular: quem já respondeu daqui */}
+                {usadosNoLink.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    {usadosNoLink.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          writeMe(code, p.id);
+                          setMe(p.id);
+                          setBusca('');
+                        }}
+                        className="flex items-center gap-3 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-3 text-left active:scale-[0.99]"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">{p.name}</span>
+                        <span className="shrink-0 text-xs font-semibold text-brand-300">Sou eu</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  maxLength={40}
+                  placeholder="Procure seu nome"
+                  aria-label="Procure seu nome"
+                  className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
+                />
               </>
             )}
           </section>
@@ -574,7 +634,7 @@ export function GuestGroupPage() {
             próprio nome; quem já confirmou, embaixo. Sem jogo marcado não há
             resposta, e a lista fica inteira em "A confirmar".
           */}
-          {gruposDeMensalistas(mensalistas).map((g) => (
+          {gruposDeMensalistas(mine ? mensalistas : mensalistasVisiveis).map((g) => (
             <div key={g.titulo} className="mb-4">
               <p className="mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">
                 {g.titulo} ({g.jogadores.length})
@@ -587,6 +647,7 @@ export function GuestGroupPage() {
                     onClick={() => {
                       writeMe(code, p.id);
                       setMe(p.id);
+                      setBusca('');
                     }}
                     className={cn(
                       'flex items-center gap-3 rounded-xl border px-3 py-3 text-left',
@@ -616,11 +677,49 @@ export function GuestGroupPage() {
           {mensalistas.length === 0 && (
             <p className="text-sm text-ink-500">O organizador ainda não cadastrou os mensalistas.</p>
           )}
-          {!mine && event && !fechada && (
-            <p className="mt-3 text-xs leading-relaxed text-ink-500">
-              Não achou seu nome? Você entra como convidado — peça ao organizador o
-              link de convidados.
-            </p>
+          {!mine && termo && mensalistasVisiveis.length === 0 && mensalistas.length > 0 && (
+            <p className="mb-2 text-sm text-ink-500">Nenhum mensalista com esse nome.</p>
+          )}
+          {/* Não é mensalista: convidado já conhecido, ou inscrição nova */}
+          {!mine && event && (
+            <div className="mt-2 flex flex-col gap-2">
+              {convidadosDaBusca.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5"
+                >
+                  <span className="min-w-0 flex-1 text-sm text-brand-100">
+                    Você é <strong>{p.name}</strong>? <span className="text-brand-100/70">(convidado)</span>
+                  </span>
+                  <button
+                    onClick={() => {
+                      writeMe(code, p.id);
+                      setMe(p.id);
+                      setBusca('');
+                    }}
+                    className="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-ink-950"
+                  >
+                    Sou eu
+                  </button>
+                </div>
+              ))}
+              {formOpen && formModo === 'eu' ? (
+                nameForm
+              ) : (
+                <button
+                  onClick={() => {
+                    setFormModo('eu');
+                    setNewName(busca.trim());
+                    setFormError(null);
+                    setFormOpen(true);
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 py-3.5 text-sm font-medium text-brand-300"
+                >
+                  <UserPlus size={17} />
+                  Não sou mensalista — quero jogar como convidado
+                </button>
+              )}
+            </div>
           )}
         </section>
       ) : (
@@ -703,13 +802,18 @@ export function GuestGroupPage() {
       )}
 
       {/* Mensalista leva alguém de fora */}
-      {!viaConvidados && event && mine && (
+      {!viaConvidados && event && mine?.kind === 'mensalista' && (
         <section className="mt-4">
-          {formOpen ? (
+          {formOpen && formModo === 'levar' ? (
             nameForm
           ) : (
             <button
-              onClick={() => setFormOpen(true)}
+              onClick={() => {
+                setFormModo('levar');
+                setNewName('');
+                setFormError(null);
+                setFormOpen(true);
+              }}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-ink-700 py-3.5 text-sm font-medium text-brand-300"
             >
               <UserPlus size={17} />

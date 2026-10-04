@@ -590,3 +590,44 @@ o aviso no celular.
 
 Provas: 15 no Postgres contra o schema completo, com todos os jogadores
 inscritos nos avisos para ver exatamente o que entra na caixa.
+
+## Um link só
+
+Decidido pelo Guilherme em 04/10/2026. A maioria dos grupos tem **um** grupo
+de WhatsApp, o dos mensalistas — então o link dos mensalistas é o link do
+jogo. O mensalista procura o nome e confirma; quem não é mensalista se
+inscreve como convidado ali mesmo, porque o mensalista mandou o link para ele
+ou porque o mensalista o levou ("Levar alguém de fora", como antes).
+
+- **O link reconhece o histórico**: os nomes que já responderam daquele
+  celular aparecem no alto, com "Sou eu".
+- **A busca**: digitar filtra os mensalistas; convidado só aparece quando bate
+  com o que foi digitado — a lista inteira de convidados continua sem ficar
+  exposta (a mesma decisão do "Você é…?", de 29/09/2026).
+- **O link dos convidados continua vivo**, para quem tem dois grupos. Na tela
+  do jogo os botões viraram "Convidar para o jogo" e "Link só de convidados".
+
+### A trava do nome (migração 030)
+
+Um link só mostra os nomes dos mensalistas para todo mundo — e, com a
+promoção, dá motivo para confirmar no nome de quem ainda não respondeu.
+
+- **Em cada jogo, o primeiro celular que responde por um nome fica com ele.**
+  Outro celular não muda aquela resposta e vê: "Este nome já foi respondido de
+  outro celular neste jogo." No jogo seguinte começa do zero.
+- **O organizador é a saída**: quando ele muda a resposta pelo app (ou a fila
+  de espera anda sozinha), a trava solta.
+- **Quem foi chamado da espera** confirma de qualquer celular — o chamado é do
+  organizador, numa mensagem direta.
+- O celular é um número aleatório guardado no aparelho (`lib/aparelho.ts`),
+  não identifica ninguém.
+
+Não pega quem chega primeiro no nome de outro. O que sobra, a lista pública
+mostra: o mensalista que não confirmou e aparece como "vou" percebe — e, ao
+tentar responder, descobre que o nome dele foi usado.
+
+**Próximo passo possível, não decidido**: entrar com o Google no link. Aí o
+nome fica preso à CONTA, não ao celular — resolve também quem chega primeiro e
+quem troca de celular. O preço é o atrito: muita gente de pelada não vai
+fazer login para marcar presença.
+

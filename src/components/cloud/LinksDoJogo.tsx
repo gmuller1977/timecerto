@@ -279,12 +279,12 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
                   className="h-auto flex-col gap-1 py-2.5"
                   onClick={() =>
                     convidar(
-                      `⚡ ${group.name}\n${detalhes}\n\nMensalistas, confirmem: toque no link, escolha seu nome e marque se vai.\n${groupLink(group.code)}`,
+                      `⚡ ${group.name}\n${detalhes}\n\nToque no link, procure seu nome e marque se vai. Não é mensalista? Coloque seu nome como convidado no mesmo link.\n${groupLink(group.code)}`,
                     )
                   }
                 >
                   <MessageCircle size={18} />
-                  <span className="text-[13px] leading-tight">Convidar mensalistas</span>
+                  <span className="text-[13px] leading-tight">Convidar para o jogo</span>
                 </Button>
                 <Button
                   variant="secondary"
@@ -297,7 +297,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
                   }
                 >
                   <UserPlus size={18} />
-                  <span className="text-[13px] leading-tight">Convidar convidados</span>
+                  <span className="text-[13px] leading-tight">Link só de convidados</span>
                 </Button>
               </div>
               <Button
