@@ -54,13 +54,14 @@ function diaLocal(iso: string): string {
 }
 
 /**
- * A data DA COBRANÇA, não o vencimento (pedido do Guilherme, 29/09/2026): a
- * mensalidade, o dia em que foi lançada; a diária, o dia do jogo; a avulsa, a
- * data escolhida ao lançar.
+ * A data que vai nas mensagens: o VENCIMENTO. A mensalidade vence no dia
+ * escolhido em Ajustes; a diária, no dia do jogo; a avulsa, na data escolhida
+ * ao lançar. Em 29/09/2026 a mensalidade mostrava o dia em que foi lançada (o
+ * dia 1); trocado pelo Guilherme em 05/10/2026 — "dia 01" na lista de
+ * pendências parecia atraso de quem ainda estava no prazo.
  */
 function dataDaCobranca(c: Cobranca): string {
-  if (c.tipo !== 'mensalidade') return c.venceEm;
-  return diaLocal(c.criadaEm);
+  return c.venceEm;
 }
 
 /**
@@ -77,7 +78,7 @@ function mensagemDeCobranca(
   dados: DadosFinanceiros,
 ): { texto: string; pix: string | null } {
   const c = dados.config;
-  // Mesmo formato do grupo: descrição — data da cobrança — o que falta (pedido do Guilherme, 29/09/2026)
+  // Mesmo formato do grupo: descrição — vencimento — o que falta
   const linhas = saldo.abertas.map(
     (a) => `• ${a.cobranca.descricao} — ${dm(dataDaCobranca(a.cobranca))} — ${formatBRL(a.faltaCents)}`,
   );
@@ -102,7 +103,7 @@ function mensagemDeCobranca(
  * nomes: quem cobra decide, a cada vez, se expõe quanto cada um deve.
  */
 function mensagemDoGrupo(devedores: SaldoDoJogador[], nome: (id: string) => string, grupo: CloudGroup, dados: DadosFinanceiros, valores: boolean): string {
-  // Uma linha por cobrança em aberto: nome — descrição — data da cobrança — o que falta (pedido do Guilherme, 29/09/2026)
+  // Uma linha por cobrança em aberto: nome — descrição — vencimento — o que falta
   const lista = valores
     ? devedores
         .flatMap((d) =>

@@ -23,7 +23,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { FormJogo } from '@/components/jogo/FormJogo';
 import { SeloStatus } from '@/components/jogo/SeloStatus';
-import { haQuantoChamado, statusDoJogo } from '@/lib/jogo';
+import { haQuantoChamado, hoje, statusDoJogo } from '@/lib/jogo';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogo, useJogoStore, useProximoJogo } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -135,10 +135,11 @@ function Pagina({
     let vivo = true;
     (async () => {
       try {
-        const { findActiveGroup, saldosDoGrupo } = await import('@/lib/cloud');
+        const { findActiveGroup, vencidosDoGrupo } = await import('@/lib/cloud');
         const g = await findActiveGroup();
         if (!g) return;
-        const porRemoto = await saldosDoGrupo(g.id);
+        // Só o que já venceu: o que ainda está no prazo não é dívida
+        const porRemoto = await vencidosDoGrupo(g.id, hoje());
         if (!vivo) return;
         const local = new Map<string, number>();
         for (const p of allPlayers) {

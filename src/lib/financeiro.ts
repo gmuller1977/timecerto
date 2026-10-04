@@ -120,6 +120,15 @@ export function saldosPorJogador(cobrancas: Cobranca[], pagamentos: Pagamento[])
   return saldos;
 }
 
+/**
+ * Quanto do que está em aberto já VENCEU (vence_em antes de `hoje`,
+ * AAAA-MM-DD). A mensalidade do dia 10 não pesa contra ninguém no dia 5
+ * (pedido do Guilherme em 05/10/2026).
+ */
+export function vencidoCents(s: SaldoDoJogador, hoje: string): number {
+  return s.abertas.filter((a) => a.cobranca.venceEm < hoje).reduce((t, a) => t + a.faltaCents, 0);
+}
+
 /** Quem deve, do maior valor para o menor */
 export function quemDeve(saldos: Map<string, SaldoDoJogador>): SaldoDoJogador[] {
   return [...saldos.values()].filter((s) => s.saldoCents > 0).sort((a, b) => b.saldoCents - a.saldoCents);

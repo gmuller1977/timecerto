@@ -1817,11 +1817,11 @@ export async function sincronizarDiarias(groupId: string): Promise<void> {
 }
 
 /** O que cada jogador deve (positivo) ou tem de crédito (negativo), por id da NUVEM */
-export async function saldosDoGrupo(groupId: string): Promise<Map<string, number>> {
+export async function vencidosDoGrupo(groupId: string, hoje: string): Promise<Map<string, number>> {
   const dados = await lerFinanceiro(groupId);
-  const { saldosPorJogador } = await import('@/lib/financeiro');
+  const { saldosPorJogador, vencidoCents } = await import('@/lib/financeiro');
   const saldos = saldosPorJogador(dados.cobrancas, dados.pagamentos);
-  return new Map([...saldos.values()].map((s) => [s.playerId, s.saldoCents]));
+  return new Map([...saldos.values()].map((s) => [s.playerId, vencidoCents(s, hoje)]));
 }
 
 /** Mensalidades do mês corrente, uma vez só. Devolve quantas nasceram */
