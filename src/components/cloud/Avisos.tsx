@@ -39,6 +39,22 @@ function gravarLocal(dono: string, valor: string | null) {
   }
 }
 
+/**
+ * Este celular recebe avisos de algum OUTRO papel? (atleta num link, ou
+ * administrador). Os papéis dividem o mesmo endereço de push (migração 034).
+ */
+function outroPapelAtivo(dono: string): boolean {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('timecerto:aviso:') && k !== chaveLocal(dono) && localStorage.getItem(k)) return true;
+    }
+  } catch {
+    /* navegação privada: sem como saber, cancela como antes */
+  }
+  return false;
+}
+
 type Estado = 'carregando' | 'ativo' | 'inativo';
 
 /**
@@ -50,8 +66,11 @@ type Estado = 'carregando' | 'ativo' | 'inativo';
 function useInterruptor(
   dono: string,
   quem: string | null,
-  /** Grava a inscrição renovada no banco e apaga a antiga */
-  trocar: (nova: InscricaoDeAviso, antigo: string) => Promise<void>,
+  /**
+   * Grava a inscrição no banco. Com `antigo`, ela foi renovada e a antiga
+   * é apagada; sem ele, só reafirma a que já existe.
+   */
+  gravar: (nova: InscricaoDeAviso, antigo?: string) => Promise<void>,
 ) {
   const [estado, setEstado] = useState<Estado>('carregando');
   useEffect(() => {
@@ -64,7 +83,12 @@ function useInterruptor(
       if (s && minha && s.chaveVelha) {
         const r = await renovarInscricao();
         if (!r) return vivo && setEstado('inativo');
-        await trocar(r.nova, r.antigo);
+        await gravar(r.nova, r.antigo);
+      } else if (s && minha) {
+        // Reafirma no banco, em silêncio: até a migração 034, ativar o outro
+        // papel neste celular SUBSTITUÍA esta inscrição, e o celular seguia
+        // dizendo "ativado". Gravar de novo é inofensivo e conserta isso
+        await gravar(s).catch((e) => console.warn('reafirmar a inscrição dos avisos', e));
       }
       if (vivo) setEstado(minha ? 'ativo' : 'inativo');
     })().catch((e) => {
@@ -152,7 +176,7 @@ export function AvisoDoAtleta({ code, playerId }: { code: string; playerId: stri
   const dono = code.toUpperCase();
   const [estado, setEstado] = useInterruptor(dono, playerId, async (nova, antigo) => {
     await guestInscreverAviso(code, playerId, nova);
-    if (antigo !== nova.endpoint)
+    if (antigo && antigo !== nova.endpoint)
       await guestCancelarAviso(code, antigo).catch((e) => console.warn('apagar a inscrição antiga', e));
   });
   const [busy, setBusy] = useState(false);
@@ -188,7 +212,7 @@ export function AvisoDoAtleta({ code, playerId }: { code: string; playerId: stri
     setBusy(true);
     setErro(null);
     try {
-      const endpoint = await desativarAvisos();
+      const endpoint = await desativarAvisos(outroPapelAtivo(dono));
       if (endpoint) await guestCancelarAviso(code, endpoint);
       gravarLocal(dono, null);
       setEstado('inativo');
@@ -223,7 +247,7 @@ export function AvisosDoAdmin() {
   const [estado, setEstado] = useInterruptor('admin', grupo ?? null, async (nova, antigo) => {
     if (!grupo) return;
     await inscreverAdmin(grupo, nova);
-    if (antigo !== nova.endpoint)
+    if (antigo && antigo !== nova.endpoint)
       await cancelarAvisoAdmin(antigo).catch((e) => console.warn('apagar a inscrição antiga', e));
   });
   const [busy, setBusy] = useState(false);
@@ -262,7 +286,7 @@ export function AvisosDoAdmin() {
     setBusy(true);
     setErro(null);
     try {
-      const endpoint = await desativarAvisos();
+      const endpoint = await desativarAvisos(outroPapelAtivo('admin'));
       if (endpoint) await cancelarAvisoAdmin(endpoint);
       gravarLocal('admin', null);
       setEstado('inativo');

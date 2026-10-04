@@ -134,12 +134,18 @@ export async function ativarAvisos(): Promise<InscricaoDeAviso> {
   return paraInscricao(s);
 }
 
-/** Cancela neste aparelho. Devolve o endereço, para apagar também no banco */
-export async function desativarAvisos(): Promise<string | null> {
+/**
+ * Cancela neste aparelho. Devolve o endereço, para apagar também no banco.
+ *
+ * `manterNoAparelho`: o celular recebe avisos de outro papel também (atleta e
+ * administrador, migração 034) — aí só o banco esquece este papel. Cancelar no
+ * navegador derrubaria os avisos do outro, que usam o mesmo endereço.
+ */
+export async function desativarAvisos(manterNoAparelho = false): Promise<string | null> {
   const reg = await navigator.serviceWorker.getRegistration('/');
   const s = await reg?.pushManager.getSubscription();
   if (!s) return null;
   const endpoint = s.endpoint;
-  await s.unsubscribe();
+  if (!manterNoAparelho) await s.unsubscribe();
   return endpoint;
 }
