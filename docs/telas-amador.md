@@ -605,7 +605,8 @@ ou porque o mensalista o levou ("Levar alguém de fora", como antes).
   com o que foi digitado — a lista inteira de convidados continua sem ficar
   exposta (a mesma decisão do "Você é…?", de 29/09/2026).
 - **O link dos convidados continua vivo**, para quem tem dois grupos. Na tela
-  do jogo os botões viraram "Convidar para o jogo" e "Link só de convidados".
+  do jogo ficou um botão só, "Convidar para o jogo" — o "Link só de convidados"
+  saiu em 05/10/2026, e os links antigos de convidados continuam abrindo.
 
 ### A trava do nome (migração 030)
 

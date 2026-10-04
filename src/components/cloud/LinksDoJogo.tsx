@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, BellOff, BellRing, ChevronRight, Send, Lock, MessageCircle, RefreshCw, SkipForward, UserPlus } from 'lucide-react';
+import { Bell, BellOff, BellRing, ChevronRight, Send, Lock, MessageCircle, RefreshCw, SkipForward } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { useJogoStore } from '@/store/useJogoStore';
@@ -274,32 +274,19 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
                     : ' · quem chega entra na fila de espera'}
                 </p>
               )}
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Button
-                  className="h-auto flex-col gap-1 py-2.5"
-                  onClick={() =>
-                    convidar(
-                      `⚡ ${group.name}\n${detalhes}\n\nToque no link, procure seu nome e marque se vai. Não é mensalista? Coloque seu nome como convidado no mesmo link.\n${groupLink(group.code)}`,
-                    )
-                  }
-                >
-                  <MessageCircle size={18} />
-                  <span className="text-[13px] leading-tight">Convidar para o jogo</span>
-                </Button>
-                <Button
-                  variant="secondary"
-                  className="h-auto flex-col gap-1 py-2.5"
-                  disabled={!group.guestCode}
-                  onClick={() =>
-                    convidar(
-                      `⚡ ${group.name}\n${detalhes}\n\nQuer jogar? Coloque seu nome na lista de convidados. Mensalistas têm prioridade; se sobrar vaga, entra por ordem de chegada.\n${guestLink(group.guestCode!)}`,
-                    )
-                  }
-                >
-                  <UserPlus size={18} />
-                  <span className="text-[13px] leading-tight">Link só de convidados</span>
-                </Button>
-              </div>
+              {/* O link só de convidados saiu da tela em 05/10/2026 (pedido do Guilherme):
+                  o link do jogo já serve aos dois. Os links antigos continuam abrindo */}
+              <Button
+                className="mt-2 w-full"
+                onClick={() =>
+                  convidar(
+                    `⚡ ${group.name}\n${detalhes}\n\nToque no link, procure seu nome e marque se vai. Não é mensalista? Coloque seu nome como convidado no mesmo link.\n${groupLink(group.code)}`,
+                  )
+                }
+              >
+                <MessageCircle size={17} />
+                Convidar para o jogo
+              </Button>
               <Button
                 variant="secondary"
                 className="mt-2 w-full"
