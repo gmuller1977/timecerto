@@ -84,7 +84,7 @@ function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGro
   const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
   const link = grupo.code ? `\n\nApós o pagamento, clique no link abaixo e confirme o valor.\n${groupLink(grupo.code)}` : '';
   return (
-    `Oi, ${nome}!\n\nPassando para lembrar do pagamento dos jogos do ${grupo.name}:\n${linhas.join('\n')}\n\n` +
+    `Oi, ${nome}!\n\nPassando para lembrar do pagamento dos jogos do ${grupo.name}:\n\n${linhas.join('\n')}\n\n` +
     `Total: ${formatBRL(saldo.saldoCents)}${pix}${link}`
   );
 }
