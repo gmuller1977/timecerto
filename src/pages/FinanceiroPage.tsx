@@ -24,7 +24,6 @@ import {
   emCaixa,
   fimDoMes,
   mensagemDaMensalidade,
-  pixCopiaECola,
   quemDeve,
   reaisParaCentavos,
   resumoDoMes,
@@ -67,37 +66,27 @@ function dataDaCobranca(c: Cobranca): string {
   return c.venceEm;
 }
 
+/** A linha de uma cobrança: o rótulo pelo tipo — diária é jogo, mensalidade não */
+function rotuloDaCobranca(c: Cobranca): string {
+  return c.tipo === 'diaria' ? 'Jogo do dia' : c.descricao;
+}
+
 /**
- * A cobrança de UMA pessoa: o que deve, e o Pix já com o valor dela.
- *
- * O código Pix vai numa SEGUNDA mensagem, sozinho (pedido do Guilherme,
- * 29/09/2026): no WhatsApp não dá para copiar só um pedaço de uma mensagem —
- * quem copiava levava o texto junto, e o banco recusava o código.
+ * A cobrança de UMA pessoa, mensalista ou convidado, no texto do Guilherme
+ * (05/10/2026): o que deve, linha por linha, o total, o Pix e o link para
+ * confirmar o pagamento. Uma mensagem só — a segunda, com o Pix copia e cola,
+ * saiu no mesmo dia.
  */
-function mensagemDeCobranca(
-  saldo: SaldoDoJogador,
-  nome: string,
-  grupo: CloudGroup,
-  dados: DadosFinanceiros,
-): { texto: string; pix: string | null } {
-  const c = dados.config;
-  // Mesmo formato do grupo: descrição — vencimento — o que falta
+function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGroup, dados: DadosFinanceiros): string {
   const linhas = saldo.abertas.map(
-    (a) => `• ${a.cobranca.descricao} — ${dm(dataDaCobranca(a.cobranca))} — ${formatBRL(a.faltaCents)}`,
+    (a) => `• ${rotuloDaCobranca(a.cobranca)}: ${dm(dataDaCobranca(a.cobranca))} — Valor de ${formatBRL(a.faltaCents)}`,
   );
-  const pix =
-    c.pixChave && c.pixNome && c.pixCidade
-      ? pixCopiaECola({ chave: c.pixChave, nome: c.pixNome, cidade: c.pixCidade, valorCents: saldo.saldoCents })
-      : null;
-  const rodape = pix
-    ? '\n\nO Pix copia e cola (já com o valor) vai na próxima mensagem 👇'
-    : c.pixChave
-      ? `\n\nPix: ${c.pixChave}`
-      : '';
-  return {
-    texto: `Oi, ${nome}! Passando para lembrar do ${grupo.name}:\n${linhas.join('\n')}\nTotal: ${formatBRL(saldo.saldoCents)}${rodape}`,
-    pix,
-  };
+  const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
+  const link = grupo.code ? `\n\nApós o pagamento, clique no link abaixo e confirme o valor.\n${groupLink(grupo.code)}` : '';
+  return (
+    `Oi, ${nome}!\n\nPassando para lembrar do pagamento dos jogos do ${grupo.name}:\n${linhas.join('\n')}\n\n` +
+    `Total: ${formatBRL(saldo.saldoCents)}${pix}${link}`
+  );
 }
 
 /**
@@ -528,8 +517,6 @@ function CobrarVarios({
   const [i, setI] = useState(0);
   // Cobrados no WhatsApp deles há menos de 3 dias: ficam fora da fila, mas dá para incluir
   const [deFora, setDeFora] = useState<SaldoDoJogador[]>([]);
-  // Código Pix que ainda falta mandar para a pessoa atual (2ª mensagem)
-  const [pixPendente, setPixPendente] = useState<string | null>(null);
 
   if (modo === null) {
     return (
@@ -654,42 +641,22 @@ function CobrarVarios({
         <Button
           size="sm"
           variant="secondary"
-          onClick={() => {
-            setPixPendente(null);
-            setI(i + 1);
-          }}
+          onClick={() => setI(i + 1)}
         >
           Pular
         </Button>
-        {pixPendente ? (
-          <Button
-            size="sm"
-            className="flex-1"
-            onClick={() => {
-              abrirWhatsApp(pixPendente, jogador?.phone);
-              setPixPendente(null);
-              setI(i + 1);
-            }}
-          >
-            <MessageCircle size={15} />
-            2ª mensagem: o código Pix
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            className="flex-1"
-            onClick={() => {
-              const m = mensagemDeCobranca(atual, nome(atual.playerId), grupo, dados);
-              abrirWhatsApp(m.texto, jogador?.phone);
-              anotar(grupo, 'individual', [atual], recarregar);
-              if (m.pix) setPixPendente(m.pix);
-              else setI(i + 1);
-            }}
-          >
-            <MessageCircle size={15} />
-            Cobrar {nome(atual.playerId)}
-          </Button>
-        )}
+        <Button
+          size="sm"
+          className="flex-1"
+          onClick={() => {
+            abrirWhatsApp(mensagemDeCobranca(atual, nome(atual.playerId), grupo, dados), jogador?.phone);
+            anotar(grupo, 'individual', [atual], recarregar);
+            setI(i + 1);
+          }}
+        >
+          <MessageCircle size={15} />
+          Cobrar {nome(atual.playerId)}
+        </Button>
       </div>
     </div>
   );
@@ -735,16 +702,12 @@ function Devedor({
   // Informou pelo link e ainda não teve baixa (migração 031)
   const aConferir = saldo.abertas.some((a) => a.cobranca.informadoEm);
 
-  const [pixPendente, setPixPendente] = useState<string | null>(null);
-
   const enviados = lembretesDe(dados, saldo.playerId);
   const ultimo = enviados[0];
 
   function cobrar() {
-    const m = mensagemDeCobranca(saldo, nome, grupo, dados);
-    abrirWhatsApp(m.texto, jogador?.phone);
+    abrirWhatsApp(mensagemDeCobranca(saldo, nome, grupo, dados), jogador?.phone);
     anotar(grupo, 'individual', [saldo], recarregar);
-    setPixPendente(m.pix);
   }
 
   async function receber(e: React.FormEvent) {
@@ -961,28 +924,6 @@ function Devedor({
             </Button>
           </div>
         </form>
-      ) : pixPendente ? (
-        <div className="mt-3 border-t border-ink-800 pt-3">
-          <p className="text-xs leading-relaxed text-ink-400">
-            Agora o código Pix, sozinho numa mensagem, para {nome} copiar e colar no banco.
-          </p>
-          <div className="mt-2 flex gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setPixPendente(null)}>
-              Não mandar
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1"
-              onClick={() => {
-                abrirWhatsApp(pixPendente, jogador?.phone);
-                setPixPendente(null);
-              }}
-            >
-              <MessageCircle size={15} />
-              2ª mensagem: o código Pix
-            </Button>
-          </div>
-        </div>
       ) : (
         <div className={cn('mt-3 grid gap-2', soLeitura ? 'grid-cols-1' : 'grid-cols-2')}>
           <Button size="sm" variant="secondary" onClick={cobrar}>

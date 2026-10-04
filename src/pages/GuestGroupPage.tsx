@@ -4,8 +4,9 @@ import { BellRing, Check, Hourglass, Lock, MapPin, UserPlus, X } from 'lucide-re
 import {
   guestAddPlayer,
   guestGroup,
-  guestInformarPagamento,
+  guestInformarPendencias,
   guestMensalidade,
+  guestPendencias,
   type MensalidadeDoLink,
   guestPromover,
   guestJoin,
@@ -18,7 +19,7 @@ import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos, normalizar } from '@/lib/juntar';
 import { textoDaLista } from '@/lib/listaDoJogo';
 import { faseDoJogo } from '@/lib/promocao';
-import { mensagemDaMensalidade, pixCopiaECola, rotuloDoMes } from '@/lib/financeiro';
+import { mensagemDaMensalidade, pixCopiaECola } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
@@ -269,16 +270,16 @@ export function GuestGroupPage() {
   // Quem desistiu também avisa o grupo: a vaga abriu (pedido do Guilherme, 29/09/2026)
   const saiuDaLista = Boolean(mine && tipoDe(mine.id) === 'nao_vou');
 
-  const cartaoMensalidade =
-    mensalidade && mine?.kind === 'mensalista' ? (
-      <MinhaMensalidade
-        code={code}
-        grupo={data.group.name}
-        mensalidade={mensalidade}
-        meuId={mine.id}
-        onInformado={load}
-      />
-    ) : null;
+  const cartaoMensalidade = mine ? (
+    <MeuPagamento
+      key={mine.id}
+      code={code}
+      grupo={data.group.name}
+      mensalidade={mine.kind === 'mensalista' ? mensalidade : null}
+      meuId={mine.id}
+      onInformado={load}
+    />
+  ) : null;
 
   async function answer(status: 'vou' | 'nao_vou') {
     if (!event || !mine) return;
@@ -868,12 +869,16 @@ function gruposDeMensalistas(lista: Mensalista[]): { titulo: string; jogadores: 
 }
 
 /**
- * A mensalidade do mês no link do jogo (migração 031, pedido do Guilherme em
- * 05/10/2026): o Pix já com o valor, o "Já paguei" e, depois dele, a lista
- * atualizada para mandar de volta no grupo — com o ✅ no nome de quem pagou.
- * "Já paguei" não é baixa: o organizador confere e registra no Financeiro.
+ * O pagamento no link do jogo (migrações 031 e 033, pedidos do Guilherme em
+ * 05/10/2026). Só confirma: nada de itens nem valores aqui — a lista com os
+ * valores vai na mensagem do grupo e na cobrança individual. Assim, tocar no
+ * nome de outra pessoa não revela o que ela deve.
+ *
+ * "Confirmar pagamento" marca tudo o que está em aberto como a conferir; não é
+ * baixa. Para o mensalista, depois dele, a lista da mensalidade para mandar
+ * de volta no grupo, com o ✅ no nome dele.
  */
-function MinhaMensalidade({
+function MeuPagamento({
   code,
   grupo,
   mensalidade,
@@ -882,133 +887,94 @@ function MinhaMensalidade({
 }: {
   code: string;
   grupo: string;
-  mensalidade: MensalidadeDoLink;
+  /** Só para mensalista no link do jogo, e só se o grupo cobra mensalidade */
+  mensalidade: MensalidadeDoLink | null;
   meuId: string;
   onInformado: () => Promise<void> | void;
 }) {
+  const [estado, setEstado] = useState<{ emAberto: boolean; confirmado: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [copiado, setCopiado] = useState(false);
-  const eu = mensalidade.mensalistas.find((m) => m.id === meuId);
-  if (!eu) return null;
-  const titulo = (
-    <p className="text-[15px] font-semibold text-ink-50">Mensalidade de {rotuloDoMes(mensalidade.mes)}</p>
-  );
-  // Isento (mensalidade do mês cancelada) não tem o que pagar
-  if (eu.isento) {
-    return (
-      <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-        {titulo}
-        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-brand-200">
-          <Check size={16} className="shrink-0" />
-          Isento neste mês.
-        </p>
-      </div>
-    );
-  }
-  // Sem mensalidade lançada: dizer, em vez de sumir com o cartão
-  if (!eu.temCobranca) {
-    return (
-      <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-        {titulo}
-        <p className="mt-2 text-sm leading-relaxed text-ink-400">
-          Sua mensalidade deste mês ainda não foi lançada. Avise o organizador.
-        </p>
-      </div>
-    );
-  }
 
-  const { chave, nome, cidade } = mensalidade.pix;
-  const codigoPix =
-    chave && nome && cidade
-      ? pixCopiaECola({ chave, nome, cidade, valorCents: mensalidade.valorCents })
+  useEffect(() => {
+    let vivo = true;
+    guestPendencias(code, meuId)
+      .then((e) => vivo && setEstado(e))
+      .catch((e) => console.warn('pendências pelo link', e));
+    return () => {
+      vivo = false;
+    };
+  }, [code, meuId]);
+
+  const eu = mensalidade?.mensalistas.find((m) => m.id === meuId);
+  const mesOk = Boolean(eu && (eu.pago || eu.informadoEm || eu.isento));
+  const lista =
+    mensalidade && mesOk
+      ? mensagemDaMensalidade({
+          grupo,
+          mes: mensalidade.mes,
+          venceEm: mensalidade.venceEm,
+          valorCents: mensalidade.valorCents,
+          pixChave: mensalidade.pix.chave,
+          lista: mensalidade.mensalistas.map((m) => ({
+            nome: m.name,
+            ok: m.pago || Boolean(m.informadoEm) || Boolean(m.isento),
+          })),
+          link: `${location.origin}${location.pathname}#/c/${code.toUpperCase()}`,
+        })
       : null;
-  const vence = `${mensalidade.venceEm.slice(8, 10)}/${mensalidade.venceEm.slice(5, 7)}`;
-  const feito = eu.pago || Boolean(eu.informadoEm);
-  const lista = mensagemDaMensalidade({
-    grupo,
-    mes: mensalidade.mes,
-    venceEm: mensalidade.venceEm,
-    valorCents: mensalidade.valorCents,
-    pixChave: chave,
-    lista: mensalidade.mensalistas.map((m) => ({
-      nome: m.name,
-      ok: m.pago || Boolean(m.informadoEm) || Boolean(m.isento),
-    })),
-    link: `${location.origin}${location.pathname}#/c/${code.toUpperCase()}`,
-  });
 
-  async function informar() {
+  if (!estado) return null;
+  // Nada em aberto e nada para mandar: o cartão não aparece
+  if (!estado.emAberto && !lista) return null;
+
+  async function confirmar() {
     setBusy(true);
     setErro(null);
     try {
-      await guestInformarPagamento(code, meuId);
+      await guestInformarPendencias(code, meuId);
+      setEstado(await guestPendencias(code, meuId));
       await onInformado();
     } catch (e) {
-      console.error('informar pagamento', e);
+      console.error('confirmar pagamento', e);
       setErro(dbMessage(e, 'Não deu para confirmar. Confira a internet e tente de novo.'));
     }
     setBusy(false);
   }
 
-  async function copiar() {
-    if (!codigoPix) return;
-    try {
-      await navigator.clipboard.writeText(codigoPix);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2500);
-    } catch {
-      setErro('Não deu para copiar. Use a chave Pix do grupo.');
-    }
-  }
-
   return (
     <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-      {titulo}
-      <p className="mt-0.5 text-sm text-ink-400">
-        Vence dia {vence} · {formatBRL(mensalidade.valorCents)}
-      </p>
-
-      {eu.pago ? (
-        <p className="mt-3 flex items-center gap-2 text-sm font-medium text-brand-200">
-          <Check size={16} className="shrink-0" />
-          Paga. Obrigado!
-        </p>
-      ) : eu.informadoEm ? (
-        <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-brand-200">
+      <p className="text-[15px] font-semibold text-ink-50">Pagamento</p>
+      {estado.confirmado ? (
+        <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-brand-200">
           <Check size={16} className="mt-0.5 shrink-0" />
           Você confirmou o pagamento. O organizador vai conferir.
         </p>
-      ) : (
+      ) : estado.emAberto ? (
         <>
-          {codigoPix ? (
-            <button
-              onClick={copiar}
-              className="mt-3 flex h-12 w-full items-center justify-center rounded-xl border border-ink-700 text-sm font-medium text-ink-100 active:scale-[0.99]"
-            >
-              {copiado ? 'Pix copiado ✓' : `Copiar o Pix (${formatBRL(mensalidade.valorCents)})`}
-            </button>
-          ) : (
-            chave && <p className="mt-3 text-sm text-ink-300">Pix: {chave}</p>
-          )}
+          <p className="mt-1 text-sm leading-relaxed text-ink-400">
+            Já fez o pagamento? Confirme aqui para o organizador conferir.
+          </p>
           <button
             disabled={busy}
-            onClick={informar}
-            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99] disabled:opacity-50"
+            onClick={confirmar}
+            className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99] disabled:opacity-50"
           >
             <Check size={17} />
-            {busy ? 'Confirmando…' : 'Já paguei'}
+            {busy ? 'Confirmando…' : 'Confirmar pagamento'}
           </button>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink-500">
-            Toque depois de fazer o Pix. O organizador confere e dá a baixa.
-          </p>
         </>
+      ) : (
+        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-brand-200">
+          <Check size={16} className="shrink-0" />
+          Nenhum pagamento em aberto.
+        </p>
       )}
 
-      {feito && (
+      {lista && (
         <button
           onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(lista)}`, '_blank', 'noopener')}
-          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
+          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/50 text-sm font-semibold text-brand-200 active:scale-[0.99]"
         >
           Mandar a lista da mensalidade no grupo
         </button>

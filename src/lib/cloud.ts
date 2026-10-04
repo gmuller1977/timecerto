@@ -1845,10 +1845,24 @@ export async function guestMensalidade(code: string): Promise<MensalidadeDoLink 
   return (data as MensalidadeDoLink | null) ?? null;
 }
 
-/** "Já paguei": fica a conferir, não é baixa */
-export async function guestInformarPagamento(code: string, playerId: string): Promise<void> {
-  const { error } = await db().rpc('guest_informar_pagamento', { code, p_player: playerId });
+/**
+ * Pelo link: só o ESTADO das pendências da pessoa (migração 033) — nunca
+ * itens nem valores. A lista com valores sai só na mensagem do grupo.
+ */
+export async function guestPendencias(
+  code: string,
+  playerId: string,
+): Promise<{ emAberto: boolean; confirmado: boolean }> {
+  const { data, error } = await db().rpc('guest_pendencias', { code, p_player: playerId });
   if (error) throw error;
+  return data as { emAberto: boolean; confirmado: boolean };
+}
+
+/** "Confirmar pagamento": tudo o que está em aberto fica a conferir, não é baixa */
+export async function guestInformarPendencias(code: string, playerId: string): Promise<number> {
+  const { data, error } = await db().rpc('guest_informar_pendencias', { code, p_player: playerId });
+  if (error) throw error;
+  return (data as number) ?? 0;
 }
 
 /** O administrador conferiu e o dinheiro não chegou */

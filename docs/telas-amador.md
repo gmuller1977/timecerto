@@ -667,3 +667,31 @@ Quando fizer o pagamento, entre no link abaixo e confirme o pagamento.
   organizador", em vez de o cartão sumir.
 - Grupo sem mensalidade continua com a mensagem de pendências antiga.
 
+## A cobrança individual
+
+No texto do Guilherme (05/10/2026), igual para mensalista e convidado, numa
+mensagem só — a segunda, com o Pix copia e cola, saiu:
+
+```
+Oi, Ana!
+
+Passando para lembrar do pagamento dos jogos do Maverick:
+• Jogo do dia: 04/10 — Valor de R$ 15,00
+• Mensalidade de outubro: 10/10 — Valor de R$ 80,00
+
+Total: R$ 95,00
+
+Pix: (chave do grupo)
+
+Após o pagamento, clique no link abaixo e confirme o valor.
+(link do jogo)
+```
+
+O rótulo vem do tipo: diária é "Jogo do dia", mensalidade e avulsa levam a
+descrição. O valor é o que falta de cada uma.
+
+**No link, só o botão.** "Confirmar pagamento" marca tudo o que a pessoa tem
+em aberto como a conferir (migração 033). O link não mostra itens nem valores
+— só sabe se há algo em aberto e se já foi confirmado —, então tocar no nome de
+outra pessoa não revela o que ela deve. A lista aparece só no grupo.
+
