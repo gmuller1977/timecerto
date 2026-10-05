@@ -198,7 +198,7 @@ export function JogosPage() {
         <>
           <section className="mt-5">
             <p className="mb-2 text-[11px] font-semibold tracking-wide text-ink-500 uppercase">
-              Próximos jogos ({proximos.length})
+              {pro ? 'Próximos jogos' : 'Próximos dias'} ({proximos.length})
             </p>
             <div className="flex flex-col gap-2">
               {proximos.map((j) => (
@@ -213,9 +213,13 @@ export function JogosPage() {
               ))}
               {proximos.length === 0 && (
                 <p className="rounded-2xl border border-dashed border-ink-800 px-4 py-5 text-center text-sm text-ink-400">
-                  {filtrando
-                    ? 'Nenhum jogo próximo com esses filtros.'
-                    : 'Nenhum jogo marcado. Crie o próximo para marcar quem vem e sortear.'}
+                  {pro
+                    ? filtrando
+                      ? 'Nenhum jogo próximo com esses filtros.'
+                      : 'Nenhum jogo marcado. Crie o próximo para marcar quem vem e sortear.'
+                    : filtrando
+                      ? 'Nenhum dia próximo com esses filtros.'
+                      : 'Nenhum dia de jogo marcado. Crie o próximo para marcar quem vem e sortear.'}
                 </p>
               )}
             </div>
