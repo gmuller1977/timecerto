@@ -26,11 +26,15 @@ export function HistoryPage() {
           <ArrowLeft size={22} />
         </button>
         <div>
-          <h1 className="text-xl font-bold">Partidas</h1>
+          <h1 className="text-xl font-bold">{pro ? 'Partidas' : 'Jogos'}</h1>
           <p className="text-xs text-ink-400">
             {matches.length === 0
-              ? 'Nenhuma ainda'
-              : `${matches.length} ${matches.length === 1 ? 'registrada' : 'registradas'}`}
+              ? pro
+                ? 'Nenhuma ainda'
+                : 'Nenhum ainda'
+              : pro
+                ? `${matches.length} ${matches.length === 1 ? 'registrada' : 'registradas'}`
+                : `${matches.length} ${matches.length === 1 ? 'registrado' : 'registrados'}`}
           </p>
         </div>
       </header>
@@ -39,9 +43,9 @@ export function HistoryPage() {
         <div className="mt-12 text-center">
           <p className="text-5xl">🏐</p>
           <p className="mt-3 text-sm leading-relaxed text-ink-400">
-            As partidas com scout aparecem aqui,
+            {pro ? 'As partidas com scout aparecem aqui,' : 'Os jogos com scout aparecem aqui,'}
             <br />
-            com o resumo de cada uma.
+            {pro ? 'com o resumo de cada uma.' : 'com o resumo de cada um.'}
           </p>
         </div>
       )}
@@ -95,10 +99,10 @@ export function HistoryPage() {
               </button>
               <button
                 onClick={() => {
-                  if (window.confirm('Apagar esta partida?')) removeMatch(m.id);
+                  if (window.confirm(pro ? 'Apagar esta partida?' : 'Apagar este jogo?')) removeMatch(m.id);
                 }}
                 className="shrink-0 p-1.5 text-ink-700 hover:text-red-400"
-                aria-label="Apagar partida"
+                aria-label={pro ? 'Apagar partida' : 'Apagar jogo'}
               >
                 <Trash2 size={16} />
               </button>

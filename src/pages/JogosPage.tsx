@@ -117,10 +117,10 @@ export function JogosPage() {
         <button
           onClick={() => navigate('/historico')}
           className="flex items-center gap-1.5 rounded-lg border border-ink-800 bg-ink-900 px-3 py-2 text-xs font-medium text-ink-300"
-          aria-label="Partidas"
+          aria-label={pro ? 'Partidas' : 'Jogos'}
         >
           <History size={14} />
-          Partidas
+          {pro ? 'Partidas' : 'Jogos'}
           {matchCount > 0 && <span className="text-ink-500">{matchCount}</span>}
         </button>
       </header>
@@ -159,7 +159,7 @@ export function JogosPage() {
       {/* A ação principal da aba, acima dos jogos */}
       {criando ? (
         <section className="rounded-2xl border border-ink-800 bg-ink-900 p-4">
-          <p className="mb-3 text-[15px] font-semibold text-ink-50">Novo jogo</p>
+          <p className="mb-3 text-[15px] font-semibold text-ink-50">{pro ? 'Novo jogo' : 'Novo dia de jogo'}</p>
           <FormJogo
             onCancel={() => setCriando(false)}
             onDone={(j) => {
@@ -170,9 +170,9 @@ export function JogosPage() {
         </section>
       ) : (
         <div className="flex gap-2">
-          <Button size="lg" className="flex-1" onClick={() => setCriando(true)}>
+          <Button size="lg" className="flex-1 whitespace-nowrap px-3" onClick={() => setCriando(true)}>
             <CalendarPlus size={19} />
-            Novo jogo
+            {pro ? 'Novo jogo' : 'Novo dia de jogo'}
           </Button>
           {/* No time não há partida direta: o jogo é escalado */}
           {!pro && (
@@ -181,10 +181,10 @@ export function JogosPage() {
               size="lg"
               className="shrink-0 px-4"
               onClick={() => navigate('/partida')}
-              aria-label="Partida direta, sem jogo marcado"
+              aria-label="Jogo direto, sem dia marcado"
             >
               <Swords size={18} />
-              Partida direta
+              Jogo direto
             </Button>
           )}
         </div>
