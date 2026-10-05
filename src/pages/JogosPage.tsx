@@ -97,6 +97,14 @@ export function JogosPage() {
   }, [jogos, agora, live?.jogoId, filtros]);
 
   const ativos = useMemo(() => players.filter((p) => !p.pending), [players]);
+  // Dia que passou sem ser encerrado (05/10/2026): um cartão no topo, por dia
+  const esquecidos = pro ? [] : jogos.filter((j) => statusDe.get(j.id) === 'sem_encerrar');
+  const nomeDoDia = (j: Jogo) => {
+    const t = new Date(`${j.date}T${j.time}`)
+      .toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })
+      .replace(',', '');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  };
   // Filtrando, o que achou aparece inteiro: esconder anteriores esconderia o resultado
   const mostraAnteriores = verAnteriores || filtrando;
 
@@ -124,7 +132,9 @@ export function JogosPage() {
         >
           <Radio size={18} className="shrink-0 animate-pulse text-brand-400" />
           <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-semibold text-brand-200">Partida em andamento</span>
+            <span className="block text-[15px] font-semibold text-brand-200">
+              {pro ? 'Partida em andamento' : 'Jogo em andamento'}
+            </span>
             <span className="block truncate text-xs text-brand-300/70">
               {live.teams[0].name} {live.sets[live.sets.length - 1].scoreA} ×{' '}
               {live.sets[live.sets.length - 1].scoreB} {live.teams[1].name} · {live.sets.length}º set
@@ -133,6 +143,18 @@ export function JogosPage() {
           <ChevronRight size={18} className="shrink-0 text-brand-400" />
         </button>
       )}
+
+      {esquecidos.map((j) => (
+        <div
+          key={j.id}
+          className="mb-3 flex items-center gap-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3"
+        >
+          <span className="min-w-0 flex-1 text-sm font-medium text-amber-100">{nomeDoDia(j)} não foi encerrado</span>
+          <Button size="sm" onClick={() => navigate(`/jogo/${j.id}?encerrar=1`)}>
+            Encerrar e cobrar
+          </Button>
+        </div>
+      ))}
 
       {/* A ação principal da aba, acima dos jogos */}
       {criando ? (

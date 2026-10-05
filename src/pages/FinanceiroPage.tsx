@@ -497,18 +497,25 @@ function Conteudo({
  * manda para várias conversas de uma vez, e o navegador só abre o WhatsApp
  * com um toque — por isso o "um por um" é um toque por pessoa.
  */
-function CobrarVarios({
+/**
+ * Cobrar no grupo, ou um por um. Também usado no fim do dia de jogo
+ * (CobrarODia), com `devedores` restritos às diárias daquele dia e
+ * `soPendencias` — lá a mensagem é das diárias, não da mensalidade do mês.
+ */
+export function CobrarVarios({
   devedores,
   grupo,
   dados,
   nome,
   recarregar,
+  soPendencias = false,
 }: {
   devedores: SaldoDoJogador[];
   grupo: CloudGroup;
   dados: DadosFinanceiros;
   nome: (id: string) => string;
   recarregar: () => void;
+  soPendencias?: boolean;
 }) {
   const [modo, setModo] = useState<'grupo' | 'fila' | null>(null);
   const [valores, setValores] = useState(true);
@@ -543,7 +550,7 @@ function CobrarVarios({
   }
 
   if (modo === 'grupo') {
-    const doMes = mensagemDoMes(grupo, dados, saldosPorJogador(dados.cobrancas, dados.pagamentos));
+    const doMes = soPendencias ? null : mensagemDoMes(grupo, dados, saldosPorJogador(dados.cobrancas, dados.pagamentos));
     const texto = doMes ?? mensagemDoGrupo(devedores, nome, grupo, dados, valores);
     return (
       <div className="mb-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">

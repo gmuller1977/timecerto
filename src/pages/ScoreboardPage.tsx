@@ -98,8 +98,10 @@ export function ScoreboardPage() {
     const matchId = live!.id;
     const played = live!.sets.some((g) => (g.rallies?.length ?? 0) > 0);
     setLeaving(true);
+    const dia = live!.jogoId;
     finishMatch();
-    navigate(played ? `/partida/${matchId}` : '/', { replace: true });
+    // Sem ponto nenhum não há resumo: volta ao dia, se o jogo era de um
+    navigate(played ? `/partida/${matchId}` : dia ? `/jogo/${dia}` : '/', { replace: true });
   }
 
   return (
@@ -108,7 +110,7 @@ export function ScoreboardPage() {
       <header className="safe-top flex items-center justify-between px-4 pt-3 pb-2">
         <button
           onClick={() => {
-            if (confirm2('Descartar esta partida? Os pontos serão perdidos.')) {
+            if (confirm2(live.pro ? 'Descartar esta partida? Os pontos serão perdidos.' : 'Descartar este jogo? Os pontos serão perdidos.')) {
               discardMatch();
               navigate('/');
             }
@@ -269,7 +271,7 @@ export function ScoreboardPage() {
               className="flex h-12 items-center justify-center gap-2 rounded-xl border border-ink-700 px-4 text-sm font-medium text-ink-200"
             >
               <Flag size={16} />
-              Encerrar
+              {live.pro ? 'Encerrar' : 'Finalizar jogo'}
             </button>
           </div>
         ) : (
@@ -287,7 +289,7 @@ export function ScoreboardPage() {
               className="flex h-12 items-center justify-center gap-2 rounded-xl border border-ink-800 px-4 text-sm font-medium text-ink-400"
             >
               <Flag size={16} />
-              Encerrar
+              {live.pro ? 'Encerrar' : 'Finalizar jogo'}
             </button>
           </div>
         )}

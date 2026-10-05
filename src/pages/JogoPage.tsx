@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { faseDoJogo, textoDaFase } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO } from '@/types';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -23,7 +23,8 @@ import {
 import { Button } from '@/components/ui/Button';
 import { FormJogo } from '@/components/jogo/FormJogo';
 import { SeloStatus } from '@/components/jogo/SeloStatus';
-import { haQuantoChamado, hoje, statusDoJogo } from '@/lib/jogo';
+import { haQuantoChamado, hoje, inicioDo, statusDoJogo } from '@/lib/jogo';
+import { diaJaTeveJogo, planoDeAjuste, podeSortear } from '@/lib/diaDeJogo';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogo, useJogoStore, useProximoJogo } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -31,7 +32,7 @@ import { useHydrated } from '@/store/useHydrated';
 import { nomeDeExibicao } from '@/lib/nome';
 import { vagasDoJogo, joga, type Situacao } from '@/lib/vagas';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
-import { TEAM_COLOR_CLASSES, encaixarNoSorteio } from '@/lib/draw';
+import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { computeAllStats, formatDate } from '@/lib/stats';
 import { SPORTS } from '@/lib/sports';
 import { setsWonBy } from '@/lib/volleyStats';
@@ -45,6 +46,7 @@ const LinksDoJogo = lazy(() =>
 const LancarDiarias = lazy(() =>
   import('@/components/cloud/LancarDiarias').then((m) => ({ default: m.LancarDiarias })),
 );
+const CobrarODia = lazy(() => import('@/components/cloud/CobrarODia').then((m) => ({ default: m.CobrarODia })));
 
 type Aba = 'confirmados' | 'times' | 'partidas' | 'estatistica';
 const ABAS: { id: Aba; label: string }[] = [
@@ -111,6 +113,10 @@ function Pagina({
   const startMatch = useMatchStore((s) => s.startMatch);
   const [editando, setEditando] = useState(false);
   const [diarias, setDiarias] = useState(false);
+  // Fim do dia (05/10/2026): depois de lançar, cobrar as diárias deste dia
+  const [cobrando, setCobrando] = useState(false);
+  const [avisoSemConta, setAvisoSemConta] = useState(false);
+  const [params, setParams] = useSearchParams();
   const sportDoApp = useAppStore((s) => s.sport);
   const setSport = useAppStore((s) => s.setSport);
 
@@ -202,18 +208,63 @@ function Pagina({
   }
 
   function mudarStatus(status: Jogo['status']) {
+    if (status === 'encerrado') return encerrarODia();
     const pergunta =
       status === 'cancelado'
-        ? 'Cancelar este jogo? Ele sai dos links e fica em Anteriores.'
-        : status === 'encerrado'
-          ? 'Encerrar este jogo? Ele sai dos links e fica em Anteriores, com times e partidas.'
-          : 'Reabrir este jogo? Ele volta para os próximos jogos.';
+        ? pro
+          ? 'Cancelar este jogo? Ele sai dos links e fica em Anteriores.'
+          : 'Cancelar o dia? Ele sai dos links e fica em Anteriores.'
+        : pro
+          ? 'Reabrir este jogo? Ele volta para os próximos jogos.'
+          : 'Reabrir o dia? Ele volta para os próximos.';
     if (!window.confirm(pergunta)) return;
     editarJogo(jogo.id, { status });
     setEditando(false);
-    // Encerrou: a diária dos convidados que jogaram, com um toque (migração 017)
-    if (status === 'encerrado' && jogo.remoteId && comSessao && jogo.cobraDiaria !== false) setDiarias(true);
+    // Reabrir ou cancelar fecha o que era do fim do dia
+    setDiarias(false);
+    setCobrando(false);
+    setAvisoSemConta(false);
   }
+
+  /*
+   * Encerrar o dia (pedido do Guilherme em 05/10/2026): confirma, encerra e
+   * abre a diária dos convidados. Lançar é sempre o administrador quem
+   * confirma — o app nunca lança diária sozinho, nem num dia esquecido.
+   */
+  function encerrarODia() {
+    if (liveDoJogo) {
+      window.alert(
+        pro
+          ? 'Há uma partida em andamento neste jogo. Encerre a partida antes.'
+          : 'Há um jogo em andamento neste dia. Finalize o jogo antes de encerrar o dia.',
+      );
+      return;
+    }
+    const pergunta = pro
+      ? 'Encerrar este jogo? Ele sai dos links e fica em Anteriores, com times e partidas.'
+      : 'Encerrar o dia? Ele sai dos links e fica em Anteriores, com os times e os jogos.';
+    if (!window.confirm(pergunta)) return;
+    editarJogo(jogo.id, { status: 'encerrado' });
+    setEditando(false);
+    if (jogo.cobraDiaria === false) return;
+    // Encerrou: a diária dos convidados que jogaram, com um toque (migração 017)
+    if (jogo.remoteId && comSessao) setDiarias(true);
+    else if (!comSessao) setAvisoSemConta(true);
+  }
+
+  // "Encerrar o dia" no fim de um jogo, ou no cartão do dia esquecido, chega
+  // aqui com ?encerrar=1. Uma vez só: a marca sai do endereço antes de perguntar
+  const pedidoEncerrar = params.get('encerrar') === '1';
+  const encerrarPedido = useRef(false);
+  useEffect(() => {
+    if (!pedidoEncerrar || encerrarPedido.current) return;
+    encerrarPedido.current = true;
+    const p = new URLSearchParams(params);
+    p.delete('encerrar');
+    setParams(p, { replace: true });
+    if (jogo.status === 'aberto') encerrarODia();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoEncerrar]);
 
   // No time (fase 2) não há sorteio: o técnico escala. A escalação com só os
   // confirmados é a fase 3; por ora ela abre com o elenco, e a partida fica
@@ -222,14 +273,40 @@ function Pagina({
     navigate('/profissional/escalacao', { state: { jogoId: jogo.id, competicao: jogo.competicao } });
 
   const fase = faseDoJogo(jogo);
+  /*
+   * O sorteio só vale antes do primeiro jogo do dia (05/10/2026). Depois, os
+   * times só mudam pelo cartão "A lista mudou", e o rodapé passa a ser
+   * "Novo jogo" + "Encerrar o dia".
+   */
+  const jaTeveJogo = diaJaTeveJogo(jogo, matches);
+  const sortearOk = podeSortear(jogo, matches);
+  // O dia começou (ou já teve jogo): "Encerrar o dia" fica à vista, fora do lápis
+  const diaComecou = jaTeveJogo || inicioDo(jogo) <= Date.now();
 
-  const rodape =
+  type Rodape = {
+    texto: string;
+    icone: React.ReactNode;
+    acao: () => void;
+    desabilitado: boolean;
+    segundo?: { texto: string; acao: () => void };
+  };
+  const rodape: Rodape | null =
     aba === 'estatistica' || jogo.status !== 'aberto'
       ? null
       : pro
         ? liveDoJogo
           ? { texto: 'Continuar a partida', icone: <Radio size={19} />, acao: () => navigate('/placar'), desabilitado: false }
           : { texto: 'Escalar e começar', icone: <ClipboardList size={19} />, acao: escalar, desabilitado: Boolean(live) }
+      : liveDoJogo
+        ? { texto: 'Continuar o jogo', icone: <Radio size={19} />, acao: () => navigate('/placar'), desabilitado: false }
+      : !sortearOk
+        ? {
+            texto: 'Novo jogo',
+            icone: <PlayCircle size={19} />,
+            acao: comecarPartida,
+            desabilitado: Boolean(live) || !jogo.sorteio,
+            segundo: { texto: 'Encerrar o dia', acao: encerrarODia },
+          }
       : aba === 'confirmados' || !jogo.sorteio
         ? {
             texto:
@@ -240,9 +317,7 @@ function Pagina({
             acao: sortear,
             desabilitado: jogam < 4 || busy,
           }
-        : liveDoJogo
-          ? { texto: 'Continuar a partida', icone: <Radio size={19} />, acao: () => navigate('/placar'), desabilitado: false }
-          : { texto: 'Começar partida', icone: <PlayCircle size={19} />, acao: comecarPartida, desabilitado: Boolean(live) };
+        : { texto: 'Começar jogo', icone: <PlayCircle size={19} />, acao: comecarPartida, desabilitado: Boolean(live) };
 
   return (
     <div className={cn('mx-auto flex min-h-full w-full max-w-lg flex-col px-4', rodape ? 'pb-32' : 'pb-10')}>
@@ -335,6 +410,16 @@ function Pagina({
         </div>
       )}
 
+      {!pro && jogo.status === 'aberto' && diaComecou && !jaTeveJogo && (
+        <button
+          onClick={encerrarODia}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-ink-800 py-2.5 text-sm text-ink-300"
+        >
+          <Flag size={14} />
+          Encerrar o dia
+        </button>
+      )}
+
       {jogo.status === 'aberto' && jogo.sorteio && (
         <AjusteDosTimes jogo={jogo} players={players} dist={dist} comSessao={comSessao} navigate={navigate} />
       )}
@@ -348,14 +433,14 @@ function Pagina({
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-800 py-2 text-xs text-ink-300"
             >
               <Flag size={13} />
-              Encerrar jogo
+              {pro ? 'Encerrar jogo' : 'Encerrar o dia'}
             </button>
             <button
               onClick={() => mudarStatus('cancelado')}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-ink-800 py-2 text-xs text-ink-300"
             >
               <Ban size={13} />
-              Cancelar jogo
+              {pro ? 'Cancelar jogo' : 'Cancelar o dia'}
             </button>
           </div>
         </section>
@@ -363,18 +448,42 @@ function Pagina({
       {jogo.status !== 'aberto' && (
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
           <button onClick={() => mudarStatus('aberto')} className="text-xs text-brand-400 underline">
-            Reabrir este jogo
+            {pro ? 'Reabrir este jogo' : 'Reabrir o dia'}
           </button>
           {jogo.status === 'encerrado' && jogo.remoteId && comSessao && jogo.cobraDiaria !== false && !diarias && (
             <button onClick={() => setDiarias(true)} className="text-xs text-brand-400 underline">
               Lançar a diária dos convidados
             </button>
           )}
+          {jogo.status === 'encerrado' && jogo.remoteId && comSessao && jogo.cobraDiaria !== false && !cobrando && (
+            <button onClick={() => setCobrando(true)} className="text-xs text-brand-400 underline">
+              Cobrar as diárias
+            </button>
+          )}
         </div>
+      )}
+      {avisoSemConta && jogo.status === 'encerrado' && (
+        <p className="mt-3 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2.5 text-sm leading-relaxed text-ink-300">
+          Dia encerrado. Para lançar a diária dos convidados e cobrar pelo app, entre com a sua conta em Ajustes ›
+          Conta: o financeiro fica guardado na nuvem.
+        </p>
       )}
       {diarias && (
         <Suspense fallback={null}>
-          <LancarDiarias jogo={jogo} players={players} onFechar={() => setDiarias(false)} />
+          <LancarDiarias
+            jogo={jogo}
+            players={players}
+            onFechar={() => setDiarias(false)}
+            onCobrar={() => {
+              setDiarias(false);
+              setCobrando(true);
+            }}
+          />
+        </Suspense>
+      )}
+      {cobrando && (
+        <Suspense fallback={null}>
+          <CobrarODia jogo={jogo} onFechar={() => setCobrando(false)} />
         </Suspense>
       )}
 
@@ -391,7 +500,7 @@ function Pagina({
               aba === a.id ? 'border-brand-500 bg-brand-500/15 text-brand-300' : 'border-ink-800 bg-ink-950 text-ink-400',
             )}
           >
-            {a.label}
+            {a.id === 'partidas' && !pro ? 'Jogos' : a.label}
             {a.id === 'partidas' && partidas.length > 0 && <span className="ml-1 font-normal opacity-70">{partidas.length}</span>}
           </button>
         ))}
@@ -468,9 +577,13 @@ function Pagina({
           })}
           {partidas.length === 0 && !liveDoJogo && (
             <p className="mt-2 rounded-2xl border border-dashed border-ink-800 px-4 py-5 text-center text-sm leading-relaxed text-ink-400">
-              {jogo.sorteio
-                ? 'Nenhuma partida ainda. Comece pelos times sorteados.'
-                : 'Nenhuma partida ainda. Sorteie os times e comece.'}
+              {pro
+                ? jogo.sorteio
+                  ? 'Nenhuma partida ainda. Comece pelos times sorteados.'
+                  : 'Nenhuma partida ainda. Sorteie os times e comece.'
+                : jogo.sorteio
+                  ? 'Nenhum jogo ainda. Comece pelos times sorteados.'
+                  : 'Nenhum jogo ainda. Sorteie os times e comece.'}
             </p>
           )}
           {jogo.status === 'aberto' && !pro && (
@@ -478,7 +591,7 @@ function Pagina({
               onClick={() => navigate(`/partida?jogo=${jogo.id}`)}
               className="mt-1 self-start text-xs text-ink-500 underline"
             >
-              Partida direta, sem sorteio
+              Jogo direto, sem sorteio
             </button>
           )}
         </section>
@@ -489,10 +602,18 @@ function Pagina({
       {rodape && (
         <div className="safe-bottom above-tabbar fixed inset-x-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
           <div className="mx-auto max-w-lg">
-            <Button size="lg" className="w-full" disabled={rodape.desabilitado} onClick={rodape.acao}>
-              {rodape.icone}
-              {rodape.texto}
-            </Button>
+            <div className="flex gap-2">
+              <Button size="lg" className="flex-1" disabled={rodape.desabilitado} onClick={rodape.acao}>
+                {rodape.icone}
+                {rodape.texto}
+              </Button>
+              {rodape.segundo && (
+                <Button size="lg" variant="secondary" className="shrink-0" onClick={rodape.segundo.acao}>
+                  <Flag size={17} />
+                  {rodape.segundo.texto}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -755,12 +876,7 @@ function AjusteDosTimes({
 }) {
   const guardarSorteio = useJogoStore((s) => s.guardarSorteio);
   const [aviso, setAviso] = useState<string | null>(null);
-  const plano = useMemo(() => {
-    if (!jogo.sorteio) return null;
-    const jogando = players.filter((p) => joga(dist.situacao.get(p.id)));
-    const vagaDe = new Map(jogo.confirmations.map((c) => [c.playerId, c.vagaDe]));
-    return encaixarNoSorteio(jogo.sorteio, jogando, (id) => vagaDe.get(id));
-  }, [jogo.sorteio, jogo.confirmations, players, dist]);
+  const plano = useMemo(() => planoDeAjuste(jogo, players), [jogo, players]);
 
   // Depois do ajuste o plano some; o que aconteceu com o link fica à vista
   if (!plano) {
@@ -811,7 +927,11 @@ function AjusteDosTimes({
         <Button size="sm" onClick={ajustar}>
           Ajustar os times
         </Button>
-        <Button size="sm" variant="secondary" onClick={() => navigate('/sortear', { state: { jogoId: jogo.id } })}>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => navigate('/sortear', { state: { jogoId: jogo.id, pelaLista: true } })}
+        >
           Sortear de novo
         </Button>
       </div>

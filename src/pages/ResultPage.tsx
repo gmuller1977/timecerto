@@ -1,3 +1,4 @@
+import { podeSortear } from '@/lib/diaDeJogo';
 import { nomeDeExibicao } from '@/lib/nome';
 import { useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
@@ -28,6 +29,7 @@ export function ResultPage() {
   const settings = useAppStore((s) => s.settings);
   const setResult = useAppStore((s) => s.setResult);
   const startMatch = useMatchStore((s) => s.startMatch);
+  const matches = useMatchStore((s) => s.matches);
   const [copied, setCopied] = useState(false);
   const [showStars, setShowStars] = useState(false);
   // Id do sorteio que está no link agora; outro id = "Refazer" depois de publicar
@@ -45,6 +47,8 @@ export function ResultPage() {
 
   const cfg = SPORTS[result.sport];
   const text = formatResultText(result, { showStars });
+  // Depois do primeiro jogo do dia, ou com o dia encerrado, não se sorteia de novo
+  const refazerOk = !jogo || podeSortear(jogo, matches);
 
   async function handleCopy() {
     const ok = await copyToClipboard(text);
@@ -107,13 +111,15 @@ export function ResultPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={handleRedraw}
-          className="flex items-center gap-1.5 rounded-lg bg-ink-800 px-3 py-1.5 text-xs font-medium text-ink-200"
-        >
-          <RotateCcw size={14} />
-          Refazer
-        </button>
+        {refazerOk && (
+          <button
+            onClick={handleRedraw}
+            className="flex items-center gap-1.5 rounded-lg bg-ink-800 px-3 py-1.5 text-xs font-medium text-ink-200"
+          >
+            <RotateCcw size={14} />
+            Refazer
+          </button>
+        )}
       </header>
 
       <div className="flex flex-col gap-3">
@@ -207,7 +213,7 @@ export function ResultPage() {
         }}
       >
         <PlayCircle size={19} />
-        Começar partida e fazer o scout
+        {jogo ? 'Começar jogo e fazer o scout' : 'Começar partida e fazer o scout'}
       </Button>
 
       <button

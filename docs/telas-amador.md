@@ -696,3 +696,31 @@ em aberto como a conferir (migração 033). O link não mostra itens nem valores
 — só sabe se há algo em aberto e se já foi confirmado —, então tocar no nome de
 outra pessoa não revela o que ela deve. A lista aparece só no grupo.
 
+## Fim de jogo e fim de dia
+
+Pedido do Guilherme em 05/10/2026. **Vocabulário na tela, no amador** (o
+código não muda de nome): `Jogo` é "o dia" / "dia de jogo", `Match` é "o
+jogo", e set continua set. Por isso "Encerrar o dia", "Começar jogo",
+"Finalizar jogo" no placar e a aba "Jogos" dentro do dia. O profissional
+mantém "partida".
+
+- **Finalizar um jogo** leva ao resumo, que pergunta "Novo jogo?": *Mesmos
+  times* começa outro com o sorteio atual; *Ajustar times* só aparece se a
+  lista mudou (a mesma conta do cartão "A lista mudou",
+  `planoDeAjuste` em lib/diaDeJogo.ts); *Encerrar o dia*; *Agora não* volta
+  ao dia. Só no ÚLTIMO jogo de um dia aberto: abrir um resumo antigo não puxa
+  jogo novo.
+- **Sorteio só antes do primeiro jogo do dia** (`podeSortear`). Depois, os
+  times só mudam pelo cartão "A lista mudou". Dia encerrado ou cancelado não
+  sorteia — nem por /sortear direto, nem pelo "Refazer" do resultado. O rodapé
+  do dia que já teve jogo é "Novo jogo" + "Encerrar o dia".
+- **Encerrar o dia** fica à vista a partir da hora do dia (antes do primeiro
+  jogo, um botão abaixo do status; depois, no rodapé). Confirma, encerra e
+  abre a diária dos convidados. Depois de lançar — ou de cara, com a diária
+  antecipada —, "Cobrar agora" abre o "Cobrar no grupo / um por um" do
+  Financeiro, restrito às diárias deste dia. Sem conta, o app explica que a
+  cobrança precisa dela.
+- **Dia esquecido**: dia que passou sem ser encerrado ganha um cartão no topo
+  da aba Jogo, "Sábado 03/10 não foi encerrado" → "Encerrar e cobrar". O app
+  nunca lança diária sozinho: quem confirma quem jogou é o administrador.
+

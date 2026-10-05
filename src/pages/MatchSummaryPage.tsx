@@ -1,6 +1,10 @@
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Share2, Trophy } from 'lucide-react';
+import { ArrowLeft, Flag, PlayCircle, Share2, Shuffle, Trophy } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
+import { useJogoStore } from '@/store/useJogoStore';
+import { useAppStore } from '@/store/useAppStore';
+import { planoDeAjuste } from '@/lib/diaDeJogo';
+import { Button } from '@/components/ui/Button';
 import { useHydrated } from '@/store/useHydrated';
 import { useRoster } from '@/store/useRoster';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
@@ -27,10 +31,49 @@ export function MatchSummaryPage() {
   const matches = useMatchStore((s) => s.matches);
   const hydrated = useHydrated();
   const players = useRoster();
+  const jogos = useJogoStore((s) => s.jogos);
+  const elenco = useAppStore((s) => s.players);
+  const live = useMatchStore((s) => s.live);
+  const startMatch = useMatchStore((s) => s.startMatch);
 
   const match = matches.find((m) => m.id === id) ?? matches[0];
   if (!hydrated) return null;
   if (!match) return <Navigate to="/" replace />;
+
+  /*
+   * Fim de um jogo do dia, no amador (pedido do Guilherme em 05/10/2026): o
+   * resumo pergunta "Novo jogo?". Só no ÚLTIMO jogo de um dia aberto, sem
+   * outro em andamento — abrir um resumo antigo não pode puxar jogo novo.
+   */
+  const dia = match.jogoId ? jogos.find((j) => j.id === match.jogoId) : undefined;
+  const ultimoDoDia = dia
+    ? matches.filter((m) => m.jogoId === dia.id).reduce((a, b) => (b.date > a.date ? b : a), match)
+    : null;
+  const perguntaNovoJogo = Boolean(
+    dia &&
+      dia.status === 'aberto' &&
+      match.mode !== 'profissional' &&
+      !live &&
+      ultimoDoDia?.id === match.id &&
+      (dia.sorteio?.teams.length ?? 0) >= 2,
+  );
+  const ajuste = perguntaNovoJogo && dia ? planoDeAjuste(dia, elenco.filter((p) => !p.pending)) : null;
+  const voltar = dia ? `/jogo/${dia.id}?aba=partidas` : '/';
+
+  function mesmosTimes() {
+    const s = dia?.sorteio;
+    if (!dia || !s || s.teams.length < 2) return;
+    const [a, b] = s.teams;
+    startMatch({
+      sport: s.sport,
+      jogoId: dia.id,
+      teams: [
+        { id: a.id, name: a.name, color: a.color, playerIds: a.players.map((p) => p.id) },
+        { id: b.id, name: b.name, color: b.color, playerIds: b.players.map((p) => p.id) },
+      ],
+    });
+    navigate('/placar');
+  }
 
   const [teamA, teamB] = match.teams;
   const scoutA = teamScout(match, teamA.id);
@@ -74,11 +117,11 @@ export function MatchSummaryPage() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
       <header className="safe-top flex items-center gap-3 pt-6 pb-4">
-        <button onClick={() => navigate('/')} className="p-1 text-ink-400">
+        <button onClick={() => navigate(voltar)} className="p-1 text-ink-400">
           <ArrowLeft size={22} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold">Resumo da partida</h1>
+          <h1 className="text-xl font-bold">{match.mode === 'profissional' ? 'Resumo da partida' : 'Resumo do jogo'}</h1>
           <p className="text-xs text-ink-400">{formatDate(match.date)}</p>
         </div>
         <button onClick={shareSummary} className="p-1.5 text-ink-400">
@@ -123,6 +166,36 @@ export function MatchSummaryPage() {
           ))}
         </div>
       </section>
+
+      {perguntaNovoJogo && dia && (
+        <section className="mt-4 rounded-2xl border border-brand-500/40 bg-brand-500/10 p-4">
+          <p className="text-[15px] font-semibold text-ink-50">Novo jogo?</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Button className="col-span-2" onClick={mesmosTimes}>
+              <PlayCircle size={18} />
+              Mesmos times
+            </Button>
+            {ajuste && (
+              <Button variant="secondary" className="col-span-2" onClick={() => navigate(`/jogo/${dia.id}`)}>
+                <Shuffle size={17} />
+                Ajustar times
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => navigate(`/jogo/${dia.id}?encerrar=1`)}>
+              <Flag size={16} />
+              Encerrar o dia
+            </Button>
+            <Button variant="secondary" onClick={() => navigate(`/jogo/${dia.id}?aba=partidas`)}>
+              Agora não
+            </Button>
+          </div>
+          {ajuste && (
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
+              A lista mudou depois do sorteio: em "Ajustar times" você vê quem entra e quem sai.
+            </p>
+          )}
+        </section>
+      )}
 
       {!detailed && (
         <p className="mt-4 rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3 text-sm leading-relaxed text-ink-400">

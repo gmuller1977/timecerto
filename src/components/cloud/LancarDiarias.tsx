@@ -14,8 +14,21 @@ import type { Jogo, Player } from '@/types';
  * em 29/09/2026: ao encerrar, o app mostra os convidados que jogaram, já
  * marcados; ele desmarca quem faltou e confirma. O mesmo jogo não cobra duas
  * vezes a mesma pessoa — quem já tem a diária aparece como lançado.
+ *
+ * Depois de lançar — ou de cara, na diária antecipada —, `onCobrar` abre a
+ * cobrança das diárias deste dia (pedido do Guilherme em 05/10/2026).
  */
-export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players: Player[]; onFechar: () => void }) {
+export function LancarDiarias({
+  jogo,
+  players,
+  onFechar,
+  onCobrar,
+}: {
+  jogo: Jogo;
+  players: Player[];
+  onFechar: () => void;
+  onCobrar?: () => void;
+}) {
   const convidados = useMemo(() => {
     const dist = vagasDoJogo(jogo, players);
     return players.filter((p) => p.kind === 'convidado' && joga(dist.situacao.get(p.id)) && p.remoteId);
@@ -50,6 +63,8 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
 
   const pendentes = convidados.filter((p) => marcados.has(p.id) && !lancadas?.has(p.remoteId!));
   const cents = reaisParaCentavos(valor);
+  // Já há diária deste dia para cobrar: lançada agora, antes, ou antecipada
+  const temParaCobrar = antecipada || feito !== null || (lancadas?.size ?? 0) > 0;
 
   async function lancar() {
     if (!jogo.remoteId || !cents || pendentes.length === 0) return;
@@ -74,10 +89,10 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
       {antecipada ? (
         <p className="mt-2 text-sm leading-relaxed text-ink-400">
           A diária é antecipada: cada convidado foi cobrado quando ganhou a vaga, e quem desistiu antes do jogo
-          teve a cobrança cancelada sozinha. Está tudo em Financeiro › Quem deve.
+          teve a cobrança cancelada sozinha. Em "Cobrar agora", quem deste dia ainda deve.
         </p>
       ) : convidados.length === 0 ? (
-        <p className="mt-2 text-sm text-ink-400">Nenhum convidado jogou este jogo.</p>
+        <p className="mt-2 text-sm text-ink-400">Nenhum convidado jogou neste dia.</p>
       ) : lancadas === null && !erro ? (
         <p className="mt-2 text-sm text-ink-500">Carregando…</p>
       ) : (
@@ -141,6 +156,11 @@ export function LancarDiarias({ jogo, players, onFechar }: { jogo: Jogo; players
         <Button type="button" size="sm" variant="secondary" onClick={onFechar}>
           {feito !== null || pendentes.length === 0 ? 'Fechar' : 'Agora não'}
         </Button>
+        {onCobrar && temParaCobrar && (antecipada || pendentes.length === 0) && (
+          <Button size="sm" className="flex-1" onClick={onCobrar}>
+            Cobrar agora
+          </Button>
+        )}
         {pendentes.length > 0 && !antecipada && (
           <Button size="sm" className="flex-1" disabled={busy || !cents} onClick={lancar}>
             {busy

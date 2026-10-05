@@ -1,3 +1,5 @@
+import { podeSortear } from '@/lib/diaDeJogo';
+import { useMatchStore } from '@/store/useMatchStore';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, Minus, Plus, Shuffle } from 'lucide-react';
@@ -115,7 +117,9 @@ function Levantadores({ presentes, aberto }: { presentes: Player[]; aberto: bool
 export function DrawPage() {
   const navigate = useNavigate();
   // O sorteio é de um jogo: o que a página do jogo mandou, ou o próximo
-  const jogoId = (useLocation().state as { jogoId?: string } | null)?.jogoId;
+  const estado = useLocation().state as { jogoId?: string; pelaLista?: boolean } | null;
+  const jogoId = estado?.jogoId;
+  const matches = useMatchStore((s) => s.matches);
   const sport = useAppStore((s) => s.sport);
   const settings = useAppStore((s) => s.settings);
   const updateSettings = useAppStore((s) => s.updateSettings);
@@ -181,6 +185,23 @@ export function DrawPage() {
       setDrawing(false);
       navigate(jogo ? `/resultado?jogo=${jogo.id}` : '/resultado');
     }, 450);
+  }
+
+  // O sorteio só vale antes do primeiro jogo do dia; depois, só pelo cartão
+  // "A lista mudou". Dia encerrado ou cancelado não sorteia (05/10/2026)
+  if (jogo && !podeSortear(jogo, matches, Boolean(estado?.pelaLista))) {
+    return (
+      <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
+        <p className="mt-16 rounded-2xl border border-ink-800 bg-ink-900 p-4 text-sm leading-relaxed text-ink-300">
+          {jogo.status !== 'aberto'
+            ? 'Este dia já foi encerrado: não dá para sortear os times.'
+            : 'Este dia já teve jogo: os times não são sorteados de novo. Se a lista mudar, o ajuste aparece na página do dia.'}
+        </p>
+        <Button className="mt-3" onClick={() => navigate(`/jogo/${jogo.id}`, { replace: true })}>
+          Voltar ao dia
+        </Button>
+      </div>
+    );
   }
 
   return (
