@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { faseDoJogo, textoDaFase } from '@/lib/promocao';
+import { faseNaTela, textoDaFase } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO } from '@/types';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
@@ -272,7 +272,7 @@ function Pagina({
   const escalar = () =>
     navigate('/profissional/escalacao', { state: { jogoId: jogo.id, competicao: jogo.competicao } });
 
-  const fase = faseDoJogo(jogo);
+  const fase = faseNaTela(jogo);
   /*
    * O sorteio só vale antes do primeiro jogo do dia (05/10/2026). Depois, os
    * times só mudam pelo cartão "A lista mudou", e o rodapé passa a ser

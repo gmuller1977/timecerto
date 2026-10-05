@@ -1,4 +1,6 @@
 import { momentoDaPromocao, type Promocao } from '@/lib/vagas';
+import { inicioDo } from '@/lib/jogo';
+import type { Jogo } from '@/types';
 
 /**
  * Inscrição em duas fases (docs/telas-amador.md, migração 028): o que as telas
@@ -46,6 +48,17 @@ export function faseDoJogo(p: Promocao, agora: Date = new Date()): Fase {
   return momentoDaPromocao(p, agora) === null
     ? { tipo: 'mensalistas', quando: quandoPromove(p.promoverEm) }
     : { tipo: 'aberto', preferenciaPermanente: Boolean(p.preferenciaPermanente) };
+}
+
+/**
+ * A fase como as telas do ADMINISTRADOR a mostram: só enquanto o dia recebe
+ * inscrições. Com a lista fechada, o dia encerrado ou já na hora do jogo, não
+ * há mais o que avisar — relatado pelo Guilherme em 05/10/2026: o dia 04,
+ * fechado, sorteado e jogado, seguia dizendo "Aberto para todos".
+ */
+export function faseNaTela(jogo: Jogo, agora: Date = new Date()): Fase {
+  if (jogo.status !== 'aberto' || jogo.listaFechada || inicioDo(jogo) <= agora.getTime()) return { tipo: 'sem' };
+  return faseDoJogo(jogo, agora);
 }
 
 /** A linha curta da fase, para o cartão e o cabeçalho do jogo */
