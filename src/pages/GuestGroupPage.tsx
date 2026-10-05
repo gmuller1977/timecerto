@@ -7,6 +7,8 @@ import {
   guestInformarPendencias,
   guestMensalidade,
   guestPendencias,
+  guestSalvarWhatsapp,
+  guestTemWhatsapp,
   type MensalidadeDoLink,
   guestPromover,
   guestJoin,
@@ -25,6 +27,7 @@ import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
 import { cn } from '@/lib/utils';
+import { isValidPhone, maskPhoneInput, onlyDigits } from '@/lib/phone';
 import { AvisoDoAtleta } from '@/components/cloud/Avisos';
 
 /** Quem este aparelho é, por link. Conveniência — errar custa um toque. */
@@ -126,6 +129,9 @@ export function GuestGroupPage() {
   // O convidado informa a posição (pedido do Guilherme, 24/09/2026): sem ela o
   // sorteio não sabe se ele é levantador ou goleiro
   const [newPosition, setNewPosition] = useState('');
+  // O WhatsApp de quem entra pelo link (migração 035): obrigatório para quem se
+  // inscreve, opcional para quem o mensalista leva
+  const [newPhone, setNewPhone] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   // No link do jogo o formulário serve a duas coisas: o convidado se inscrever
   // (eu) ou o mensalista levar alguém (levar)
@@ -302,15 +308,16 @@ export function GuestGroupPage() {
     setFormError(null);
     try {
       if (souEu) {
-        const id = await guestJoin(code, event.id, newName, newPosition);
+        const id = await guestJoin(code, event.id, newName, newPosition, onlyDigits(newPhone));
         writeMe(code, id);
         setMe(id);
       } else {
-        await guestAddPlayer(code, event.id, newName, mine?.id ?? null, newPosition);
+        await guestAddPlayer(code, event.id, newName, mine?.id ?? null, newPosition, onlyDigits(newPhone));
       }
       setFormOpen(false);
       setNewName('');
       setNewPosition('');
+      setNewPhone('');
       setBusca('');
       await load();
     } catch (err) {
@@ -377,6 +384,14 @@ export function GuestGroupPage() {
         maxLength={40}
         placeholder="Nome e sobrenome"
         className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
+      />
+      <input
+        value={newPhone}
+        onChange={(e) => setNewPhone(maskPhoneInput(e.target.value))}
+        inputMode="tel"
+        aria-label={souEu ? 'Seu WhatsApp' : 'WhatsApp de quem você vai levar'}
+        placeholder={souEu ? 'Seu WhatsApp, com DDD' : 'WhatsApp dele (opcional)'}
+        className="mt-2 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
       />
       {convidadosParecidos.map((p) => (
         <div
@@ -464,7 +479,13 @@ export function GuestGroupPage() {
         )}
         <button
           type="submit"
-          disabled={saving || newName.trim().length < 2 || !newPosition}
+          disabled={
+            saving ||
+            newName.trim().length < 2 ||
+            !newPosition ||
+            // Quem se inscreve informa o número; quem leva alguém, só se souber
+            (souEu ? !isValidPhone(onlyDigits(newPhone)) : Boolean(newPhone) && !isValidPhone(onlyDigits(newPhone)))
+          }
           className="h-12 flex-1 rounded-xl bg-brand-500 font-semibold text-ink-950 disabled:opacity-40"
         >
           {saving
@@ -557,6 +578,7 @@ export function GuestGroupPage() {
                     setRespostaErro(null);
                   }}
                 />
+                <MeuWhatsapp key={mine.id} code={code} playerId={mine.id} />
                 {respostaErro && (
                   <p className="mt-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm leading-relaxed text-red-200">
                     {respostaErro}
@@ -979,6 +1001,81 @@ function MeuPagamento({
           Mandar a lista da mensalidade no grupo
         </button>
       )}
+      {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
+    </div>
+  );
+}
+
+/**
+ * "Cadastre seu WhatsApp" (migração 035): para quem se identificou e ainda
+ * não tem número — a cobrança e os avisos do organizador vão direto para ele.
+ * O link só sabe SE a pessoa tem número, nunca qual. Quem já tem não troca por
+ * aqui: trocar é com o organizador.
+ */
+function MeuWhatsapp({ code, playerId }: { code: string; playerId: string }) {
+  const [tem, setTem] = useState<boolean | null>(null);
+  const [fone, setFone] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [salvo, setSalvo] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    guestTemWhatsapp(code, playerId)
+      .then((t) => vivo && setTem(t))
+      .catch((e) => console.warn('whatsapp pelo link', e));
+    return () => {
+      vivo = false;
+    };
+  }, [code, playerId]);
+
+  if (salvo) {
+    return (
+      <p className="mt-3 flex items-center gap-2 text-sm text-brand-200">
+        <Check size={16} className="shrink-0" />
+        WhatsApp cadastrado. Obrigado!
+      </p>
+    );
+  }
+  if (tem !== false) return null;
+
+  const digitos = onlyDigits(fone);
+  async function salvar() {
+    setBusy(true);
+    setErro(null);
+    try {
+      await guestSalvarWhatsapp(code, playerId, digitos);
+      setSalvo(true);
+    } catch (e) {
+      console.error('salvar whatsapp', e);
+      setErro(dbMessage(e, 'Não deu para salvar. Confira a internet e tente de novo.'));
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+      <p className="text-[15px] font-semibold text-ink-50">Cadastre seu WhatsApp</p>
+      <p className="mt-0.5 text-xs leading-relaxed text-ink-500">
+        Para o organizador falar com você direto: cobranças e avisos do jogo.
+      </p>
+      <div className="mt-3 flex gap-2">
+        <input
+          value={fone}
+          onChange={(e) => setFone(maskPhoneInput(e.target.value))}
+          inputMode="tel"
+          aria-label="Seu WhatsApp"
+          placeholder="(11) 98765-4321"
+          className="min-w-0 flex-1 rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
+        />
+        <button
+          disabled={busy || !isValidPhone(digitos)}
+          onClick={salvar}
+          className="shrink-0 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-ink-950 disabled:opacity-40"
+        >
+          {busy ? 'Salvando…' : 'Salvar'}
+        </button>
+      </div>
       {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
     </div>
   );

@@ -126,7 +126,7 @@ export function PlayerSheet({ player, onClose }: { player: Player; onClose: () =
             />
           </div>
           <div className="min-w-0 flex-1">
-            <label className="block text-xs font-medium text-ink-400">Telefone</label>
+            <label className="block text-xs font-medium text-ink-400">WhatsApp</label>
             <input
               value={phone}
               onChange={(e) => setPhone(maskPhoneInput(e.target.value))}

@@ -963,6 +963,8 @@ export async function guestJoin(
   eventId: string,
   name: string,
   position: string,
+  /** Migração 035: só preenche quem ainda não tem número */
+  phone?: string,
 ): Promise<string> {
   const { data, error } = await db().rpc('guest_join', {
     code,
@@ -970,6 +972,7 @@ export async function guestJoin(
     p_name: name,
     p_position: position,
     p_aparelho: meuAparelho(),
+    p_phone: phone || null,
   });
   if (error) throw error;
   return data as string;
@@ -987,6 +990,7 @@ export async function guestAddPlayer(
   name: string,
   invitedBy: string | null,
   position: string,
+  phone?: string,
 ): Promise<string> {
   const { data, error } = await db().rpc('guest_add_player', {
     code,
@@ -995,9 +999,23 @@ export async function guestAddPlayer(
     p_invited_by: invitedBy,
     p_position: position,
     p_aparelho: meuAparelho(),
+    p_phone: phone || null,
   });
   if (error) throw error;
   return data as string;
+}
+
+/** Pelo link: a pessoa já tem WhatsApp? Só sim ou não (migração 035) */
+export async function guestTemWhatsapp(code: string, playerId: string): Promise<boolean> {
+  const { data, error } = await db().rpc('guest_tem_whatsapp', { code, p_player: playerId });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/** Pelo link: cadastra o WhatsApp de quem ainda não tem */
+export async function guestSalvarWhatsapp(code: string, playerId: string, phone: string): Promise<void> {
+  const { error } = await db().rpc('guest_salvar_whatsapp', { code, p_player: playerId, p_phone: phone });
+  if (error) throw error;
 }
 
 export async function guestGroup(code: string): Promise<GuestGroup> {
