@@ -127,7 +127,7 @@ export function Administradores({ mode: modoPedido }: { mode?: AppMode }) {
         <p className="mt-2 text-sm leading-relaxed text-ink-400">
           {mode === 'profissional'
             ? 'Crie o time para poder ter mais administradores.'
-            : 'Crie o grupo na aba Jogo para poder ter mais administradores.'}
+            : 'Crie o grupo na aba Agenda para poder ter mais administradores.'}
         </p>
       ) : (
         <>

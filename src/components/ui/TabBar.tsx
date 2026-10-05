@@ -26,7 +26,7 @@ type Aba = {
 export const TABS: Aba[] = [
   {
     id: 'jogo',
-    label: 'Jogo',
+    label: 'Agenda',
     icon: Volleyball,
     root: '/amador',
     prefixes: ['/amador', '/jogo', '/resultado', '/partida', '/historico'],

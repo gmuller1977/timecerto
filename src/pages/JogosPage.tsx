@@ -112,7 +112,7 @@ export function JogosPage() {
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
       <header className="safe-top flex items-center justify-between gap-3 pt-6 pb-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Jogo</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{pro ? 'Jogo' : 'Agenda'}</h1>
         </div>
         <button
           onClick={() => navigate('/historico')}

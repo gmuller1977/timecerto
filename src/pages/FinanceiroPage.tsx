@@ -306,7 +306,7 @@ export function FinanceiroPage() {
         <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">{erro}</p>
       )}
       {grupo === null && (
-        <p className="mt-4 text-sm leading-relaxed text-ink-400">Crie o grupo na aba Jogo para usar o financeiro.</p>
+        <p className="mt-4 text-sm leading-relaxed text-ink-400">Crie o grupo na aba Agenda para usar o financeiro.</p>
       )}
       {grupo && !dados && !erro && <p className="mt-6 text-center text-sm text-ink-500">Carregando…</p>}
       {grupo && dados && !situacaoDoPlano(grupo.plano).premium && (
