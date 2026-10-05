@@ -160,9 +160,10 @@ function mensagemDeRecibo(
   for (const a of saldo.abertas) {
     if (resto <= 0) break;
     const abate = Math.min(resto, a.faltaCents);
-    const linha = `• ${a.cobranca.descricao} — ${dm(dataDaCobranca(a.cobranca))}`;
-    if (abate === a.faltaCents) quitadas.push(`${linha} — ${formatBRL(abate)}`);
-    else parcial = `${linha} — ${formatBRL(abate)} de ${formatBRL(a.faltaCents)}`;
+    // As linhas iguais às da cobrança individual (pedido do Guilherme, 05/10/2026)
+    const linha = `• ${rotuloDaCobranca(a.cobranca)}: ${dm(dataDaCobranca(a.cobranca))}`;
+    if (abate === a.faltaCents) quitadas.push(`${linha} — Valor de ${formatBRL(abate)}`);
+    else parcial = `${linha} — Pago ${formatBRL(abate)} de ${formatBRL(a.faltaCents)}`;
     resto -= abate;
   }
   const falta = saldo.saldoCents - pago.valorCents;
