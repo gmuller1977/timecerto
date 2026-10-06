@@ -466,20 +466,37 @@ function Conteudo({
           <CobrarVarios devedores={devedores} grupo={grupo} dados={dados} nome={nome} recarregar={recarregar} />
         )}
         <div className="flex flex-col gap-2">
-          {lista.map((s) => (
-            <Devedor
-              key={s.playerId}
-              saldo={s}
-              jogador={dados.jogadores.get(s.playerId)}
-              grupo={grupo}
-              dados={dados}
-              recarregar={recarregar}
-              recibo={recibo?.playerId === s.playerId ? recibo : null}
-              quitado={quitou && recibo?.playerId === s.playerId}
-              onRecebido={(r) => setRecibo({ ...r, indice: Math.max(0, devedores.findIndex((d) => d.playerId === r.playerId)) })}
-              onFecharRecibo={() => setRecibo(null)}
-            />
-          ))}
+          {/* Separados por tipo, com título (pedido do Guilherme em 06/10/2026) */}
+          {(['mensalista', 'convidado'] as const).map((tipo) => {
+            const doTipo = lista.filter(
+              (s) => (dados.jogadores.get(s.playerId)?.kind === 'convidado') === (tipo === 'convidado'),
+            );
+            if (doTipo.length === 0) return null;
+            return (
+              <div key={tipo} className="flex flex-col gap-2">
+                <p className="mt-2 text-xs font-semibold tracking-wide text-ink-400 uppercase">
+                  <span aria-hidden className="mr-1.5">{iconeDoTipo(tipo)}</span>
+                  {tipo === 'convidado' ? 'Convidados' : 'Mensalistas'} ({doTipo.length})
+                </p>
+                {doTipo.map((s) => (
+                  <Devedor
+                    key={s.playerId}
+                    saldo={s}
+                    jogador={dados.jogadores.get(s.playerId)}
+                    grupo={grupo}
+                    dados={dados}
+                    recarregar={recarregar}
+                    recibo={recibo?.playerId === s.playerId ? recibo : null}
+                    quitado={quitou && recibo?.playerId === s.playerId}
+                    onRecebido={(r) =>
+                      setRecibo({ ...r, indice: Math.max(0, devedores.findIndex((d) => d.playerId === r.playerId)) })
+                    }
+                    onFecharRecibo={() => setRecibo(null)}
+                  />
+                ))}
+              </div>
+            );
+          })}
           {lista.length === 0 && (
             <p className="rounded-2xl border border-dashed border-ink-800 px-4 py-4 text-center text-sm text-ink-400">
               Ninguém devendo. 🎉
@@ -772,24 +789,15 @@ function Devedor({
 
   return (
     <div className="rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3">
-      <button onClick={() => setAberto((v) => !v)} className="flex w-full items-center gap-2 text-left">
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold text-ink-50">{nome}</span>
-          <span className={cn('block truncate text-xs', atrasada ? 'text-amber-300' : 'text-ink-500')}>
-            {saldo.abertas.length === 1
-              ? saldo.abertas[0].cobranca.descricao
-              : `${saldo.abertas.length} cobranças`}
-            {atrasada && ' · atrasada'}
-          </span>
-          {aConferir && (
-            <span className="block truncate text-[11px] font-medium text-brand-300">Informou que pagou · a conferir</span>
-          )}
-          {ultimo && (
-            <span className="block truncate text-[11px] text-ink-500">
-              Cobrado {haQuanto(ultimo.enviadoEm)}
-              {ultimo.canal === 'grupo' && ' no grupo'}
-            </span>
-          )}
+      {/* Fechado: só o nome e o valor (pedido do Guilherme em 06/10/2026) */}
+      <button
+        onClick={() => setAberto((v) => !v)}
+        aria-expanded={aberto}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink-50">
+          <span aria-hidden className="mr-1.5">{iconeDoTipo(jogador?.kind)}</span>
+          {nome}
         </span>
         {quitado ? (
           <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-300">
@@ -803,7 +811,22 @@ function Devedor({
       </button>
 
       {aberto && (
-        <ul className="mt-2 flex flex-col gap-1.5 border-t border-ink-800 pt-2">
+        <div className="mt-2 border-t border-ink-800 pt-2 text-xs">
+          <p className={atrasada ? 'text-amber-300' : 'text-ink-500'}>
+            {saldo.abertas.length === 1 ? '1 cobrança em aberto' : `${saldo.abertas.length} cobranças em aberto`}
+            {atrasada && ' · atrasada'}
+          </p>
+          {aConferir && <p className="mt-0.5 font-medium text-brand-300">Informou que pagou · a conferir</p>}
+          {ultimo && (
+            <p className="mt-0.5 text-[11px] text-ink-500">
+              Cobrado {haQuanto(ultimo.enviadoEm)}
+              {ultimo.canal === 'grupo' && ' no grupo'}
+            </p>
+          )}
+        </div>
+      )}
+      {aberto && (
+        <ul className="mt-2 flex flex-col gap-1.5">
           {saldo.abertas.map((a) => (
             <li key={a.cobranca.id} className="flex items-center gap-2 text-sm">
               <span className="min-w-0 flex-1 text-ink-300">
@@ -937,7 +960,7 @@ function Devedor({
             </Button>
           </div>
         </form>
-      ) : (
+      ) : !aberto ? null : (
         <div className={cn('mt-3 grid gap-2', soLeitura ? 'grid-cols-1' : 'grid-cols-2')}>
           <Button size="sm" variant="secondary" onClick={cobrar}>
             <MessageCircle size={15} />
