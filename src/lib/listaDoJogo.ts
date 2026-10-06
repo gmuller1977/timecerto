@@ -8,6 +8,15 @@
  * um robô que arrisca banir o número. A mensagem sai pronta; alguém envia.
  */
 
+/**
+ * Quem é mensalista e quem é convidado, nas listas (pedido do Guilherme em
+ * 06/10/2026): Ⓜ️ e 🎟️ (ingresso). Os mesmos na mensagem do WhatsApp, no link
+ * e na página do dia — trocar aqui troca em todos.
+ */
+export const ICONE_DO_TIPO = { mensalista: 'Ⓜ️', convidado: '🎟️' } as const;
+export const iconeDoTipo = (kind: string | null | undefined) =>
+  kind === 'convidado' ? ICONE_DO_TIPO.convidado : ICONE_DO_TIPO.mensalista;
+
 export interface LinhaDaLista {
   nome: string;
   convidado: boolean;
@@ -43,8 +52,7 @@ export function textoDaLista(p: {
     `⚡ ${p.grupo} · ${quandoDoJogo(p.inicio)}${p.local ? ` · ${p.local}` : ''}`,
     `*Confirmados (${p.confirmados.length}${p.vagas != null ? ` de ${p.vagas}` : ''})*\n` +
       (p.confirmados.length
-        ? // Sem marca de mensalista ou convidado: só os nomes (pedido do Guilherme, 06/10/2026)
-          numerada(p.confirmados.map((c) => c.nome))
+        ? numerada(p.confirmados.map((c) => `${c.convidado ? ICONE_DO_TIPO.convidado : ICONE_DO_TIPO.mensalista} ${c.nome}`))
         : 'Ninguém ainda.'),
   ];
   if (p.fila.length) partes.push(`*Na fila*\n${numerada(p.fila)}`);

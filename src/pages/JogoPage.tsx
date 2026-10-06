@@ -1,3 +1,4 @@
+import { iconeDoTipo } from '@/lib/listaDoJogo';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { faseNaTela, textoDaFase } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO } from '@/types';
@@ -845,12 +846,12 @@ function PresenceRow({
         {chamado && <span className="block text-xs font-normal text-amber-300">{haQuantoChamado(situacao.desde)}</span>}
       </span>
       <span
-        className={cn(
-          'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
-          convidado ? 'border border-ink-700 text-ink-400' : 'bg-brand-500/15 text-brand-300',
-        )}
+        role="img"
+        aria-label={convidado ? 'Convidado' : 'Mensalista'}
+        title={convidado ? 'Convidado' : 'Mensalista'}
+        className="shrink-0 text-lg leading-none"
       >
-        {convidado ? 'Convidado' : 'Mensalista'}
+        {iconeDoTipo(player.kind)}
       </span>
     </button>
   );

@@ -19,7 +19,7 @@ import {
 } from '@/lib/cloud';
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos, normalizar } from '@/lib/juntar';
-import { textoDaLista } from '@/lib/listaDoJogo';
+import { iconeDoTipo, textoDaLista } from '@/lib/listaDoJogo';
 import { diaDaPromocao, faseDoJogo } from '@/lib/promocao';
 import { mensagemDaMensalidade, pixCopiaECola } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
@@ -748,7 +748,10 @@ export function GuestGroupPage() {
                         }}
                         className="flex items-center gap-3 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-3 text-left active:scale-[0.99]"
                       >
-                        <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">{p.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">
+                          <span aria-hidden className="mr-1.5">{iconeDoTipo(p.kind)}</span>
+                          {p.name}
+                        </span>
                         <span className="shrink-0 text-xs font-semibold text-brand-300">Sou eu</span>
                       </button>
                     ))}
@@ -798,7 +801,10 @@ export function GuestGroupPage() {
                       !mine && 'active:scale-[0.99]',
                     )}
                   >
-                    <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">{p.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">
+                      <span aria-hidden className="mr-1.5">{iconeDoTipo(p.kind)}</span>
+                      {p.name}
+                    </span>
                     {p.position && (
                       <span className="shrink-0 text-xs text-ink-500">
                         {getPositionLabel(data.group.sport as SportId, p.position)}
@@ -911,7 +917,7 @@ export function GuestGroupPage() {
               </p>
               <div className="flex flex-col gap-1.5">
                 {g.lista.map((p) => (
-                  <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
+                  <GuestLine key={p.id} name={p.name} kind={p.kind} invitedBy={p.invitedBy} mine={p.id === me}>
                     {g.fila && <span className="text-xs text-ink-400">{posicao(sit(p.id))}º na fila</span>}
                   </GuestLine>
                 ))}
@@ -927,12 +933,12 @@ export function GuestGroupPage() {
           </p>
           <div className="flex flex-col gap-1.5">
             {chamados.map((p) => (
-              <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
+              <GuestLine key={p.id} name={p.name} kind={p.kind} invitedBy={p.invitedBy} mine={p.id === me}>
                 <span className="text-xs font-medium text-amber-300">chamado, confirmando</span>
               </GuestLine>
             ))}
             {espera.map((p) => (
-              <GuestLine key={p.id} name={p.name} invitedBy={p.invitedBy} mine={p.id === me}>
+              <GuestLine key={p.id} name={p.name} kind={p.kind} invitedBy={p.invitedBy} mine={p.id === me}>
                 <span className="text-xs text-ink-400">{posicao(sit(p.id))}º na espera</span>
               </GuestLine>
             ))}
@@ -1560,11 +1566,13 @@ function JaJogou({
 
 function GuestLine({
   name,
+  kind,
   invitedBy,
   mine,
   children,
 }: {
   name: string;
+  kind: string;
   invitedBy: string | null;
   mine: boolean;
   children: React.ReactNode;
@@ -1577,7 +1585,10 @@ function GuestLine({
       )}
     >
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[15px] text-ink-50">{name}</span>
+        <span className="block truncate text-[15px] text-ink-50">
+          <span aria-hidden className="mr-1.5">{iconeDoTipo(kind)}</span>
+          {name}
+        </span>
         {invitedBy && (
           <span className="block truncate text-[11px] text-ink-500">convidado de {invitedBy}</span>
         )}
