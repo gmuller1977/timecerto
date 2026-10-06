@@ -1,10 +1,9 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { unificarElenco } from '@/store/unificarElenco';
-import { SoNaPelada } from '@/components/ui/SoNaPelada';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
 import { useHydrated } from '@/store/useHydrated';
 import { useJogoStore } from '@/store/useJogoStore';
-import { HashRouter, Link, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { HomePage } from '@/pages/HomePage';
 import { AberturaPage } from '@/pages/AberturaPage';
 import { JogosPage } from '@/pages/JogosPage';
@@ -19,7 +18,7 @@ import { QuickMatchPage } from '@/pages/QuickMatchPage';
 import { MatchSummaryPage } from '@/pages/MatchSummaryPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { PlayerProfilePage } from '@/pages/PlayerProfilePage';
-import { EmBrevePage } from '@/pages/EmBrevePage';
+import { AjustesPage, SecaoDosAjustesPage } from '@/pages/AjustesPage';
 import { TabLayout } from '@/components/ui/TabLayout';
 
 // Só estas telas falam com o banco. Carregadas sob demanda, o cliente do
@@ -35,35 +34,8 @@ const GuestRegisterPage = lazy(() =>
 const AdminInvitePage = lazy(() =>
   import('@/pages/AdminInvitePage').then((m) => ({ default: m.AdminInvitePage })),
 );
-const Administradores = lazy(() =>
-  import('@/components/cloud/Administradores').then((m) => ({ default: m.Administradores })),
-);
 const FinanceiroPage = lazy(() =>
   import('@/pages/FinanceiroPage').then((m) => ({ default: m.FinanceiroPage })),
-);
-const FinanceiroAjustes = lazy(() =>
-  import('@/components/cloud/FinanceiroAjustes').then((m) => ({ default: m.FinanceiroAjustes })),
-);
-const SairDaConta = lazy(() =>
-  import('@/components/cloud/SairDaConta').then((m) => ({ default: m.SairDaConta })),
-);
-const PlanoDoGrupo = lazy(() =>
-  import('@/components/cloud/PlanoDoGrupo').then((m) => ({ default: m.PlanoDoGrupo })),
-);
-const PerfilDoTime = lazy(() =>
-  import('@/components/cloud/PerfilDoTime').then((m) => ({ default: m.PerfilDoTime })),
-);
-const ExcluirGrupo = lazy(() =>
-  import('@/components/cloud/ExcluirGrupo').then((m) => ({ default: m.ExcluirGrupo })),
-);
-const PromocaoAjustes = lazy(() =>
-  import('@/components/cloud/PromocaoAjustes').then((m) => ({ default: m.PromocaoAjustes })),
-);
-const NomeDoGrupo = lazy(() =>
-  import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })),
-);
-const AvisosDoAdmin = lazy(() =>
-  import('@/components/cloud/Avisos').then((m) => ({ default: m.AvisosDoAdmin })),
 );
 const GuestAthletePage = lazy(() =>
   import('@/pages/GuestAthletePage').then((m) => ({ default: m.GuestAthletePage })),
@@ -169,44 +141,9 @@ export default function App() {
                   </Suspense>
                 }
               />
-              <Route
-                path="/ajustes"
-                element={
-                  <EmBrevePage
-                    title="Ajustes"
-                    text="Nome do grupo, plano, financeiro, administradores e avisos. Local, horário e vagas padrão, e os padrões do sorteio, chegam aqui depois."
-                  >
-                    {hasSavedSession() && (
-                      <Suspense fallback={null}>
-                        <NomeDoGrupo />
-                        <PerfilDoTime />
-                        <PlanoDoGrupo />
-                        <FinanceiroAjustes />
-                        <Administradores />
-                        <SoNaPelada>
-                          <PromocaoAjustes />
-                          <AvisosDoAdmin />
-                        </SoNaPelada>
-                        {/* Por último: é a ação que não tem volta */}
-                        <ExcluirGrupo />
-                      </Suspense>
-                    )}
-                    {/* Com o login obrigatório, a conta só tem uma ação: sair.
-                        Trocar de modo é atalho — as raízes de aba não têm seta
-                        para voltar ao menu */}
-                    <Suspense fallback={null}>
-                      <SairDaConta />
-                    </Suspense>
-                    <Link
-                      to="/modo"
-                      className="mt-3 flex items-center justify-between rounded-2xl border border-ink-800 bg-ink-900 px-4 py-3.5 text-[15px] font-medium text-ink-100"
-                    >
-                      Trocar de modo
-                      <span className="text-xs text-ink-500">Amador · Profissional</span>
-                    </Link>
-                  </EmBrevePage>
-                }
-              />
+              {/* Ajustes em seções (06/10/2026): o menu e uma tela por assunto */}
+              <Route path="/ajustes" element={<AjustesPage />} />
+              <Route path="/ajustes/:secao" element={<SecaoDosAjustesPage />} />
             </Route>
           </Route>
           {/* Links do WhatsApp — abertos por quem não tem conta */}
