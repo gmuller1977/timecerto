@@ -98,10 +98,11 @@ export interface PublishedTeams {
 export type Attendance = Record<string, { status: 'vou' | 'nao_vou'; answeredAt: string }>;
 
 const GROUP_COLS =
-  'id, name, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia, age_group, naipe, promocao_dias, promocao_hora, preferencia_permanente';
+  'id, name, mode, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia, vip_ate, vip_teste_ate, age_group, naipe, promocao_dias, promocao_hora, preferencia_permanente';
 const toGroup = (d: {
   id: string;
   name: string;
+  mode: string | null;
   invite_code: string;
   guest_code: string | null;
   register_code: string | null;
@@ -109,6 +110,8 @@ const toGroup = (d: {
   teste_ate: string | null;
   pago_ate: string | null;
   cortesia: boolean | null;
+  vip_ate: string | null;
+  vip_teste_ate: string | null;
   age_group: AgeGroup | null;
   naipe: Naipe | null;
   promocao_dias: number | null;
@@ -121,7 +124,14 @@ const toGroup = (d: {
   guestCode: d.guest_code,
   registerCode: d.register_code,
   ownerId: d.owner_id,
-  plano: { testeAte: d.teste_ate, pagoAte: d.pago_ate, cortesia: Boolean(d.cortesia) },
+  plano: {
+    testeAte: d.teste_ate,
+    pagoAte: d.pago_ate,
+    cortesia: Boolean(d.cortesia),
+    vipAte: d.vip_ate,
+    vipTesteAte: d.vip_teste_ate,
+    pro: d.mode === 'profissional',
+  },
   ageGroup: d.age_group,
   naipe: d.naipe,
   promocao: {

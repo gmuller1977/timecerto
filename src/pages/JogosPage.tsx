@@ -20,6 +20,7 @@ import {
 import { SPORTS, SPORT_LIST } from '@/lib/sports';
 import { vagasDoJogo } from '@/lib/vagas';
 import { cn } from '@/lib/utils';
+import { usePremium } from '@/store/usePlano';
 import type { Jogo, Player, SportId } from '@/types';
 
 const fmtDia = (j: Jogo) =>
@@ -67,6 +68,9 @@ export function JogosPage() {
   const live = useMatchStore((s) => s.live);
   const matchCount = useMatchStore((s) => s.matches.filter((m) => m.mode !== 'profissional').length);
   const [criando, setCriando] = useState(false);
+  // Time profissional sem VIP (migração 037): só consulta — não cria jogo
+  const premium = usePremium();
+  const soConsulta = pro && !premium;
   const [verAnteriores, setVerAnteriores] = useState(false);
   const [filtros, setFiltrosState] = useState(filtrosGuardados);
   const setFiltros = (f: Partial<Filtros>) => {
@@ -170,7 +174,12 @@ export function JogosPage() {
         </section>
       ) : (
         <div className="flex gap-2">
-          <Button size="lg" className="flex-1 whitespace-nowrap px-3" onClick={() => setCriando(true)}>
+          <Button
+            size="lg"
+            className="flex-1 whitespace-nowrap px-3"
+            disabled={soConsulta}
+            onClick={() => setCriando(true)}
+          >
             <CalendarPlus size={19} />
             {pro ? 'Novo jogo' : 'Novo dia de jogo'}
           </Button>
@@ -188,6 +197,12 @@ export function JogosPage() {
             </Button>
           )}
         </div>
+      )}
+
+      {soConsulta && (
+        <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-100">
+          O teste do VIP terminou: o time fica só para consulta. Para criar jogo e escalar, veja Ajustes › Plano.
+        </p>
       )}
 
       {migrado && jogos.length > 0 && !pro && (

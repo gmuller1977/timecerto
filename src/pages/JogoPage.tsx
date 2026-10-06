@@ -29,6 +29,7 @@ import { diaJaTeveJogo, planoDeAjuste, podeSortear } from '@/lib/diaDeJogo';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogo, useJogoStore, useProximoJogo } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
+import { usePremium } from '@/store/usePlano';
 import { useHydrated } from '@/store/useHydrated';
 import { nomeDeExibicao } from '@/lib/nome';
 import { vagasDoJogo, joga, type Situacao } from '@/lib/vagas';
@@ -113,6 +114,9 @@ function Pagina({
   const matches = useMatchStore((s) => s.matches);
   const startMatch = useMatchStore((s) => s.startMatch);
   const [editando, setEditando] = useState(false);
+  // Time profissional sem VIP (migração 037): só consulta — não escala
+  const premium = usePremium();
+  const soConsulta = pro && !premium;
   const [diarias, setDiarias] = useState(false);
   // Fim do dia (05/10/2026): depois de lançar, cobrar as diárias deste dia
   const [cobrando, setCobrando] = useState(false);
@@ -297,7 +301,9 @@ function Pagina({
       : pro
         ? liveDoJogo
           ? { texto: 'Continuar a partida', icone: <Radio size={19} />, acao: () => navigate('/placar'), desabilitado: false }
-          : { texto: 'Escalar e começar', icone: <ClipboardList size={19} />, acao: escalar, desabilitado: Boolean(live) }
+          : soConsulta
+            ? { texto: 'Escalar pede o VIP', icone: <ClipboardList size={19} />, acao: escalar, desabilitado: true }
+            : { texto: 'Escalar e começar', icone: <ClipboardList size={19} />, acao: escalar, desabilitado: Boolean(live) }
       : liveDoJogo
         ? { texto: 'Continuar o jogo', icone: <Radio size={19} />, acao: () => navigate('/placar'), desabilitado: false }
       : !sortearOk

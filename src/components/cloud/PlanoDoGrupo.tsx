@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { useAppStore } from '@/store/useAppStore';
 import { findActiveGroup, type CloudGroup } from '@/lib/cloud';
-import { LIMITE_MENSALISTAS_GRATIS, PRECO_DO_PLANO_CENTS, situacaoDoPlano } from '@/lib/plano';
+import { LIMITE_MENSALISTAS_GRATIS, PRECO_DO_PLANO_CENTS, PRECO_DO_VIP_CENTS, situacaoDoPlano } from '@/lib/plano';
 import { formatBRL } from '@/lib/utils';
 
 const data = (iso: string) => new Date(iso).toLocaleDateString('pt-BR');
@@ -39,22 +39,35 @@ export function PlanoDoGrupo() {
   const sit = situacaoDoPlano(group.plano);
   const souDono = group.ownerId === session.user.id;
 
+  const faltam = (n: number | null) => (n === 1 ? 'Falta 1 dia' : `Faltam ${n} dias`);
   const titulo =
     sit.tipo === 'cortesia'
-      ? 'Plano pago · cortesia'
-      : sit.tipo === 'pago'
-        ? 'Plano pago'
-        : sit.tipo === 'teste'
-          ? 'Teste do plano pago'
-          : 'Plano grátis';
+      ? pro
+        ? 'VIP · cortesia'
+        : 'Plano pago · cortesia'
+      : sit.tipo === 'vip'
+        ? 'VIP'
+        : sit.tipo === 'teste_vip'
+          ? 'Teste do VIP'
+          : sit.tipo === 'pago'
+            ? 'Plano pago'
+            : sit.tipo === 'teste'
+              ? 'Teste do plano pago'
+              : pro
+                ? 'Sem VIP'
+                : 'Plano grátis';
   const detalhe =
     sit.tipo === 'cortesia'
       ? 'Tudo liberado, sem prazo.'
-      : sit.tipo === 'pago'
+      : sit.tipo === 'vip' || sit.tipo === 'pago'
         ? `Assinatura em dia até ${data(sit.ate!)}.`
-        : sit.tipo === 'teste'
-          ? `${sit.dias === 1 ? 'Falta 1 dia' : `Faltam ${sit.dias} dias`}, até ${data(sit.ate!)}. Depois, sem assinatura, o grupo passa para o grátis — nada se perde, só trava.`
-          : `Financeiro só para consulta, um administrador e até 20 ${pro ? 'atletas' : 'mensalistas'}. Nada do que já existe se perdeu.`;
+        : sit.tipo === 'teste_vip'
+          ? `${faltam(sit.dias)}, até ${data(sit.ate!)}. O teste é um só por conta e vale para todos os seus times. Depois, sem o VIP, os times ficam só para consulta — nada se perde, só trava.`
+          : sit.tipo === 'teste'
+            ? `${faltam(sit.dias)}, até ${data(sit.ate!)}. Depois, sem assinatura, o grupo passa para o grátis — nada se perde, só trava.`
+            : pro
+              ? `O teste do VIP terminou${group.plano.vipTesteAte ? ` em ${data(group.plano.vipTesteAte)}` : ''}. O time fica só para consulta: dá para ver elenco, jogos e estatísticas, mas criar jogo e escalar pedem o VIP.`
+              : `Financeiro só para consulta, um administrador e até 20 mensalistas. Nada do que já existe se perdeu.`;
 
   const quem = pro ? 'atletas' : 'mensalistas';
   const hoje = pro ? atletasDoTime : mensalistas;
@@ -77,14 +90,31 @@ export function PlanoDoGrupo() {
     { t: 'Mais de um administrador', ok: true },
     { t: `${quem[0].toUpperCase()}${quem.slice(1)} sem limite (hoje: ${hoje})`, ok: true },
   ];
-  const noPago = sit.premium;
+  // VIP (migração 037): tudo do Pago + o modo profissional
+  const vip = [
+    { t: 'Tudo do Pago', ok: true },
+    { t: 'Modo profissional: elenco com categoria e naipe, escalação e scout por atleta', ok: true },
+    { t: 'Amistosos e campeonatos', ok: true },
+    { t: '30 dias de teste, uma vez por conta', ok: true },
+  ];
+  // Qual cartão é o "Seu plano": cortesia é tudo liberado, cai no de cima
+  const atual: 'gratis' | 'pago' | 'vip' =
+    sit.tipo === 'vip' || sit.tipo === 'teste_vip' || (sit.tipo === 'cortesia' && pro)
+      ? 'vip'
+      : sit.tipo === 'pago' || sit.tipo === 'teste' || sit.tipo === 'cortesia'
+        ? 'pago'
+        : 'gratis';
 
   // O teste sempre aparece com a data — inclusive para quem já assinou ou é cortesia
-  const linhaDoTeste = group.plano.testeAte
-    ? new Date(group.plano.testeAte) > new Date()
-      ? `Teste do plano pago até ${data(group.plano.testeAte)}`
-      : `Teste do plano pago terminou em ${data(group.plano.testeAte)}`
-    : null;
+  // No time profissional, o teste que importa é o do VIP (migração 037)
+  const testeIso = pro ? group.plano.vipTesteAte : group.plano.testeAte;
+  const nomeDoTeste = pro ? 'Teste do VIP' : 'Teste do plano pago';
+  const linhaDoTeste =
+    testeIso && !(pro && sit.tipo === 'gratis')
+      ? new Date(testeIso) > new Date()
+        ? `${nomeDoTeste} até ${data(testeIso)}`
+        : `${nomeDoTeste} terminou em ${data(testeIso)}`
+      : null;
 
   const cartao = ({
     nome,
@@ -142,7 +172,7 @@ export function PlanoDoGrupo() {
         <p className={`mt-0.5 text-xs leading-relaxed ${sit.premium ? 'text-brand-100/80' : 'text-amber-100/80'}`}>
           {detalhe}
         </p>
-        {linhaDoTeste && sit.tipo !== 'teste' && (
+        {linhaDoTeste && sit.tipo !== 'teste' && sit.tipo !== 'teste_vip' && (
           <p className={`mt-1 text-xs ${sit.premium ? 'text-brand-100/70' : 'text-amber-100/70'}`}>{linhaDoTeste}</p>
         )}
       </div>
@@ -154,23 +184,29 @@ export function PlanoDoGrupo() {
         </p>
       )}
 
-      {/* Os dois planos */}
+      {/* Os três planos */}
       <div className="mt-3 flex flex-col gap-2">
-        {cartao({ nome: 'Grátis', preco: 'R$ 0', lista: gratis, atual: !noPago })}
+        {cartao({ nome: 'Grátis', preco: 'R$ 0', lista: gratis, atual: atual === 'gratis' })}
         {cartao({
           nome: 'Pago',
           preco: `${formatBRL(PRECO_DO_PLANO_CENTS)} por mês, para o grupo todo`,
           lista: pago,
-          atual: noPago,
+          atual: atual === 'pago',
+        })}
+        {cartao({
+          nome: 'VIP',
+          preco: `${formatBRL(PRECO_DO_VIP_CENTS)} por mês`,
+          lista: vip,
+          atual: atual === 'vip',
         })}
       </div>
 
-      {sit.tipo !== 'cortesia' && sit.tipo !== 'pago' && (
+      {sit.tipo !== 'cortesia' && sit.tipo !== 'pago' && sit.tipo !== 'vip' && (
         <>
           {souDono ? (
             <>
               <Button className="mt-3 w-full" disabled>
-                Assinar o plano pago
+                {pro ? 'Assinar o VIP' : 'Assinar'}
               </Button>
               <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
                 A assinatura pelo Mercado Pago chega em breve.

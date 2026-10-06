@@ -10,15 +10,23 @@
 
 export const LIMITE_MENSALISTAS_GRATIS = 20;
 export const PRECO_DO_PLANO_CENTS = 1490;
+/** VIP (migração 037): tudo do Pago + o modo profissional */
+export const PRECO_DO_VIP_CENTS = 2490;
 
 export interface PlanoDoGrupo {
   testeAte: string | null;
   pagoAte: string | null;
   cortesia: boolean;
+  /** VIP pago até (migração 037) */
+  vipAte?: string | null;
+  /** Fim do teste VIP da conta do dono — só no time profissional */
+  vipTesteAte?: string | null;
+  /** O grupo é um time profissional: só o VIP libera */
+  pro?: boolean;
 }
 
 export interface SituacaoDoPlano {
-  tipo: 'cortesia' | 'pago' | 'teste' | 'gratis';
+  tipo: 'cortesia' | 'vip' | 'teste_vip' | 'pago' | 'teste' | 'gratis';
   /** Tudo liberado */
   premium: boolean;
   /** Até quando vale (pago ou teste) */
@@ -30,6 +38,13 @@ export interface SituacaoDoPlano {
 export function situacaoDoPlano(p: PlanoDoGrupo, agora = new Date()): SituacaoDoPlano {
   const faltam = (iso: string) => Math.ceil((new Date(iso).getTime() - agora.getTime()) / 86_400_000);
   if (p.cortesia) return { tipo: 'cortesia', premium: true, ate: null, dias: null };
+  if (p.vipAte && new Date(p.vipAte) > agora) return { tipo: 'vip', premium: true, ate: p.vipAte, dias: faltam(p.vipAte) };
+  // Time profissional: só o VIP libera — o Pago e o teste do Pago não contam
+  if (p.pro) {
+    return p.vipTesteAte && new Date(p.vipTesteAte) > agora
+      ? { tipo: 'teste_vip', premium: true, ate: p.vipTesteAte, dias: faltam(p.vipTesteAte) }
+      : { tipo: 'gratis', premium: false, ate: null, dias: null };
+  }
   if (p.pagoAte && new Date(p.pagoAte) > agora) return { tipo: 'pago', premium: true, ate: p.pagoAte, dias: faltam(p.pagoAte) };
   if (p.testeAte && new Date(p.testeAte) > agora) return { tipo: 'teste', premium: true, ate: p.testeAte, dias: faltam(p.testeAte) };
   return { tipo: 'gratis', premium: false, ate: null, dias: null };
