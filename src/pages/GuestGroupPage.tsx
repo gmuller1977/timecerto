@@ -221,6 +221,9 @@ export function GuestGroupPage() {
   };
   const dist = distribuirVagas(event?.slots ?? null, data.players, promocaoDoJogo);
   const fase = faseDoJogo(promocaoDoJogo);
+  // "quinta-feira (08/10) às 6h" — o mesmo texto na faixa, no formulário e no cartão
+  const diaDaAbertura =
+    fase.tipo === 'mensalistas' ? (event?.promoverEm ? diaDaPromocao(event.promoverEm) : fase.quando) : '';
   const sit = (id: string) => dist.situacao.get(id);
 
   const mensalistas = data.players.filter((p) => p.kind === 'mensalista');
@@ -372,8 +375,9 @@ export function GuestGroupPage() {
     ? null
     : fase.tipo === 'mensalistas' && !fechada
       ? {
-          texto: `Mensalistas têm prioridade até ${fase.quando}.`,
-          detalhe: `Coloque seu nome agora: você entra na lista de espera e, ${fase.quando}, os convidados sobem para as vagas que sobrarem, por ordem de inscrição.`,
+          // Os mesmos textos da faixa do jogo (06/10/2026)
+          texto: 'Lista aberta para mensalistas.',
+          detalhe: `Deixe seu nome na lista de espera. Na ${diaDaAbertura}, quem estiver na lista de espera entra na lista do jogo.`,
           cheio: true,
         }
       : fechada
@@ -629,8 +633,7 @@ export function GuestGroupPage() {
               <p className="font-semibold">Lista aberta para mensalistas.</p>
               <p>Convidados podem deixar seu nome na lista de espera.</p>
               <p>
-                Na {event.promoverEm ? diaDaPromocao(event.promoverEm) : fase.quando}, quem estiver na lista de espera
-                entra na lista do jogo.
+                Na {diaDaAbertura}, quem estiver na lista de espera entra na lista do jogo.
               </p>
             </div>
           )}
@@ -660,7 +663,7 @@ export function GuestGroupPage() {
               <>
                 <MyCard
                   name={mine.name}
-                  antesDaPromocao={fase.tipo === 'mensalistas' ? fase.quando : null}
+                  antesDaPromocao={fase.tipo === 'mensalistas' ? diaDaAbertura : null}
                   situacao={sit(mine.id)}
                   convidado={mine.kind === 'convidado'}
                   fechada={fechada}
@@ -1246,7 +1249,7 @@ function MyCard({
   onNotMe,
 }: {
   name: string;
-  /** "quinta às 20h": a fila ainda espera a promoção (migração 028) */
+  /** "quinta-feira (08/10) às 6h": a fila ainda espera a promoção (migração 028) */
   antesDaPromocao?: string | null;
   situacao: Situacao | undefined;
   convidado: boolean;
@@ -1358,7 +1361,7 @@ function MyCard({
       : situacao?.tipo === 'fila'
         ? {
             text: antesDaPromocao
-              ? `Você é o ${situacao.posicao}º da lista de espera. ${antesDaPromocao[0].toUpperCase()}${antesDaPromocao.slice(1)}, os convidados sobem por ordem de inscrição para as vagas que sobrarem.`
+              ? `Você é o ${situacao.posicao}º da lista de espera. Na ${antesDaPromocao}, quem estiver na lista de espera entra na lista do jogo.`
               : `Você é o ${situacao.posicao}º da fila. Se abrir vaga, você entra sozinho.`,
             tone: 'wait' as const,
           }
