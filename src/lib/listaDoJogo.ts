@@ -43,7 +43,8 @@ export function textoDaLista(p: {
     `⚡ ${p.grupo} · ${quandoDoJogo(p.inicio)}${p.local ? ` · ${p.local}` : ''}`,
     `*Confirmados (${p.confirmados.length}${p.vagas != null ? ` de ${p.vagas}` : ''})*\n` +
       (p.confirmados.length
-        ? numerada(p.confirmados.map((c) => (c.convidado ? `${c.nome} (conv.)` : c.nome)))
+        ? // Sem marca de mensalista ou convidado: só os nomes (pedido do Guilherme, 06/10/2026)
+          numerada(p.confirmados.map((c) => c.nome))
         : 'Ninguém ainda.'),
   ];
   if (p.fila.length) partes.push(`*Na fila*\n${numerada(p.fila)}`);
