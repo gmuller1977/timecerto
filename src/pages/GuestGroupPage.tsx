@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { BellRing, Check, Hourglass, Lock, MapPin, UserPlus, X } from 'lucide-react';
+import { AlertCircle, BellRing, Check, Hourglass, Lock, MapPin, UserPlus, X } from 'lucide-react';
 import {
   guestAddPlayer,
   guestGroup,
@@ -176,6 +176,26 @@ export function GuestGroupPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /*
+   * Há pagamento em aberto, ainda não confirmado? É o alerta na aba
+   * Pagamento (pedido do Guilherme em 06/10/2026), visível também de dentro da
+   * aba Jogo. Relê junto com a página: depois de confirmar, o alerta some.
+   */
+  const [pendencia, setPendencia] = useState(false);
+  useEffect(() => {
+    if (!me) {
+      setPendencia(false);
+      return;
+    }
+    let vivo = true;
+    guestPendencias(code, me)
+      .then((e) => vivo && setPendencia(e.emAberto && !e.confirmado))
+      .catch(() => vivo && setPendencia(false));
+    return () => {
+      vivo = false;
+    };
+  }, [code, me, data]);
 
   // Lista fechada: os times estão para sair, e a fila de espera anda — quem
   // está olhando o link vê as duas coisas chegarem sem recarregar
@@ -524,7 +544,20 @@ export function GuestGroupPage() {
             assunto === a ? 'bg-brand-500 text-ink-950' : 'text-ink-300',
           )}
         >
-          {a === 'jogo' ? 'Jogo' : 'Pagamento'}
+          {a === 'jogo' ? (
+            'Jogo'
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              Pagamento
+              {pendencia && (
+                <AlertCircle
+                  size={16}
+                  aria-label="Há pagamento em aberto"
+                  className={assunto === a ? 'text-ink-950' : 'text-amber-300'}
+                />
+              )}
+            </span>
+          )}
         </button>
       ))}
     </div>
