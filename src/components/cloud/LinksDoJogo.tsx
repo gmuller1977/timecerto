@@ -92,10 +92,18 @@ function listaDoJogo(jogo: Jogo, players: Player[], group: CloudGroup): string {
       ...ativos.filter((p) => tipo(p) === 'confirmado').sort(porChegada),
       ...ativos.filter((p) => tipo(p) === 'vaga').sort(porChegada),
     ].map((p) => ({ nome: nomeDeExibicao(p), convidado: p.kind === 'convidado' })),
-    fila: ativos.filter((p) => tipo(p) === 'fila').sort((a, b) => posicao(a) - posicao(b)).map(nomeDeExibicao),
+    fila: ativos
+      .filter((p) => tipo(p) === 'fila')
+      .sort((a, b) => posicao(a) - posicao(b))
+      .map((p) => ({ nome: nomeDeExibicao(p), convidado: p.kind === 'convidado' })),
     espera: [
-      ...ativos.filter((p) => tipo(p) === 'chamado').map((p) => `${nomeDeExibicao(p)} (chamado)`),
-      ...ativos.filter((p) => tipo(p) === 'espera').sort((a, b) => posicao(a) - posicao(b)).map(nomeDeExibicao),
+      ...ativos
+        .filter((p) => tipo(p) === 'chamado')
+        .map((p) => ({ nome: nomeDeExibicao(p), convidado: p.kind === 'convidado', chamado: true })),
+      ...ativos
+        .filter((p) => tipo(p) === 'espera')
+        .sort((a, b) => posicao(a) - posicao(b))
+        .map((p) => ({ nome: nomeDeExibicao(p), convidado: p.kind === 'convidado' })),
     ],
     livres: dist.livres,
     fechada: Boolean(jogo.listaFechada),

@@ -288,13 +288,15 @@ export function GuestGroupPage() {
           ...mensalistas.filter((p) => tipoDe(p.id) === 'confirmado').sort(porChegada),
           ...comVaga.slice().sort(porChegada),
         ].map((p) => ({ nome: p.name, convidado: p.kind === 'convidado' })),
-        fila: fila.map((p) => p.name),
+        fila: fila.map((p) => ({ nome: p.name, convidado: p.kind === 'convidado' })),
         espera: [
-          ...data.players.filter((p) => tipoDe(p.id) === 'chamado').map((p) => `${p.name} (chamado)`),
+          ...data.players
+            .filter((p) => tipoDe(p.id) === 'chamado')
+            .map((p) => ({ nome: p.name, convidado: p.kind === 'convidado', chamado: true })),
           ...data.players
             .filter((p) => tipoDe(p.id) === 'espera')
             .sort((a, b) => posicao(sit(a.id)) - posicao(sit(b.id)))
-            .map((p) => p.name),
+            .map((p) => ({ nome: p.name, convidado: p.kind === 'convidado' })),
         ],
         livres: dist.livres,
         fechada,

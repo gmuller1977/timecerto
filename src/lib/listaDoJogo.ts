@@ -20,7 +20,13 @@ export const iconeDoTipo = (kind: string | null | undefined) =>
 export interface LinhaDaLista {
   nome: string;
   convidado: boolean;
+  /** Na lista de espera: chamado, esperando a resposta */
+  chamado?: boolean;
 }
+
+/** "🎟️ Edu Prado (chamado)" — a mesma linha nas três seções */
+const linhaDe = (l: LinhaDaLista) =>
+  `${l.convidado ? ICONE_DO_TIPO.convidado : ICONE_DO_TIPO.mensalista} ${l.nome}${l.chamado ? ' (chamado)' : ''}`;
 
 const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
 
@@ -38,9 +44,9 @@ export function textoDaLista(p: {
   /** Mensalistas na ordem em que confirmaram, depois os convidados com vaga */
   confirmados: LinhaDaLista[];
   /** Convidados esperando vaga, com a lista aberta */
-  fila: string[];
+  fila: LinhaDaLista[];
   /** Lista fechada: quem espera ser chamado (e quem já foi) */
-  espera: string[];
+  espera: LinhaDaLista[];
   /** Vagas ainda livres; null = sem limite */
   livres: number | null;
   /** Lista fechada: só resta a lista de espera */
@@ -52,11 +58,11 @@ export function textoDaLista(p: {
     `⚡ ${p.grupo} · ${quandoDoJogo(p.inicio)}${p.local ? ` · ${p.local}` : ''}`,
     `*Confirmados (${p.confirmados.length}${p.vagas != null ? ` de ${p.vagas}` : ''})*\n` +
       (p.confirmados.length
-        ? numerada(p.confirmados.map((c) => `${c.convidado ? ICONE_DO_TIPO.convidado : ICONE_DO_TIPO.mensalista} ${c.nome}`))
+        ? numerada(p.confirmados.map(linhaDe))
         : 'Ninguém ainda.'),
   ];
-  if (p.fila.length) partes.push(`*Na fila*\n${numerada(p.fila)}`);
-  if (p.espera.length) partes.push(`*Lista de espera*\n${numerada(p.espera)}`);
+  if (p.fila.length) partes.push(`*Na fila*\n${numerada(p.fila.map(linhaDe))}`);
+  if (p.espera.length) partes.push(`*Lista de espera*\n${numerada(p.espera.map(linhaDe))}`);
   // "Entre na lista" só quando as vagas acabaram (pedido do Guilherme,
   // 29/09/2026); com vaga, o convite é para confirmar
   if (p.link) {
