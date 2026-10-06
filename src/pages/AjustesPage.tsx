@@ -6,8 +6,6 @@ import {
   CalendarClock,
   ChevronRight,
   Crown,
-  ShieldCheck,
-  Trash2,
   UserRound,
   Users,
   Wallet,
@@ -53,16 +51,20 @@ interface Secao {
  * página só, com todos os cartões empilhados.
  */
 const SECOES: Secao[] = [
+  // Grupo reúne o nome, os administradores e, por último, excluir
+  // (pedido do Guilherme em 06/10/2026)
   {
     id: 'grupo',
     titulo: 'Grupo',
-    resumo: 'Nome do grupo',
+    resumo: 'Nome, administradores e excluir o grupo',
     icone: Users,
     conta: true,
     conteudo: () => (
       <>
         <NomeDoGrupo />
         <PerfilDoTime />
+        <Administradores />
+        <ExcluirGrupo />
       </>
     ),
   },
@@ -74,14 +76,6 @@ const SECOES: Secao[] = [
     icone: Wallet,
     conta: true,
     conteudo: () => <FinanceiroAjustes />,
-  },
-  {
-    id: 'administradores',
-    titulo: 'Administradores',
-    resumo: 'Quem mais cuida do grupo',
-    icone: ShieldCheck,
-    conta: true,
-    conteudo: () => <Administradores />,
   },
   {
     id: 'inscricao',
@@ -118,16 +112,6 @@ const SECOES: Secao[] = [
         </Link>
       </>
     ),
-  },
-  // Por último: é a ação que não tem volta
-  {
-    id: 'excluir',
-    titulo: 'Excluir grupo',
-    resumo: 'Apaga o grupo e tudo dele',
-    icone: Trash2,
-    conta: true,
-    perigo: true,
-    conteudo: () => <ExcluirGrupo />,
   },
 ];
 
