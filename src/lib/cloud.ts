@@ -1673,7 +1673,10 @@ export interface ConfigFinanceiro {
 
 export interface JogadorDoFinanceiro {
   id: string;
+  /** Como a pessoa é chamada: o apelido, ou o nome. É o das mensagens */
   nome: string;
+  /** "Nome (Apelido)" — para achar na lista (pedido do Guilherme, 06/10/2026) */
+  nomeNaLista: string;
   kind: PlayerKind;
   phone: string | null;
   /** Ativo, aprovado e não excluído — só esses entram em cobrança nova */
@@ -1769,6 +1772,10 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
         {
           id: p.id,
           nome: (p.nickname as string | null)?.trim() || p.name,
+          nomeNaLista: (() => {
+            const apelido = (p.nickname as string | null)?.trim();
+            return apelido && apelido.toLowerCase() !== p.name.toLowerCase() ? `${p.name} (${apelido})` : p.name;
+          })(),
           kind: p.kind ?? 'mensalista',
           phone: p.phone,
           ativo: Boolean(p.active) && !p.pending && !p.deleted_at,

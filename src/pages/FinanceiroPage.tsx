@@ -797,7 +797,7 @@ function Devedor({
       >
         <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink-50">
           <span aria-hidden className="mr-1.5">{iconeDoTipo(jogador?.kind)}</span>
-          {nome}
+          {jogador?.nomeNaLista ?? nome}
         </span>
         {quitado ? (
           <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-300">
@@ -1275,21 +1275,26 @@ function CobrancaAvulsa({
   const [quem, setQuem] = useState('');
   // A lista cresce com o tempo (pedido do Guilherme em 06/10/2026): busca e filtro
   const [busca, setBusca] = useState('');
-  const [tipo, setTipo] = useState<'todos' | 'mensalista' | 'convidado'>('todos');
+  // Nenhum filtro escolhido = a lista fica fechada (pedido do Guilherme em
+  // 06/10/2026): os nomes aparecem ao tocar num filtro ou ao buscar
+  const [tipo, setTipo] = useState<'todos' | 'mensalista' | 'convidado' | null>(null);
   const [descricao, setDescricao] = useState('');
   const [valor, setValor] = useState('');
   const [vence, setVence] = useState(hoje());
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   // Só quem está no elenco hoje: excluídos e inativos continuam com nome nas dívidas antigas, mas não recebem cobrança nova
-  const jogadores = [...dados.jogadores.values()].filter((j) => j.ativo).sort((a, b) => a.nome.localeCompare(b.nome));
+  const jogadores = [...dados.jogadores.values()]
+    .filter((j) => j.ativo)
+    .sort((a, b) => a.nomeNaLista.localeCompare(b.nomeNaLista));
   const termo = normalizar(busca);
   const visiveis = jogadores.filter(
     (j) =>
-      (tipo === 'todos' || (tipo === 'convidado' ? j.kind === 'convidado' : j.kind !== 'convidado')) &&
-      (!termo || normalizar(j.nome).includes(termo)),
+      (tipo === null || tipo === 'todos' || (tipo === 'convidado' ? j.kind === 'convidado' : j.kind !== 'convidado')) &&
+      (!termo || normalizar(j.nomeNaLista).includes(termo)),
   );
   const escolhido = jogadores.find((j) => j.id === quem);
+  const mostraNomes = tipo !== null || termo !== '';
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
@@ -1317,7 +1322,7 @@ function CobrancaAvulsa({
         <div className="flex items-center gap-2 rounded-xl border border-brand-500/50 bg-brand-500/10 px-3 py-2.5">
           <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">
             <span aria-hidden className="mr-1.5">{iconeDoTipo(escolhido.kind)}</span>
-            {escolhido.nome}
+            {escolhido.nomeNaLista}
           </span>
           <button type="button" onClick={() => setQuem('')} className="shrink-0 text-xs text-ink-400 underline">
             trocar
@@ -1354,21 +1359,23 @@ function CobrancaAvulsa({
               </button>
             ))}
           </div>
-          <ul className="mt-2 flex max-h-56 flex-col gap-1 overflow-y-auto">
-            {visiveis.map((j) => (
-              <li key={j.id}>
-                <button
-                  type="button"
-                  onClick={() => setQuem(j.id)}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-[15px] text-ink-100 active:bg-ink-800"
-                >
-                  <span aria-hidden>{iconeDoTipo(j.kind)}</span>
-                  <span className="min-w-0 flex-1 truncate">{j.nome}</span>
-                </button>
-              </li>
-            ))}
-            {visiveis.length === 0 && <li className="px-2.5 py-2 text-sm text-ink-500">Nenhum nome encontrado.</li>}
-          </ul>
+          {mostraNomes && (
+            <ul className="mt-2 flex max-h-56 flex-col gap-1 overflow-y-auto">
+              {visiveis.map((j) => (
+                <li key={j.id}>
+                  <button
+                    type="button"
+                    onClick={() => setQuem(j.id)}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-[15px] text-ink-100 active:bg-ink-800"
+                  >
+                    <span aria-hidden>{iconeDoTipo(j.kind)}</span>
+                    <span className="min-w-0 flex-1 truncate">{j.nomeNaLista}</span>
+                  </button>
+                </li>
+              ))}
+              {visiveis.length === 0 && <li className="px-2.5 py-2 text-sm text-ink-500">Nenhum nome encontrado.</li>}
+            </ul>
+          )}
         </div>
       )}
       <input
