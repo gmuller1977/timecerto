@@ -113,7 +113,7 @@ export function Administradores({ mode: modoPedido }: { mode?: AppMode }) {
 
   return (
     <section className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-      <p className="flex items-center gap-2 text-[15px] font-semibold text-ink-50">
+      <p data-titulo-da-secao className="flex items-center gap-2 text-[15px] font-semibold text-ink-50">
         <ShieldCheck size={17} className="text-brand-400" />
         <span className="min-w-0 truncate">
           Administradores{group ? <span className="font-normal text-ink-400"> · {group.name}</span> : null}

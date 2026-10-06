@@ -183,13 +183,26 @@ export function SecaoDosAjustesPage() {
   if (!s) return <Navigate to="/ajustes" replace />;
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-10">
-      <header className="safe-top flex items-center gap-2 pt-6 pb-2">
+      <header className="safe-top flex items-center gap-3 pt-6 pb-2">
         <button onClick={() => navigate('/ajustes')} className="-ml-1 p-1 text-ink-400" aria-label="Voltar aos ajustes">
           <ArrowLeft size={22} />
         </button>
-        <h1 className="text-xl font-bold tracking-tight">{s.titulo}</h1>
+        <span
+          className={cn(
+            'flex size-10 shrink-0 items-center justify-center rounded-xl',
+            s.perigo ? 'bg-red-500/10 text-red-300' : 'bg-brand-500/10 text-brand-300',
+          )}
+        >
+          <s.icone size={20} />
+        </span>
+        <h1 className={cn('min-w-0 truncate text-xl font-bold tracking-tight', s.perigo && 'text-red-200')}>
+          {s.titulo}
+        </h1>
       </header>
-      <Suspense fallback={<p className="mt-4 text-sm text-ink-500">Carregando…</p>}>{s.conteudo()}</Suspense>
+      {/* O título do cartão que repete o da seção fica escondido: o topo já diz */}
+      <div className="[&_[data-titulo-da-secao]]:hidden">
+        <Suspense fallback={<p className="mt-4 text-sm text-ink-500">Carregando…</p>}>{s.conteudo()}</Suspense>
+      </div>
     </div>
   );
 }

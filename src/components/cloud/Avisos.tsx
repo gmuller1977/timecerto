@@ -299,7 +299,7 @@ export function AvisosDoAdmin() {
 
   return (
     <section className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
-      <p className="flex items-center gap-2 text-[15px] font-semibold text-ink-50">
+      <p data-titulo-da-secao className="flex items-center gap-2 text-[15px] font-semibold text-ink-50">
         <Bell size={17} className="text-brand-400" />
         Avisos no celular
       </p>

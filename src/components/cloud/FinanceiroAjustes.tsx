@@ -129,10 +129,10 @@ export function FinanceiroAjustes() {
   return (
     <section className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
       <div className="flex items-center gap-2">
-        <Wallet size={17} className="text-brand-400" />
-        <p className="min-w-0 flex-1 text-[15px] font-semibold text-ink-50">Financeiro</p>
+        <Wallet data-titulo-da-secao size={17} className="text-brand-400" />
+        <p data-titulo-da-secao className="min-w-0 flex-1 text-[15px] font-semibold text-ink-50">Financeiro</p>
         {!editando && (
-          <button onClick={abrir} className="rounded-lg border border-ink-800 px-2.5 py-1.5 text-xs text-ink-300">
+          <button onClick={abrir} className="ml-auto rounded-lg border border-ink-800 px-2.5 py-1.5 text-xs text-ink-300">
             {config.mensalidadeCents || config.diariaCents || config.pixChave || config.caixaInicialCents != null
               ? 'Editar'
               : 'Configurar'}

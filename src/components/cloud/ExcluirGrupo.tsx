@@ -60,7 +60,7 @@ export function ExcluirGrupo() {
 
   return (
     <section className="mt-3 rounded-2xl border border-red-500/30 bg-red-500/5 p-4">
-      <p className="flex items-center gap-2 text-[15px] font-semibold text-red-200">
+      <p data-titulo-da-secao className="flex items-center gap-2 text-[15px] font-semibold text-red-200">
         <Trash2 size={17} className="text-red-300" />
         Excluir grupo
       </p>
