@@ -38,6 +38,15 @@ export function quandoPromove(iso: string): string {
   return `${DIAS[d.getDay()]} às ${h}h${m ? String(m).padStart(2, '0') : ''}`;
 }
 
+/** "quinta-feira (08/10) às 6h" (ou "às 6h30") — a data por extenso, para o link */
+export function diaDaPromocao(iso: string): string {
+  const d = new Date(iso);
+  const semana = d.toLocaleDateString('pt-BR', { weekday: 'long' });
+  const dm = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const m = d.getMinutes();
+  return `${semana} (${dm}) às ${d.getHours()}h${m ? String(m).padStart(2, '0') : ''}`;
+}
+
 export type Fase =
   | { tipo: 'sem' } // o jogo não usa a promoção
   | { tipo: 'mensalistas'; quando: string } // só mensalista tem vaga, até `quando`

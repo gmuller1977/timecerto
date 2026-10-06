@@ -20,7 +20,7 @@ import {
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos, normalizar } from '@/lib/juntar';
 import { textoDaLista } from '@/lib/listaDoJogo';
-import { faseDoJogo } from '@/lib/promocao';
+import { diaDaPromocao, faseDoJogo } from '@/lib/promocao';
 import { mensagemDaMensalidade, pixCopiaECola } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
@@ -624,18 +624,22 @@ export function GuestGroupPage() {
           </p>
           {/* Inscrição em duas fases (migração 028): a regra, e não só a fila */}
           {!fechada && fase.tipo === 'mensalistas' && (
-            <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm leading-relaxed text-amber-100">
-              <strong>Mensalistas confirmando até {fase.quando}.</strong> Convidados já podem colocar o nome: entram
-              na lista de espera e, {fase.quando}, sobem para as vagas que sobrarem, por ordem de inscrição.
-            </p>
+            // Texto do Guilherme (06/10/2026)
+            <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm leading-relaxed text-amber-100">
+              <p className="font-semibold">Lista aberta para mensalistas.</p>
+              <p>Convidados podem deixar seu nome na lista de espera.</p>
+              <p>
+                Na {event.promoverEm ? diaDaPromocao(event.promoverEm) : fase.quando}, quem estiver na lista de espera
+                entra na lista do jogo.
+              </p>
+            </div>
           )}
           {!fechada && fase.tipo === 'aberto' && (
-            <p className="mt-3 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm leading-relaxed text-brand-100">
-              <strong>Aberto para todos.</strong>{' '}
-              {fase.preferenciaPermanente
-                ? 'Mensalista que confirmar ainda entra na frente; as outras vagas vão por ordem de chegada.'
-                : 'As vagas que sobrarem vão por ordem de chegada, para mensalista ou convidado.'}
-            </p>
+            <div className="mt-3 rounded-xl border border-brand-500/30 bg-brand-500/10 px-3 py-2.5 text-sm leading-relaxed text-brand-100">
+              <p className="font-semibold">Lista aberta para todos.</p>
+              <p>Se a lista estiver completa, coloque seu nome na lista de espera.</p>
+              <p>Em caso de desistência, quem estiver na lista de espera será chamado.</p>
+            </div>
           )}
           {fechada && (
             <p className="mt-3 flex items-center gap-2 rounded-xl border border-ink-800 bg-ink-900 px-3 py-2.5 text-sm text-ink-300">
