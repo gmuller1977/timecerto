@@ -82,7 +82,10 @@ function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGro
     (a) => `• ${rotuloDaCobranca(a.cobranca)}: ${dm(dataDaCobranca(a.cobranca))} — Valor de ${formatBRL(a.faltaCents)}`,
   );
   const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
-  const link = grupo.code ? `\n\nApós o pagamento, clique no link abaixo e confirme o valor.\n${groupLink(grupo.code)}` : '';
+  // O link abre direto na aba Pagamento (06/10/2026)
+  const link = grupo.code
+    ? `\n\nApós o pagamento, clique no link abaixo e confirme o valor.\n${groupLink(grupo.code)}?aba=pagamento`
+    : '';
   return (
     `Oi, ${nome}!\n\nPassando para lembrar do pagamento dos jogos do ${grupo.name}:\n\n${linhas.join('\n')}\n\n` +
     `Total: ${formatBRL(saldo.saldoCents)}${pix}${link}`
@@ -138,7 +141,7 @@ function mensagemDoMes(grupo: CloudGroup, dados: DadosFinanceiros, saldos: Map<s
     valorCents: c.mensalidadeCents,
     pixChave: c.pixChave,
     lista,
-    link: groupLink(grupo.code),
+    link: `${groupLink(grupo.code)}?aba=pagamento`,
   });
 }
 

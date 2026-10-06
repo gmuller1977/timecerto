@@ -140,6 +140,15 @@ export function GuestGroupPage() {
   // Erro de resposta fica no cartão: "respondido de outro celular" não pode
   // apagar a página inteira
   const [respostaErro, setRespostaErro] = useState<string | null>(null);
+  /*
+   * Jogo e pagamento separados (pedido do Guilherme em 06/10/2026): dois
+   * atletas confirmaram o pagamento querendo confirmar o jogo. Cada aba mostra
+   * só o seu assunto; o link das mensagens de cobrança abre direto em
+   * "Pagamento" (?aba=pagamento).
+   */
+  const [assunto, setAssunto] = useState<'jogo' | 'pagamento'>(() =>
+    params.get('aba') === 'pagamento' ? 'pagamento' : 'jogo',
+  );
   // A mensalidade do mês (migração 031): só no link do jogo, e só se o grupo cobra
   const [mensalidade, setMensalidade] = useState<MensalidadeDoLink | null>(null);
 
@@ -284,6 +293,7 @@ export function GuestGroupPage() {
       mensalidade={mine.kind === 'mensalista' ? mensalidade : null}
       meuId={mine.id}
       onInformado={load}
+      sempre
     />
   ) : null;
 
@@ -500,12 +510,60 @@ export function GuestGroupPage() {
     </form>
   );
 
+  // As duas abas aparecem depois que a pessoa diz quem é
+  const abas = mine ? (
+    <div role="tablist" className="mt-4 grid grid-cols-2 gap-1.5 rounded-xl bg-ink-900 p-1">
+      {(['jogo', 'pagamento'] as const).map((a) => (
+        <button
+          key={a}
+          role="tab"
+          aria-selected={assunto === a}
+          onClick={() => setAssunto(a)}
+          className={cn(
+            'h-11 rounded-lg text-sm font-semibold',
+            assunto === a ? 'bg-brand-500 text-ink-950' : 'text-ink-300',
+          )}
+        >
+          {a === 'jogo' ? 'Jogo' : 'Pagamento'}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  // Aba Pagamento: só o pagamento — nada de lista nem de "Vou / Não vou"
+  if (mine && assunto === 'pagamento') {
+    return (
+      <Frame>
+        <p className="text-xs font-semibold tracking-wide text-brand-400 uppercase">
+          {viaConvidados ? 'Lista de convidados' : 'Lista do jogo'}
+        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{data.group.name}</h1>
+        {abas}
+        <p className="mt-4 text-sm text-ink-400">
+          Você é <span className="font-semibold text-ink-50">{mine.name}</span>
+          <button
+            onClick={() => {
+              writeMe(code, null);
+              setMe(null);
+              setAssunto('jogo');
+            }}
+            className="ml-2 text-xs text-ink-500 underline"
+          >
+            não sou eu
+          </button>
+        </p>
+        {cartaoMensalidade}
+      </Frame>
+    );
+  }
+
   return (
     <Frame>
       <p className="text-xs font-semibold tracking-wide text-brand-400 uppercase">
         {viaConvidados ? 'Lista de convidados' : 'Lista do jogo'}
       </p>
       <h1 className="text-2xl font-bold tracking-tight">{data.group.name}</h1>
+      {abas}
 
       {!event ? (
         <>
@@ -513,7 +571,6 @@ export function GuestGroupPage() {
             Nenhum jogo marcado agora. Quando o organizador marcar, é neste mesmo
             link que você {viaConvidados ? 'se inscreve' : 'confirma'}.
           </p>
-          {cartaoMensalidade}
         </>
       ) : (
         <>
@@ -617,7 +674,6 @@ export function GuestGroupPage() {
                     </button>
                   </div>
                 )}
-                {cartaoMensalidade}
                 <AvisoDoAtleta code={code} playerId={mine.id} />
               </>
             ) : viaConvidados ? (
@@ -906,6 +962,7 @@ function MeuPagamento({
   mensalidade,
   meuId,
   onInformado,
+  sempre = false,
 }: {
   code: string;
   grupo: string;
@@ -913,6 +970,8 @@ function MeuPagamento({
   mensalidade: MensalidadeDoLink | null;
   meuId: string;
   onInformado: () => Promise<void> | void;
+  /** Na aba Pagamento: aparece mesmo sem nada em aberto, dizendo isso */
+  sempre?: boolean;
 }) {
   const [estado, setEstado] = useState<{ emAberto: boolean; confirmado: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -942,15 +1001,17 @@ function MeuPagamento({
             nome: m.name,
             ok: m.pago || Boolean(m.informadoEm) || Boolean(m.isento),
           })),
-          link: `${location.origin}${location.pathname}#/c/${code.toUpperCase()}`,
+          link: `${location.origin}${location.pathname}#/c/${code.toUpperCase()}?aba=pagamento`,
         })
       : null;
 
-  if (!estado) return null;
-  // Nada em aberto e nada para mandar: o cartão não aparece
-  if (!estado.emAberto && !lista) return null;
+  if (!estado) return sempre ? <p className="mt-4 text-sm text-ink-500">Carregando…</p> : null;
+  // Nada em aberto e nada para mandar: fora da aba própria, o cartão não aparece
+  if (!estado.emAberto && !lista && !sempre) return null;
 
   async function confirmar() {
+    // Confirmar por engano marca "a conferir" — pergunta antes
+    if (!window.confirm('Você já fez o pagamento? O organizador vai conferir no extrato.')) return;
     setBusy(true);
     setErro(null);
     try {
