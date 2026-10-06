@@ -1901,6 +1901,61 @@ export async function guestInformarPendencias(code: string, playerId: string): P
 }
 
 /** O administrador conferiu e o dinheiro não chegou */
+// ── Assinatura pelo Mercado Pago (migração 038) ──
+
+export interface Assinatura {
+  mpId: string;
+  plano: 'pago' | 'vip';
+  /** pending, authorized, paused, cancelled — como o Mercado Pago diz */
+  status: string;
+  valorCents: number;
+  initPoint: string | null;
+  proximaCobranca: string | null;
+  criadaEm: string;
+}
+
+/** As assinaturas do grupo, da mais nova para a mais velha */
+export async function assinaturasDoGrupo(groupId: string): Promise<Assinatura[]> {
+  const { data, error } = await db()
+    .from('assinaturas')
+    .select('mp_id, plano, status, valor_cents, init_point, proxima_cobranca, criada_em')
+    .eq('group_id', groupId)
+    .order('criada_em', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((a) => ({
+    mpId: a.mp_id,
+    plano: a.plano,
+    status: a.status,
+    valorCents: a.valor_cents,
+    initPoint: a.init_point,
+    proximaCobranca: a.proxima_cobranca,
+    criadaEm: a.criada_em,
+  }));
+}
+
+/** A Edge Function responde { erro } em português; o resto vira um erro genérico */
+async function chamarAssinatura(corpo: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { data, error } = await db().functions.invoke('assinatura', { body: corpo });
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const msg = ctx ? await ctx.json().then((j) => j?.erro as string | undefined).catch(() => undefined) : undefined;
+    throw new Error(msg ?? 'Não deu para falar com o Mercado Pago. Tente de novo.');
+  }
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+/** Abre a assinatura e devolve a página de pagamento do Mercado Pago */
+export async function assinarPlano(groupId: string, plano: 'pago' | 'vip', email: string): Promise<string> {
+  const r = await chamarAssinatura({ acao: 'assinar', group_id: groupId, plano, email });
+  if (typeof r.init_point !== 'string') throw new Error('O Mercado Pago não devolveu a página de pagamento.');
+  return r.init_point;
+}
+
+/** Cancela no Mercado Pago. O plano vale até o fim do mês já pago */
+export async function cancelarAssinatura(groupId: string): Promise<void> {
+  await chamarAssinatura({ acao: 'cancelar', group_id: groupId });
+}
+
 export async function desfazerInformado(cobrancaId: string): Promise<void> {
   const { error } = await db().rpc('desfazer_informado', { p_cobranca: cobrancaId });
   if (error) throw error;

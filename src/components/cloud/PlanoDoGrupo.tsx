@@ -4,16 +4,23 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import { useAppStore } from '@/store/useAppStore';
-import { findActiveGroup, type CloudGroup } from '@/lib/cloud';
+import {
+  assinarPlano,
+  assinaturasDoGrupo,
+  cancelarAssinatura,
+  findActiveGroup,
+  type Assinatura,
+  type CloudGroup,
+} from '@/lib/cloud';
 import { LIMITE_MENSALISTAS_GRATIS, PRECO_DO_PLANO_CENTS, PRECO_DO_VIP_CENTS, situacaoDoPlano } from '@/lib/plano';
 import { formatBRL } from '@/lib/utils';
 
 const data = (iso: string) => new Date(iso).toLocaleDateString('pt-BR');
 
 /**
- * Ajustes › Plano (migração 021). Diz em que plano o grupo está, até quando, e
- * o que o pago libera. A assinatura pelo Mercado Pago é a fase 2: até lá o
- * botão aparece, desligado, para o dono saber que ela vem.
+ * Ajustes › Plano (migrações 021, 037 e 038). Diz em que plano o grupo está,
+ * até quando, o que cada plano libera — e, para o dono, a assinatura pelo
+ * Mercado Pago.
  */
 export function PlanoDoGrupo() {
   const ready = useAuth((s) => s.ready);
@@ -201,22 +208,148 @@ export function PlanoDoGrupo() {
         })}
       </div>
 
-      {sit.tipo !== 'cortesia' && sit.tipo !== 'pago' && sit.tipo !== 'vip' && (
-        <>
-          {souDono ? (
-            <>
-              <Button className="mt-3 w-full" disabled>
-                {pro ? 'Assinar o VIP' : 'Assinar'}
-              </Button>
-              <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-                A assinatura pelo Mercado Pago chega em breve.
-              </p>
-            </>
-          ) : (
-            <p className="mt-2 text-[11px] leading-relaxed text-ink-500">Quem assina é o dono do grupo.</p>
-          )}
-        </>
+      {sit.tipo !== 'cortesia' && (
+        <Assinar group={group} pro={pro} souDono={souDono} email={session.user.email ?? ''} />
       )}
     </section>
+  );
+}
+
+/**
+ * A assinatura pelo Mercado Pago (migração 038). Só o dono assina e cancela;
+ * quem libera o plano é o aviso do Mercado Pago (Edge Function mp-webhook),
+ * não esta tela — por isso, depois de pagar, o plano pode levar alguns
+ * segundos para aparecer.
+ */
+function Assinar({
+  group,
+  pro,
+  souDono,
+  email: emailDaConta,
+}: {
+  group: CloudGroup;
+  pro: boolean;
+  souDono: boolean;
+  email: string;
+}) {
+  const [lista, setLista] = useState<Assinatura[] | null>(null);
+  const [email, setEmail] = useState(emailDaConta);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let vivo = true;
+    assinaturasDoGrupo(group.id)
+      .then((l) => vivo && setLista(l))
+      .catch((e) => {
+        console.warn('assinaturas do grupo', e);
+        if (vivo) setLista([]);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [group.id]);
+
+  if (lista === null) return null;
+  const ativa = lista.find((a) => a.status === 'authorized');
+  const pendente = lista.find((a) => a.status === 'pending');
+  const nomeDo = (plano: 'pago' | 'vip') => (plano === 'vip' ? 'VIP' : 'Pago');
+
+  async function assinar(plano: 'pago' | 'vip') {
+    setBusy(true);
+    setErro(null);
+    try {
+      // A página do Mercado Pago abre aqui mesmo; ao terminar, ele volta para Ajustes › Plano
+      window.location.href = await assinarPlano(group.id, plano, email);
+    } catch (e) {
+      setErro((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  async function cancelar() {
+    const ate = ativa?.proximaCobranca ? data(ativa.proximaCobranca) : 'o fim do mês já pago';
+    if (!window.confirm(`Cancelar a assinatura? O plano continua até ${ate} e depois o grupo volta ao grátis. Nada se perde.`)) return;
+    setBusy(true);
+    setErro(null);
+    try {
+      await cancelarAssinatura(group.id);
+      setLista(await assinaturasDoGrupo(group.id));
+    } catch (e) {
+      setErro((e as Error).message);
+    }
+    setBusy(false);
+  }
+
+  if (!souDono) {
+    return (
+      <p className="mt-3 text-[11px] leading-relaxed text-ink-500">
+        {ativa
+          ? `Assinatura ${nomeDo(ativa.plano)} ativa, feita pelo dono do grupo.`
+          : 'Quem assina é o dono do grupo.'}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3 border-t border-ink-800 pt-3">
+      {ativa ? (
+        <>
+          <p className="text-sm font-semibold text-ink-50">Assinatura {nomeDo(ativa.plano)} ativa</p>
+          <p className="mt-0.5 text-xs text-ink-400">
+            {formatBRL(ativa.valorCents)} por mês
+            {ativa.proximaCobranca && ` · próxima cobrança em ${data(ativa.proximaCobranca)}`}
+          </p>
+          {!pro && ativa.plano === 'pago' && (
+            <Button className="mt-3 w-full" disabled={busy} onClick={() => assinar('vip')}>
+              Mudar para o VIP · {formatBRL(PRECO_DO_VIP_CENTS)}/mês
+            </Button>
+          )}
+          <button
+            disabled={busy}
+            onClick={cancelar}
+            className="mt-3 text-xs text-ink-400 underline disabled:opacity-50"
+          >
+            Cancelar assinatura
+          </button>
+        </>
+      ) : (
+        <>
+          {pendente?.initPoint && (
+            <p className="mb-3 rounded-xl bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-100">
+              Você começou uma assinatura {nomeDo(pendente.plano)} e não terminou o pagamento.{' '}
+              <a href={pendente.initPoint} className="font-semibold underline">
+                Continuar o pagamento
+              </a>
+            </p>
+          )}
+          <label className="block">
+            <span className="text-xs text-ink-400">E-mail da sua conta do Mercado Pago</span>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              inputMode="email"
+              autoComplete="email"
+              className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-2.5 text-[15px] text-ink-50 outline-none"
+            />
+          </label>
+          <div className="mt-3 flex flex-col gap-2">
+            {!pro && (
+              <Button variant="secondary" disabled={busy} onClick={() => assinar('pago')}>
+                Assinar o Pago · {formatBRL(PRECO_DO_PLANO_CENTS)}/mês
+              </Button>
+            )}
+            <Button disabled={busy} onClick={() => assinar('vip')}>
+              {busy ? 'Abrindo o Mercado Pago…' : `Assinar o VIP · ${formatBRL(PRECO_DO_VIP_CENTS)}/mês`}
+            </Button>
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+            O pagamento é no Mercado Pago, com cobrança automática todo mês. Dá para cancelar quando quiser: o plano
+            vale até o fim do mês já pago.
+          </p>
+        </>
+      )}
+      {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
+    </div>
   );
 }
