@@ -2,7 +2,7 @@ import { iconeDoTipo } from '@/lib/listaDoJogo';
 import { normalizar } from '@/lib/juntar';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Plus, RotateCcw, Wallet, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Plus, RotateCcw, TriangleAlert, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import {
@@ -799,6 +799,15 @@ function Devedor({
           <span aria-hidden className="mr-1.5">{iconeDoTipo(jogador?.kind)}</span>
           {jogador?.nomeNaLista ?? nome}
         </span>
+        {/* Informou pelo link que pagou: o aviso fica à vista com a linha
+            fechada, para ninguém precisar abrir uma por uma (08/10/2026) */}
+        {aConferir && !quitado && (
+          <TriangleAlert
+            size={18}
+            className="shrink-0 text-amber-300"
+            aria-label="Informou que pagou — a conferir"
+          />
+        )}
         {quitado ? (
           <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-brand-300">
             <CheckCircle2 size={16} />
