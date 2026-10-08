@@ -426,6 +426,8 @@ export interface Lineup {
   bench: string[];
   /** Quem foi marcado no passo 1 (08/10/2026) */
   convocados?: string[];
+  /** O levantador escolhido no passo 1 */
+  levantadorId?: string;
   /** O número de cada um no último jogo */
   numeros?: Record<string, number>;
   createdAt: string;

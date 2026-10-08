@@ -46,12 +46,20 @@ export function useCoresDasPosicoes(): Record<PosicaoComCor, string> {
   return { ...CORES_PADRAO, ...(doTime ?? {}) };
 }
 
-/** A posição que dá a cor ao atleta: o líbero da partida, ou a principal dele */
-export function posicaoDaCor(p: Player | undefined, liberoId?: string): PosicaoComCor | null {
+/**
+ * A posição que dá a cor ao atleta: o líbero e o levantador escolhidos para a
+ * partida (08/10/2026), ou a posição principal do cadastro.
+ */
+export function posicaoDaCor(p: Player | undefined, liberoId?: string, levantadorId?: string): PosicaoComCor | null {
   if (!p) return null;
   if (liberoId && p.id === liberoId) return 'libero';
+  if (levantadorId && p.id === levantadorId) return 'levantador';
   const pos = p.positions.volei;
   return POSICOES_COM_COR.some((x) => x.id === pos) ? (pos as PosicaoComCor) : null;
 }
+
+/** Como o atleta aparece na quadra: o apelido, ou o primeiro nome */
+export const nomeCurto = (p: { name: string; nickname?: string } | undefined) =>
+  p ? p.nickname?.trim() || p.name.split(' ')[0] : '?';
 
 export const siglaDa = (pos: PosicaoComCor | null) => POSICOES_COM_COR.find((x) => x.id === pos)?.sigla ?? '';

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
-import { camposDoPro, linhaDePosicoes } from '@/lib/pro';
+import { camposDoPro } from '@/lib/pro';
 import type { TipoDeJogo } from '@/types';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -19,7 +19,7 @@ import { useMatchStore } from '@/store/useMatchStore';
 import { useHydrated } from '@/store/useHydrated';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ROTATIONS, ROTATION_LIST } from '@/lib/rotation';
-import { SPORTS, getPositionLabel } from '@/lib/sports';
+import { SPORTS } from '@/lib/sports';
 import {
   BACK_ROW,
   FRONT_ROW,
@@ -33,7 +33,7 @@ import {
 } from '@/lib/court';
 import type { CourtPosition, Lineup, MatchTeam, RotationSystem, TeamColor } from '@/types';
 import { cn, initials, uid } from '@/lib/utils';
-import { posicaoDaCor, siglaDa, useCoresDasPosicoes } from '@/lib/posicoes';
+import { nomeCurto, posicaoDaCor, siglaDa, useCoresDasPosicoes } from '@/lib/posicoes';
 
 const COLORS: TeamColor[] = [
   'verde', 'azul', 'vermelho', 'amarelo', 'preto', 'branco', 'laranja', 'roxo',
@@ -106,6 +106,26 @@ function LineupEditor() {
   );
   const [court, setCourt] = useState<Court>(initial.court);
   const [liberoId, setLiberoId] = useState<string | undefined>(initial.liberoId);
+  // O levantador do jogo (pedido do Guilherme em 08/10/2026): o salvo, ou quem
+  // é levantador no cadastro
+  const [levantadorId, setLevantadorId] = useState<string | undefined>(() => {
+    const salvo = saved?.levantadorId;
+    if (salvo && volleyPlayers.some((p) => p.id === salvo)) return salvo;
+    return volleyPlayers.find((p) => p.positions.volei === 'levantador')?.id;
+  });
+  /*
+   * Para a quadra, o sugerir e as regras do sistema, o levantador escolhido
+   * conta como levantador — mesmo que no cadastro seja de outra posição.
+   */
+  const comoJoga = useMemo(
+    () =>
+      players.map((p) =>
+        p.id === levantadorId && p.positions.volei !== 'levantador'
+          ? { ...p, positions: { ...p.positions, volei: 'levantador' } }
+          : p,
+      ),
+    [players, levantadorId],
+  );
   const [picking, setPicking] = useState<CourtPosition | null>(null);
   const [showRotations, setShowRotations] = useState(false);
 
@@ -126,11 +146,13 @@ function LineupEditor() {
     createdAt: new Date().toISOString(),
   };
 
-  const problems = validateLineup(lineup, players, 'volei');
+  const problems = validateLineup(lineup, comoJoga, 'volei');
   const blocked = blocksStart(problems) || volleyPlayers.length < 6;
 
   const nameOf = (id?: string) =>
     id ? (players.find((p) => p.id === id)?.name ?? '?') : undefined;
+  // Na quadra: o apelido, ou o primeiro nome (08/10/2026)
+  const curtoOf = (id?: string) => (id ? nomeCurto(players.find((p) => p.id === id)) : undefined);
 
   const numeroDe = (id: string) => {
     const t = numeros[id]?.trim();
@@ -151,12 +173,15 @@ function LineupEditor() {
   // A cor, a sigla e o número de quem está numa posição
   const infoDe = (id?: string) => {
     const pl = id ? players.find((x) => x.id === id) : undefined;
-    const pos = posicaoDaCor(pl, liberoId);
+    const pos = posicaoDaCor(pl, liberoId, levantadorId);
     return { numero: id ? numeroDe(id) : undefined, cor: pos ? cores[pos] : undefined, sigla: siglaDa(pos) };
   };
 
   // O levantador em P1…P6: gira o time inteiro até ele cair ali
-  const setterId = onCourt.find((id) => players.find((x) => x.id === id)?.positions.volei === 'levantador');
+  const setterId =
+    levantadorId && onCourt.includes(levantadorId)
+      ? levantadorId
+      : onCourt.find((id) => comoJoga.find((x) => x.id === id)?.positions.volei === 'levantador');
   const posDoLevantador = setterId
     ? (Number(Object.entries(court).find(([, id]) => id === setterId)?.[0]) as CourtPosition)
     : undefined;
@@ -176,6 +201,7 @@ function LineupEditor() {
       return next;
     });
     if (liberoId && !convocados.has(liberoId)) setLiberoId(undefined);
+    if (levantadorId && !convocados.has(levantadorId)) setLevantadorId(undefined);
     setPasso(2);
     window.scrollTo(0, 0);
   }
@@ -218,7 +244,7 @@ function LineupEditor() {
     setCourt(
       autoFill(
         volleyPlayers.filter((p) => p.id !== liberoId).map((p) => p.id),
-        players,
+        comoJoga,
         system,
         'volei',
       ),
@@ -240,7 +266,7 @@ function LineupEditor() {
         return n !== undefined ? [[id, n]] : [];
       }),
     );
-    saveLineup({ ...lineup, id: uid(), convocados: [...convocados], numeros: nums });
+    saveLineup({ ...lineup, id: uid(), convocados: [...convocados], numeros: nums, levantadorId });
     const home: MatchTeam = {
       id: uid(),
       name: teamName.trim() || 'Meu time',
@@ -257,7 +283,7 @@ function LineupEditor() {
       sport: 'volei',
       teams: [home, away],
       scout: { mode: 'atleta' },
-      lineup: { system, court, liberoId, numeros: nums, adversarioSaca },
+      lineup: { system, court, liberoId, numeros: nums, adversarioSaca, levantadorId },
       // Amistoso ou campeonato: escolhido no "Novo jogo" da aba Jogo
       ...(competicao ? { competicao } : {}),
       // Veio de um jogo da agenda (fase 2): a partida fica nele
@@ -311,7 +337,7 @@ function LineupEditor() {
             <div className="flex flex-col">
               {elenco.map((pl) => {
                 const marcado = convocados.has(pl.id);
-                const pos = posicaoDaCor(pl, liberoId);
+                const pos = posicaoDaCor(pl, liberoId, levantadorId);
                 const rep2 = marcado && repetido(pl.id);
                 return (
                   <div
@@ -368,6 +394,32 @@ function LineupEditor() {
 
           <section className="mt-5">
             <p className="mb-2 text-sm font-medium text-ink-300">
+              Levantador{' '}
+              <span className="text-xs font-normal text-ink-500">— quem levanta neste jogo</span>
+            </p>
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+              {volleyPlayers
+                .filter((pl) => pl.id !== liberoId)
+                .map((pl) => (
+                  <button
+                    key={pl.id}
+                    onClick={() => setLevantadorId(pl.id === levantadorId ? undefined : pl.id)}
+                    aria-pressed={levantadorId === pl.id}
+                    className={cn(
+                      'shrink-0 rounded-xl border px-3 py-2 text-sm font-medium',
+                      levantadorId === pl.id
+                        ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                        : 'border-ink-800 bg-ink-900 text-ink-400',
+                    )}
+                  >
+                    {pl.name}
+                  </button>
+                ))}
+            </div>
+          </section>
+
+          <section className="mt-5">
+            <p className="mb-2 text-sm font-medium text-ink-300">
               Líbero{' '}
               <span className="text-xs font-normal text-ink-500">— entra no fundo, não ataca nem saca</span>
             </p>
@@ -384,7 +436,10 @@ function LineupEditor() {
               {volleyPlayers.map((pl) => (
                 <button
                   key={pl.id}
-                  onClick={() => setLiberoId(pl.id === liberoId ? undefined : pl.id)}
+                  onClick={() => {
+                    setLiberoId(pl.id === liberoId ? undefined : pl.id);
+                    if (pl.id === levantadorId) setLevantadorId(undefined);
+                  }}
                   className={cn(
                     'shrink-0 rounded-xl border px-3 py-2 text-sm font-medium',
                     liberoId === pl.id
@@ -478,7 +533,7 @@ function LineupEditor() {
               <CourtCell
                 key={pos}
                 pos={pos}
-                name={nameOf(court[pos])}
+                name={curtoOf(court[pos])}
                 {...infoDe(court[pos])}
                 onClick={() => setPicking(pos)}
               />
@@ -489,7 +544,7 @@ function LineupEditor() {
               <CourtCell
                 key={pos}
                 pos={pos}
-                name={nameOf(court[pos])}
+                name={curtoOf(court[pos])}
                 {...infoDe(court[pos])}
                 serves={pos === 1}
                 onClick={() => setPicking(pos)}
@@ -558,18 +613,17 @@ function LineupEditor() {
         ) : (
           <div className="flex flex-wrap gap-2">
             {bench.map((id) => {
-              const p = players.find((x) => x.id === id)!;
               return (
                 <span
                   key={id}
-                  className="rounded-lg border border-ink-800 bg-ink-950 px-2.5 py-1.5 text-xs text-ink-300"
-                  style={{ borderColor: infoDe(id).cor }}
+                  className={cn(
+                    'flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold',
+                    infoDe(id).cor ? 'text-ink-950' : 'border border-ink-800 bg-ink-950 text-ink-300',
+                  )}
+                  style={infoDe(id).cor ? { background: infoDe(id).cor } : undefined}
                 >
-                  {numeroDe(id) !== undefined && <strong className="mr-1 text-ink-100">{numeroDe(id)}</strong>}
-                  {p.name}
-                  <span className="ml-1.5 text-ink-600">
-                    {linhaDePosicoes(p.positions.volei, p.outrasPosicoes) || getPositionLabel('volei', p.positions.volei)}
-                  </span>
+                  {infoDe(id).sigla && <span className="text-[10px] opacity-75">{infoDe(id).sigla}</span>}
+                  {numeroDe(id) !== undefined ? `${numeroDe(id)} · ${curtoOf(id)}` : curtoOf(id)}
                 </span>
               );
             })}
@@ -679,25 +733,31 @@ function LineupEditor() {
               .filter((p) => p.id !== liberoId)
               .map((p) => {
                 const already = onCourt.includes(p.id);
+                const { cor, sigla, numero } = infoDe(p.id);
                 return (
                   <div
                     key={p.id}
                     className={cn(
                       'flex items-center gap-2 rounded-xl border px-3 py-2.5',
-                      already
-                        ? 'border-ink-800 bg-ink-950'
-                        : 'border-ink-700 bg-ink-800',
+                      cor ? 'border-transparent' : already ? 'border-ink-800 bg-ink-950' : 'border-ink-700 bg-ink-800',
+                      cor && already && 'opacity-60',
                     )}
+                    style={cor ? { background: cor } : undefined}
                   >
+                    {sigla && (
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink-950/20 text-[11px] font-bold text-ink-950">
+                        {sigla}
+                      </span>
+                    )}
                     <button
                       onClick={() => place(picking, p.id)}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <span className="block truncate text-[15px] font-medium text-ink-50">
-                        {p.name}
+                      <span className={cn('block truncate text-[15px] font-semibold', cor ? 'text-ink-950' : 'text-ink-50')}>
+                        {numero !== undefined ? `${numero} · ${p.name}` : p.name}
                       </span>
                       {already && (
-                        <span className="block text-[11px] text-ink-500">
+                        <span className={cn('block text-[11px]', cor ? 'text-ink-950/80' : 'text-ink-500')}>
                           em quadra
                         </span>
                       )}
@@ -814,41 +874,45 @@ function CourtCell({
   serves?: boolean;
   onClick: () => void;
 }) {
+  // A caixa pintada com a cor da posição; o texto escuro, que lê bem em todas
+  // as cores da paleta (pedido do Guilherme em 08/10/2026)
+  const pintada = Boolean(name && cor);
   return (
     <button
       onClick={onClick}
       className={cn(
         'relative flex h-20 flex-col items-center justify-center rounded-xl border px-1 transition-colors active:scale-[0.98]',
-        name
-          ? 'border-ink-700 bg-ink-800'
-          : 'border-dashed border-ink-700 bg-ink-950',
+        pintada ? 'border-transparent' : name ? 'border-ink-700 bg-ink-800' : 'border-dashed border-ink-700 bg-ink-950',
       )}
+      style={pintada ? { background: cor } : undefined}
     >
-      <span className="absolute top-1.5 left-2 text-[10px] font-bold text-ink-500">
+      <span className={cn('absolute top-1.5 left-2 text-[10px] font-bold', pintada ? 'text-ink-950/70' : 'text-ink-500')}>
         P{pos}
       </span>
       {serves && (
         <CircleDot
           size={11}
-          className="absolute top-1.5 right-2 text-brand-400"
+          className={cn('absolute top-1.5 right-2', pintada ? 'text-ink-950' : 'text-brand-400')}
         />
       )}
       {name ? (
         <>
           <span
-            className="flex size-8 items-center justify-center rounded-full border-2 bg-ink-900 text-[12px] font-bold text-ink-50"
-            style={{ borderColor: cor ?? 'transparent' }}
+            className={cn(
+              'flex size-9 items-center justify-center rounded-full text-[11px] font-bold',
+              pintada ? 'bg-ink-950/20 text-ink-950' : 'bg-ink-900 text-ink-50',
+            )}
           >
-            {numero ?? initials(name)}
+            {sigla || initials(name)}
           </span>
-          <span className="mt-1 w-full truncate px-1 text-center text-[11px] text-ink-200">
-            {name}
+          <span
+            className={cn(
+              'mt-1 w-full truncate px-1 text-center text-[12px] font-semibold',
+              pintada ? 'text-ink-950' : 'text-ink-200',
+            )}
+          >
+            {numero != null ? `${numero} · ${name}` : name}
           </span>
-          {sigla && (
-            <span className="text-[10px] font-semibold" style={{ color: cor }}>
-              {sigla}
-            </span>
-          )}
         </>
       ) : (
         <span className="text-[11px] text-ink-600">vazio</span>

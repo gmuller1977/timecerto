@@ -40,6 +40,8 @@ export interface ProSetup {
   liberoId?: string;
   /** O número de cada atleta nesta partida (08/10/2026) */
   numeros?: Record<string, number>;
+  /** O levantador escolhido na escalação: vale mais que a posição do cadastro */
+  levantadorId?: string;
 }
 
 /** Partida apagada que já estava na nuvem: a exclusão ainda precisa subir */
@@ -68,6 +70,7 @@ interface MatchState {
       court: Court;
       liberoId?: string;
       numeros?: Record<string, number>;
+      levantadorId?: string;
       /** Quem saca primeiro: o time da casa (padrão) ou o adversário */
       adversarioSaca?: boolean;
     };
@@ -160,6 +163,7 @@ export const useMatchStore = create<MatchState>()(
                 system: lineup.system,
                 liberoId: lineup.liberoId,
                 ...(lineup.numeros ? { numeros: lineup.numeros } : {}),
+                ...(lineup.levantadorId ? { levantadorId: lineup.levantadorId } : {}),
               },
             }),
           },

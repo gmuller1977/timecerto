@@ -207,6 +207,7 @@ export function ScoreboardPage() {
           rotates={rotates}
           liberoId={pro.liberoId}
           numeros={pro.numeros}
+          levantadorId={pro.levantadorId}
           players={players}
           onFirstServe={setFirstServe}
           onStartCourt={setStartCourt}

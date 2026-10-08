@@ -12,7 +12,7 @@ import {
 } from '@/lib/court';
 import { getPositionLabel } from '@/lib/sports';
 import { cn } from '@/lib/utils';
-import { posicaoDaCor, siglaDa, useCoresDasPosicoes } from '@/lib/posicoes';
+import { nomeCurto, posicaoDaCor, siglaDa, useCoresDasPosicoes } from '@/lib/posicoes';
 
 interface Props {
   home: MatchTeam;
@@ -25,6 +25,8 @@ interface Props {
   liberoId?: string;
   /** O número de cada atleta nesta partida (08/10/2026) */
   numeros?: Record<string, number>;
+  /** O levantador escolhido na escalação */
+  levantadorId?: string;
   players: Player[];
   onFirstServe: (teamId: string) => void;
   onStartCourt: (court: Court) => void;
@@ -45,6 +47,7 @@ export function CourtPanel({
   rotates,
   liberoId,
   numeros,
+  levantadorId,
   players,
   onFirstServe,
   onStartCourt,
@@ -54,8 +57,8 @@ export function CourtPanel({
   const cores = useCoresDasPosicoes();
 
   const byId = new Map(players.map((p) => [p.id, p]));
-  const firstName = (id?: string) =>
-    id ? (byId.get(id)?.name.split(' ')[0] ?? '?') : '—';
+  // O apelido, ou o primeiro nome (08/10/2026)
+  const firstName = (id?: string) => (id ? nomeCurto(byId.get(id)) : '—');
   // "7 · Ana": o número desta partida, ou o do cadastro
   const comNumero = (id?: string) => {
     if (!id) return '—';
@@ -63,13 +66,16 @@ export function CourtPanel({
     return n != null ? `${n} · ${firstName(id)}` : firstName(id);
   };
   const corDe = (id?: string) => {
-    const pos = posicaoDaCor(id ? byId.get(id) : undefined, liberoId);
+    const pos = posicaoDaCor(id ? byId.get(id) : undefined, liberoId, levantadorId);
     return { cor: pos ? cores[pos] : undefined, sigla: siglaDa(pos) };
   };
   // Como o vôlei chama a rotação: onde está o levantador (08/10/2026)
   const posDoLevantador = (Object.keys(state.court) as unknown as CourtPosition[])
     .map(Number)
-    .find((p) => byId.get(state.court[p as CourtPosition] ?? '')?.positions.volei === 'levantador');
+    .find((p) => {
+      const id = state.court[p as CourtPosition];
+      return levantadorId ? id === levantadorId : byId.get(id ?? '')?.positions.volei === 'levantador';
+    });
 
   const homeServes = state.servingTeamId === home.id;
   const onCourt = courtPlayerIds(state.court);
@@ -129,23 +135,22 @@ export function CourtPanel({
               onClick={() => setPicking(pos)}
               className={cn(
                 'relative flex h-12 flex-col items-center justify-center rounded-lg border-2 px-1 active:scale-[0.98]',
-                serving ? 'bg-brand-500/15' : FRONT_ROW.includes(pos) ? 'bg-ink-800' : 'bg-ink-950',
+                cor ? '' : FRONT_ROW.includes(pos) ? 'bg-ink-800' : 'bg-ink-950',
+                // Quem saca ganha a borda clara, por cima da cor
+                serving ? 'border-ink-50' : 'border-transparent',
               )}
-              style={{ borderColor: cor ?? (serving ? undefined : 'transparent') }}
+              style={cor ? { background: cor } : undefined}
             >
-              <span className="absolute top-0.5 left-1.5 text-[9px] font-bold text-ink-500">
+              <span className={cn('absolute top-0.5 left-1.5 text-[9px] font-bold', cor ? 'text-ink-950/70' : 'text-ink-500')}>
                 P{pos}
               </span>
               <span
-                className={cn(
-                  'max-w-full truncate text-[13px] font-medium',
-                  serving ? 'text-brand-200' : 'text-ink-100',
-                )}
+                className={cn('max-w-full truncate text-[13px] font-semibold', cor ? 'text-ink-950' : 'text-ink-100')}
               >
                 {comNumero(state.court[pos])}
               </span>
               {sigla && (
-                <span className="text-[9px] font-semibold leading-none" style={{ color: cor }}>
+                <span className={cn('text-[9px] font-bold leading-none', cor ? 'text-ink-950/80' : 'text-ink-400')}>
                   {sigla}
                 </span>
               )}
@@ -207,33 +212,52 @@ export function CourtPanel({
               </p>
             )}
 
-            {(beforeFirstRally ? [...bench, ...onCourt] : bench)
+            {/* Só as reservas: quem está em quadra não aparece (pedido do Guilherme, 08/10/2026) */}
+            {bench
               .filter((id) => id !== state.court[picking])
               .map((id) => {
                 const p = byId.get(id)!;
                 const inCourt = onCourt.includes(id);
+                // Pintada com a cor da posição, como a quadra (08/10/2026)
+                const { cor, sigla } = corDe(id);
                 return (
                   <button
                     key={id}
                     onClick={() => choose(id)}
-                    className="mb-2 flex w-full items-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 py-3 text-left active:scale-[0.98]"
+                    className={cn(
+                      'mb-2 flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-left active:scale-[0.98]',
+                      cor ? 'border-transparent' : 'border-ink-700 bg-ink-800',
+                    )}
+                    style={cor ? { background: cor } : undefined}
                   >
-                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink-50">
-                      {p.name}
+                    {sigla && (
+                      <span
+                        className={cn(
+                          'flex size-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+                          cor ? 'bg-ink-950/20 text-ink-950' : 'bg-ink-900 text-ink-50',
+                        )}
+                      >
+                        {sigla}
+                      </span>
+                    )}
+                    <span
+                      className={cn('min-w-0 flex-1 truncate text-[15px] font-semibold', cor ? 'text-ink-950' : 'text-ink-50')}
+                    >
+                      {comNumero(id)}
                     </span>
-                    <span className="shrink-0 text-xs text-ink-500">
+                    <span className={cn('shrink-0 text-xs', cor ? 'text-ink-950/80' : 'text-ink-500')}>
                       {inCourt
                         ? 'em quadra — troca de lugar'
                         : getPositionLabel('volei', p.positions.volei)}
                     </span>
                     {!inCourt && (
-                      <ArrowLeftRight size={15} className="shrink-0 text-brand-400" />
+                      <ArrowLeftRight size={15} className={cn('shrink-0', cor ? 'text-ink-950' : 'text-brand-400')} />
                     )}
                   </button>
                 );
               })}
 
-            {bench.length === 0 && !beforeFirstRally && (
+            {bench.length === 0 && (
               <p className="text-sm leading-relaxed text-ink-500">
                 Ninguém no banco. Marque mais jogadores como presentes antes da
                 próxima partida para ter reservas.
