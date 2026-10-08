@@ -22,10 +22,17 @@ O que conta como vôlei:
   `courtStateAt`), `lib/rotation.ts`, `lib/volley.ts`, `lib/volleyStats.ts`.
 - **Resumo da partida e relatório em PDF** (`MatchSummaryPage`,
   `lib/scoutPdf.ts`).
+- **A pelada de vôlei também** (fechada no mesmo dia): o sorteio com as regras
+  do vôlei (levantadores por time, posições, sistemas — `lib/draw.ts` no que
+  é do vôlei, `lib/rotation.ts`) e as posições do vôlei no cadastro.
 
-Fora do congelamento: pelada (lista, sorteio, financeiro, links do WhatsApp),
-assinatura do Mercado Pago e a infraestrutura comum (grupos, modo, abas) —
-desde que a mudança não altere o comportamento das telas acima.
+A pelada em si — lista, presença, financeiro, links do WhatsApp, avisos — é
+comum aos três esportes e segue aberta, porque é por ela que futebol e
+basquete vão crescer. A regra: **mudança feita para futebol ou basquete não
+pode alterar nada do que um grupo de vôlei vê ou faz**, nos dois modos. Se
+precisar de comportamento diferente, condicione ao esporte em vez de mudar o
+caminho do vôlei. O mesmo vale para a assinatura do Mercado Pago e a
+infraestrutura comum (grupos, modo, abas).
 
 Antes de corrigir um bug nessas telas: reproduzir primeiro (mock ou script
 com `npx tsx`), mexer só no necessário e conferir que o resto do fluxo do
