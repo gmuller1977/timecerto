@@ -39,7 +39,8 @@ export async function compartilharScoutEmPdf(match: Match, jogadorDe: (id: strin
 /** Monta o relatório; separado do compartilhar para dar para gerar e conferir fora do app */
 export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string) => Player | undefined): Promise<JsPDF> {
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  // Todas as páginas deitadas (pedido do Guilherme em 08/10/2026)
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
   const r = new Relatorio(doc);
   const [teamA, teamB] = match.teams;
   const times = [teamA, teamB];
@@ -149,8 +150,8 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
       if (l.length) r.item(p.label, l.length, SERIES[p.action], quem(l));
     }
 
-    r.espaco(80);
-    r.y += 4;
+    // Os erros começam em página própria: na deitada, dividir a seção deixava sobra
+    r.novaPagina();
     r.secao(`5. Erros — ${t.name}`);
     const erros = rallies.filter((x) => x.kind === 'erro' && x.teamId !== t.id);
     r.sozinha(`${erros.length} erros cometidos`, errosDe(match, t.id));
@@ -173,11 +174,12 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
     r.novaPagina();
     r.secao(`6. Jogadores — ${t.name}`);
     r.nota('Ordenados pelo saldo: pontos feitos menos erros cometidos.');
-    for (const j of linhas) {
+    // Dois cartões por linha, para aproveitar a página deitada
+    const cartoes = linhas.map((j) => {
       const p = jogadorDe(j.id);
       const pos = p?.positions.volei ? getPositionLabel('volei', p.positions.volei) : '';
       const erros = ERROS.map((e) => ({ e, n: j.errados.filter((x) => x.action === e.action).length })).filter((x) => x.n);
-      r.jogador({
+      return {
         nome: nome(j.id),
         posicao: pos,
         saldo: j.saldo,
@@ -188,8 +190,9 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
         })),
         erros: erros.map((x) => `${x.e.label} ${x.n}`),
         totalErros: j.errados.length,
-      });
-    }
+      };
+    });
+    for (let i = 0; i < cartoes.length; i += 2) r.duplaDeJogadores(cartoes.slice(i, i + 2));
   }
 
   return rodape(doc);
@@ -392,7 +395,7 @@ function graficoDoSet(doc: JsPDF, match: Match, g: Game, idx: number, curto: (id
 class Relatorio {
   y = 18;
   readonly L = 15;
-  readonly R = 195;
+  readonly R = 282;
   private doc: JsPDF;
   constructor(doc: JsPDF) {
     this.doc = doc;
@@ -406,12 +409,11 @@ class Relatorio {
   }
 
   espaco(mm: number) {
-    if (this.y + mm > 282) this.novaPagina();
+    if (this.y + mm > 195) this.novaPagina();
   }
 
   novaPagina() {
-    // Em pé: a página anterior pode ser a deitada do gráfico
-    this.doc.addPage('a4', 'portrait');
+    this.doc.addPage('a4', 'landscape');
     this.y = 18;
   }
 
@@ -528,7 +530,7 @@ class Relatorio {
       this.doc.setTextColor(30);
       this.doc.text(`${p.titulo} (${total})`, x0, this.y);
       this.pizza(x0 + raio, this.y + 4 + raio, raio, p.fatias);
-      this.legenda(x0 + raio * 2 + 5, this.y + 8, p.fatias, meio - this.L - raio * 2 - 10);
+      this.legenda(x0 + raio * 2 + 5, this.y + 8, p.fatias, Math.min(75, meio - this.L - raio * 2 - 10));
     });
     this.y += alt;
   }
@@ -561,35 +563,46 @@ class Relatorio {
     this.y += linhas.length * 4.5 + 2;
   }
 
-  /** O cartão de um jogador: pizza dos pontos, erros e saldo */
-  jogador(j: { nome: string; posicao: string; saldo: number; fatias: Fatia[]; erros: string[]; totalErros: number }) {
-    const raio = 10;
-    const linhas = Math.max(j.fatias.filter((f) => f.value).length, j.erros.length, 1);
-    const alt = Math.max(raio * 2 + 8, 14 + linhas * 5) + 6;
+  /** Dois cartões lado a lado: a linha tem a altura do mais alto */
+  duplaDeJogadores(js: Cartao[]) {
+    const alt = Math.max(...js.map((j) => this.alturaDoCartao(j)));
     this.espaco(alt);
+    const larg = (this.R - this.L - 6) / 2;
+    js.forEach((j, i) => this.cartao(j, this.L + i * (larg + 6), larg, alt));
+    this.y += alt;
+  }
+
+  alturaDoCartao(j: Cartao) {
+    const linhas = Math.max(j.fatias.filter((f) => f.value).length, j.erros.length, 1);
+    return Math.max(10 * 2 + 8, 14 + linhas * 5) + 6;
+  }
+
+  /** O cartão de um jogador: pizza dos pontos, erros e saldo */
+  cartao(j: Cartao, x0: number, larg: number, alt: number) {
+    const raio = 10;
     const topo = this.y;
     this.doc.setDrawColor(225);
-    this.doc.roundedRect(this.L, topo - 5, this.R - this.L, alt - 2, 2, 2, 'S');
+    this.doc.roundedRect(x0, topo - 5, larg, alt - 2, 2, 2, 'S');
 
-    this.texto(j.nome, 11, 'bold', 30, this.L + 4);
+    this.texto(j.nome, 11, 'bold', 30, x0 + 4);
     if (j.posicao) {
       const w = this.doc.getTextWidth(j.nome);
-      this.texto(j.posicao, 9, 'normal', 110, this.L + 7 + w);
+      this.texto(j.posicao, 9, 'normal', 110, x0 + 7 + w);
     }
     this.doc.setFont('helvetica', 'bold');
     this.doc.setFontSize(11);
     this.doc.setTextColor(j.saldo > 0 ? '#15803d' : j.saldo < 0 ? '#b91c1c' : '#475569');
-    this.doc.text(`saldo ${j.saldo > 0 ? '+' : ''}${j.saldo}`, this.R - 4, this.y, { align: 'right' });
+    this.doc.text(`saldo ${j.saldo > 0 ? '+' : ''}${j.saldo}`, x0 + larg - 4, topo, { align: 'right' });
 
     const pontos = j.fatias.reduce((a, f) => a + f.value, 0);
-    this.pizza(this.L + 4 + raio, topo + 4 + raio, raio, j.fatias);
+    this.pizza(x0 + 4 + raio, topo + 4 + raio, raio, j.fatias);
     this.doc.setFont('helvetica', 'bold');
     this.doc.setFontSize(9);
     this.doc.setTextColor(30);
-    this.doc.text(`${pontos} ${pontos === 1 ? 'ponto' : 'pontos'}`, this.L + raio * 2 + 10, topo + 6);
-    this.legenda(this.L + raio * 2 + 10, topo + 11, j.fatias, 55);
+    this.doc.text(`${pontos} ${pontos === 1 ? 'ponto' : 'pontos'}`, x0 + raio * 2 + 10, topo + 6);
+    this.legenda(x0 + raio * 2 + 10, topo + 11, j.fatias, 45);
 
-    const xe = this.L + 112;
+    const xe = x0 + raio * 2 + 62;
     this.doc.setFont('helvetica', 'bold');
     this.doc.setFontSize(9);
     this.doc.setTextColor(30);
@@ -598,7 +611,14 @@ class Relatorio {
     this.doc.setFontSize(8.5);
     this.doc.setTextColor(80);
     j.erros.forEach((e, i) => this.doc.text(e, xe, topo + 11 + i * 5));
-
-    this.y = topo + alt;
   }
+}
+
+interface Cartao {
+  nome: string;
+  posicao: string;
+  saldo: number;
+  fatias: Fatia[];
+  erros: string[];
+  totalErros: number;
 }
