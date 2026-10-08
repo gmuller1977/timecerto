@@ -72,6 +72,11 @@ function ElencoDaPelada() {
   return mode === 'profissional' ? <Navigate to="/profissional" replace /> : <RosterPage />;
 }
 
+function ElencoDoTime() {
+  const mode = useAppStore((s) => s.mode);
+  return mode === 'amador' ? <Navigate to="/elenco" replace /> : <ProPlayersPage />;
+}
+
 function ModoDoGrupo() {
   const hydrated = useHydrated();
   const ativo = useGrupoAtivo();
@@ -149,7 +154,7 @@ export default function App() {
               <Route path="/amador" element={<JogosPage />} />
               {/* Profissional, com as mesmas abas (30/09/2026) */}
               <Route path="/profissional/jogo" element={<JogosPage />} />
-              <Route path="/profissional" element={<ProPlayersPage />} />
+              <Route path="/profissional" element={<ElencoDoTime />} />
               {/* Só o profissional; no amador leva ao Jogo */}
               <Route path="/convites" element={<InvitePage />} />
               <Route path="/jogo/:id" element={<JogoPage />} />
@@ -157,7 +162,7 @@ export default function App() {
               <Route path="/partida" element={<QuickMatchPage />} />
               <Route path="/partida/:id" element={<MatchSummaryPage />} />
               <Route path="/historico" element={<HistoryPage />} />
-              {/* A tela de atletas da pelada (mensalista/convidado) nunca abre num time */}
+              {/* Cada modo com a sua tela de atletas: a da pelada nunca abre num time, e vice-versa */}
               <Route path="/elenco" element={<ElencoDaPelada />} />
               <Route path="/jogador/:id" element={<PlayerProfilePage />} />
               <Route

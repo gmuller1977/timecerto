@@ -1,9 +1,9 @@
-import { Suspense, useLayoutEffect } from 'react';
+import { Suspense, useEffect, useLayoutEffect } from 'react';
 import { useGrupoAtivo } from '@/store/useGrupoAtivo';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useAppStore } from '@/store/useAppStore';
 import { useHydrated } from '@/store/useHydrated';
-import { TabBar, rememberPath, savedScroll, tabOf } from '@/components/ui/TabBar';
+import { TabBar, esquecerCaminhos, rememberPath, savedScroll, tabOf } from '@/components/ui/TabBar';
 
 /**
  * Casca das telas do modo amador: a tela da vez e a barra de abas embaixo.
@@ -27,6 +27,10 @@ export function TabLayout() {
   // Os dois tipos têm a barra desde 30/09/2026
   const show = hydrated;
   const current = pathname + search;
+
+  // Trocou de grupo: a memória de onde cada aba estava era do outro
+  const grupoId = useGrupoAtivo()?.id;
+  useEffect(() => esquecerCaminhos(), [grupoId]);
 
   useLayoutEffect(() => {
     if (active) rememberPath(active, current);

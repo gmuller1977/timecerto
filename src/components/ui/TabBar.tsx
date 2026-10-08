@@ -87,6 +87,12 @@ export function rememberPath(tab: TabId, path: string) {
   lastPath[tab] = path;
 }
 
+/** Trocou de grupo: as telas lembradas eram do outro grupo */
+export function esquecerCaminhos() {
+  for (const k of Object.keys(lastPath) as TabId[]) delete lastPath[k];
+  scrollOf.clear();
+}
+
 /** Rolagem de uma tela, guardada ao sair dela pela barra */
 export function savedScroll(path: string): number {
   return scrollOf.get(path) ?? 0;
@@ -99,7 +105,12 @@ export function TabBar({ active, current, mode }: { active: TabId | null; curren
     scrollOf.set(current, window.scrollY);
     // Tocar na aba em que já se está volta para a raiz dela; nas outras,
     // retoma de onde a pessoa parou
-    const to = tab.id === active ? tab.root : (lastPath[tab.id] ?? tab.root);
+    // A tela lembrada só vale se for desta aba NESTE modo: a aba Atletas é
+    // /elenco na pelada e /profissional no time, e retomar a do outro modo
+    // abria a tela errada (relatado em 08/10/2026, trocando Audax e Maverick)
+    const lembrada = lastPath[tab.id];
+    const daAba = lembrada && tab.prefixes.some((p) => lembrada === p || lembrada.startsWith(p + '/') || lembrada.startsWith(p + '?'));
+    const to = tab.id === active ? tab.root : daAba ? lembrada : tab.root;
     if (to === current) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
