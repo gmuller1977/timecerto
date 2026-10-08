@@ -4,6 +4,7 @@ import type { MatchTeam, Player, ScoutMode, VolleyAction } from '@/types';
 import { ERROR_ACTIONS, POINT_ACTIONS } from '@/lib/volley';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { cn } from '@/lib/utils';
+import { nomeCurto, posicaoDaCor, siglaDa, useCoresDasPosicoes } from '@/lib/posicoes';
 
 export interface PointDraft {
   kind: 'ponto' | 'erro';
@@ -19,6 +20,8 @@ interface Props {
   opponentTeam: MatchTeam;
   players: Player[];
   mode: ScoutMode;
+  /** No profissional: pinta cada atleta com a cor da posição (08/10/2026) */
+  pro?: { liberoId?: string; levantadorId?: string; numeros?: Record<string, number> };
   onConfirm: (draft: PointDraft) => void;
   onClose: () => void;
 }
@@ -29,9 +32,11 @@ export function PointSheet({
   opponentTeam,
   players,
   mode,
+  pro,
   onConfirm,
   onClose,
 }: Props) {
+  const cores = useCoresDasPosicoes();
   const [draft, setDraft] = useState<PointDraft | null>(null);
 
   useEffect(() => {
@@ -75,15 +80,32 @@ export function PointSheet({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          {list.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => onConfirm({ ...draft, playerId: p.id })}
-              className="rounded-xl border border-ink-700 bg-ink-800 px-3 py-3.5 text-left text-[15px] font-medium text-ink-50 active:scale-[0.98]"
-            >
-              {p.name}
-            </button>
-          ))}
+          {list.map((p) => {
+            // No profissional, a caixa pintada como na quadra: sigla, número e apelido
+            const pos = pro ? posicaoDaCor(p, pro.liberoId, pro.levantadorId) : null;
+            const cor = pos ? cores[pos] : undefined;
+            const numero = pro ? (pro.numeros?.[p.id] ?? p.numero) : undefined;
+            return (
+              <button
+                key={p.id}
+                onClick={() => onConfirm({ ...draft, playerId: p.id })}
+                className={cn(
+                  'flex items-center gap-2 rounded-xl border px-3 py-3.5 text-left text-[15px] active:scale-[0.98]',
+                  cor ? 'border-transparent font-semibold text-ink-950' : 'border-ink-700 bg-ink-800 font-medium text-ink-50',
+                )}
+                style={cor ? { background: cor } : undefined}
+              >
+                {cor && (
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink-950/20 text-[10px] font-bold">
+                    {siglaDa(pos)}
+                  </span>
+                )}
+                <span className="min-w-0 truncate">
+                  {pro ? (numero != null ? `${numero} · ${nomeCurto(p)}` : nomeCurto(p)) : p.name}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <button
