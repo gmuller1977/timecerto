@@ -5,6 +5,32 @@ Esportes: futebol, vôlei, basquete. O vôlei é o mais desenvolvido.
 
 Nome de trabalho — a marca ainda não está decidida.
 
+## Congelado — vôlei
+
+**O vôlei está fechado desde 08/10/2026** ("versão fechada", Guilherme). Só
+entra correção de bug comprovado; funcionalidade nova, ajuste de layout e
+mudança de regra, não — nem "aproveitando" outra tarefa.
+
+O que conta como vôlei:
+
+- **Modo profissional inteiro**: elenco (`ProPlayersPage`, `ProPlayerSheet`),
+  escalação em dois passos (`LineupPage` — camisa, levantador, líbero, posição
+  em quadra, quem saca), cores das posições (`lib/posicoes.ts`,
+  `CoresDasPosicoes`).
+- **Placar e scout de vôlei**, nos dois modos: `ScoreboardPage`, `CourtPanel`,
+  `PointSheet`, rodízio e líbero automático (`lib/court.ts` — `comLibero`,
+  `courtStateAt`), `lib/rotation.ts`, `lib/volley.ts`, `lib/volleyStats.ts`.
+- **Resumo da partida e relatório em PDF** (`MatchSummaryPage`,
+  `lib/scoutPdf.ts`).
+
+Fora do congelamento: pelada (lista, sorteio, financeiro, links do WhatsApp),
+assinatura do Mercado Pago e a infraestrutura comum (grupos, modo, abas) —
+desde que a mudança não altere o comportamento das telas acima.
+
+Antes de corrigir um bug nessas telas: reproduzir primeiro (mock ou script
+com `npx tsx`), mexer só no necessário e conferir que o resto do fluxo do
+vôlei continua igual — escalação → placar → scout → resumo → PDF.
+
 ## Comandos
 
 ```bash
