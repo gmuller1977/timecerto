@@ -14,6 +14,8 @@ import { formatDate } from '@/lib/stats';
  * do app. A fonte padrão do PDF não tem emoji, então nada de emoji no texto.
  */
 
+const sum = (v: number[]) => v.reduce((a, b) => a + b, 0);
+
 interface Fatia {
   label: string;
   value: number;
@@ -100,12 +102,14 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
   match.games.forEach((g, i) => {
     if (!(g.rallies ?? []).length) return;
     const doSet: Match = { ...match, games: [g] };
-    r.espaco(70);
+    // Pizzas grandes, dois sets por página (pedido do Guilherme em 08/10/2026)
+    r.espaco(80);
     const venc = g.scoreA > g.scoreB ? teamA.name : teamB.name;
     r.subtitulo(`${i + 1}º set — ${g.scoreA} x ${g.scoreB}`, g.finished ? `venceu ${venc}` : '');
     r.par(
-      { titulo: `Pontos de ${teamA.name}`, fatias: origem(doSet, teamA.id), pequena: true },
-      { titulo: `Pontos de ${teamB.name}`, fatias: origem(doSet, teamB.id), pequena: true },
+      { titulo: `Pontos de ${teamA.name}`, fatias: origem(doSet, teamA.id) },
+      { titulo: `Pontos de ${teamB.name}`, fatias: origem(doSet, teamB.id) },
+      24,
     );
     const ea = teamScout(doSet, teamA.id);
     const eb = teamScout(doSet, teamB.id);
@@ -128,16 +132,15 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
   // ── 4 e 5. Pontos e erros, do fundamento a quem fez ──
   const rallies = allRallies(match);
   const comElenco = times.filter((t) => rallies.some((x) => x.playerId && t.playerIds.includes(x.playerId)));
-  const quem = (lista: Rally[]) => {
-    const conta = new Map<string, number>();
-    for (const x of lista) {
-      const k = x.playerId ?? '';
-      conta.set(k, (conta.get(k) ?? 0) + 1);
-    }
-    return [...conta.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([id, n]) => `${id ? nome(id) : 'Sem autor'} ${n}`)
-      .join('   ');
+  // Uma linha por atleta, uma coluna por tipo; quem não foi marcado fica em "Sem autor"
+  const porAtleta = (lista: Rally[], tipos: VolleyAction[]) => {
+    const ids = [...new Set(lista.map((x) => x.playerId ?? ''))];
+    return ids
+      .map((id) => ({
+        nome: id ? nome(id) : 'Sem autor',
+        valores: tipos.map((a) => lista.filter((x) => (x.playerId ?? '') === id && x.action === a).length),
+      }))
+      .sort((a, b) => (a.nome === 'Sem autor' ? 1 : b.nome === 'Sem autor' ? -1 : 0) || sum(b.valores) - sum(a.valores));
   };
 
   for (const t of comElenco) {
@@ -145,20 +148,23 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
     r.secao(`4. Pontos — ${t.name}`);
     const meus = rallies.filter((x) => x.kind === 'ponto' && x.teamId === t.id);
     r.sozinha(`${meus.length} pontos de mérito`, origem(match, t.id).filter((f) => f.label !== 'Erro do adversário'));
-    for (const p of PONTOS) {
-      const l = meus.filter((x) => x.action === p.action);
-      if (l.length) r.item(p.label, l.length, SERIES[p.action], quem(l));
-    }
+    r.tabela(
+      PONTOS.map((p) => ({ titulo: p.label, cor: SERIES[p.action] })),
+      porAtleta(meus, PONTOS.map((p) => p.action)),
+    );
 
     // Os erros começam em página própria: na deitada, dividir a seção deixava sobra
     r.novaPagina();
     r.secao(`5. Erros — ${t.name}`);
     const erros = rallies.filter((x) => x.kind === 'erro' && x.teamId !== t.id);
     r.sozinha(`${erros.length} erros cometidos`, errosDe(match, t.id));
-    for (const e of ERROS) {
-      const l = erros.filter((x) => x.action === e.action);
-      if (l.length) r.item(e.label, l.length, SERIES[e.action], quem(l));
-    }
+    // "Não classificado" só entra como coluna se houver algum
+    const tipos = ERROS.filter((e) => e.action !== 'indefinido' || erros.some((x) => x.action === 'indefinido'));
+    r.tabela(
+      // Cabeçalho curto: a seção já diz que é erro
+      tipos.map((e) => ({ titulo: e.label.replace(/^Erro de /, '').replace(/^./, (c) => c.toUpperCase()), cor: SERIES[e.action] })),
+      porAtleta(erros, tipos.map((e) => e.action)),
+    );
   }
 
   // ── 5. Cada jogador ──
@@ -517,8 +523,7 @@ class Relatorio {
   }
 
   /** Duas pizzas lado a lado, com título e legenda */
-  par(a: { titulo: string; fatias: Fatia[]; pequena?: boolean }, b: { titulo: string; fatias: Fatia[]; pequena?: boolean }) {
-    const raio = a.pequena ? 11 : 15;
+  par(a: { titulo: string; fatias: Fatia[] }, b: { titulo: string; fatias: Fatia[] }, raio = 15) {
     const alt = Math.max(raio * 2, 30) + 10;
     this.espaco(alt);
     const meio = (this.L + this.R) / 2;
@@ -530,7 +535,10 @@ class Relatorio {
       this.doc.setTextColor(30);
       this.doc.text(`${p.titulo} (${total})`, x0, this.y);
       this.pizza(x0 + raio, this.y + 4 + raio, raio, p.fatias);
-      this.legenda(x0 + raio * 2 + 5, this.y + 8, p.fatias, Math.min(75, meio - this.L - raio * 2 - 10));
+      // A legenda centrada na altura da pizza
+      const altLegenda = p.fatias.filter((f) => f.value).length * 5;
+      const yLegenda = Math.max(this.y + 8, this.y + 4 + raio - altLegenda / 2 + 3);
+      this.legenda(x0 + raio * 2 + 8, yLegenda, p.fatias, Math.min(75, meio - this.L - raio * 2 - 14));
     });
     this.y += alt;
   }
@@ -545,22 +553,61 @@ class Relatorio {
     this.y += raio * 2 + 12;
   }
 
-  /** Um fundamento e quem fez: "Ataque 8 — Ana 4  Gabi 3 …" */
-  item(label: string, n: number, cor: string, quem: string) {
-    const linhas = (() => {
-      this.doc.setFontSize(9);
-      return this.doc.splitTextToSize(quem, this.R - this.L - 8) as string[];
-    })();
-    this.espaco(6 + linhas.length * 4.5);
-    this.doc.setFillColor(cor);
-    this.doc.rect(this.L, this.y - 2.8, 2.8, 2.8, 'F');
-    this.texto(`${label}  ${n}`, 10, 'bold', 30, this.L + 5);
-    this.y += 5;
-    this.doc.setFont('helvetica', 'normal');
-    this.doc.setFontSize(9);
-    this.doc.setTextColor(80);
-    this.doc.text(linhas, this.L + 5, this.y);
-    this.y += linhas.length * 4.5 + 2;
+  /**
+   * Atleta por tipo: uma linha por atleta, uma coluna por tipo, total na
+   * última coluna e na última linha. Zero vira traço, para o número saltar.
+   */
+  tabela(colunas: { titulo: string; cor: string }[], linhas: { nome: string; valores: number[] }[]) {
+    const xNome = this.L;
+    const wNome = 62;
+    const wCol = (this.R - this.L - wNome) / (colunas.length + 1);
+    const centro = (i: number) => xNome + wNome + wCol * i + wCol / 2;
+    const alturaLinha = 6.5;
+    const cabecalho = () => {
+      this.espaco(16);
+      this.doc.setFont('helvetica', 'bold');
+      this.doc.setFontSize(8.5);
+      this.doc.setTextColor(60);
+      this.doc.text('Atleta', xNome + 2, this.y);
+      colunas.forEach((c, i) => {
+        this.doc.setFillColor(c.cor);
+        const w = this.doc.getTextWidth(c.titulo);
+        this.doc.rect(centro(i) - w / 2 - 4, this.y - 2.6, 2.6, 2.6, 'F');
+        this.doc.text(c.titulo, centro(i) + 0.5, this.y, { align: 'center' });
+      });
+      this.doc.text('Total', centro(colunas.length), this.y, { align: 'center' });
+      this.y += 2.5;
+      this.doc.setDrawColor(190);
+      this.doc.line(this.L, this.y, this.R, this.y);
+      this.y += alturaLinha - 1.5;
+    };
+    const linha = (nome: string, valores: number[], negrito: boolean, zebra: boolean) => {
+      if (this.y + alturaLinha > 195) {
+        this.novaPagina();
+        cabecalho();
+      }
+      if (zebra) {
+        this.doc.setFillColor('#f3f4f6');
+        this.doc.rect(this.L, this.y - 4.4, this.R - this.L, alturaLinha, 'F');
+      }
+      this.doc.setFont('helvetica', negrito ? 'bold' : 'normal');
+      this.doc.setFontSize(9.5);
+      this.doc.setTextColor(30);
+      this.doc.text(nome, xNome + 2, this.y);
+      [...valores, sum(valores)].forEach((v, i) => {
+        const total = i === valores.length;
+        this.doc.setFont('helvetica', negrito || total ? 'bold' : 'normal');
+        this.doc.setTextColor(v ? 30 : 175);
+        this.doc.text(v ? String(v) : '-', centro(i), this.y, { align: 'center' });
+      });
+      this.y += alturaLinha;
+    };
+    this.y += 4;
+    cabecalho();
+    linhas.forEach((l, i) => linha(l.nome, l.valores, false, i % 2 === 1));
+    this.doc.setDrawColor(190);
+    this.doc.line(this.L, this.y - 4.4, this.R, this.y - 4.4);
+    linha('Total', colunas.map((_, c) => sum(linhas.map((l) => l.valores[c]))), true, false);
   }
 
   /** Dois cartões lado a lado: a linha tem a altura do mais alto */
