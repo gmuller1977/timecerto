@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowLeft,
+  Check,
   CircleDot,
   PlayCircle,
   RotateCw,
@@ -32,6 +33,7 @@ import {
 } from '@/lib/court';
 import type { CourtPosition, Lineup, MatchTeam, RotationSystem, TeamColor } from '@/types';
 import { cn, initials, uid } from '@/lib/utils';
+import { posicaoDaCor, siglaDa, useCoresDasPosicoes } from '@/lib/posicoes';
 
 const COLORS: TeamColor[] = [
   'verde', 'azul', 'vermelho', 'amarelo', 'preto', 'branco', 'laranja', 'roxo',
@@ -61,8 +63,25 @@ function LineupEditor() {
   // e o aviso de improviso nunca apareceria. Sem filtro: cada categoria é um
   // grupo (Guilherme, 30/09/2026), então disponível é todo o elenco
   const players = useMemo(() => cadastro.filter((p) => !p.pending), [cadastro]);
-  const volleyPlayers = players;
+  const elenco = players;
   const scope = 'Todo o elenco';
+
+  /*
+   * Duas telas (pedido do Guilherme em 08/10/2026): no passo 1, quem joga e
+   * com qual camisa; no passo 2, a posição em quadra. O número vem do
+   * cadastro; trocar aqui vale só para este jogo (fica na partida).
+   */
+  const [passo, setPasso] = useState<1 | 2>(1);
+  const [convocados, setConvocados] = useState<Set<string>>(() => {
+    const salvos = saved?.convocados?.filter((id) => elenco.some((p) => p.id === id));
+    return new Set(salvos?.length ? salvos : elenco.map((p) => p.id));
+  });
+  const [numeros, setNumeros] = useState<Record<string, string>>(() =>
+    Object.fromEntries(elenco.map((p) => [p.id, p.numero != null ? String(p.numero) : ''])),
+  );
+  const [adversarioSaca, setAdversarioSaca] = useState(false);
+  const volleyPlayers = elenco.filter((p) => convocados.has(p.id));
+  const cores = useCoresDasPosicoes();
 
   // Da escalação salva, só volta quem ainda está disponível hoje
   const [initial] = useState(() => {
@@ -113,6 +132,63 @@ function LineupEditor() {
   const nameOf = (id?: string) =>
     id ? (players.find((p) => p.id === id)?.name ?? '?') : undefined;
 
+  const numeroDe = (id: string) => {
+    const t = numeros[id]?.trim();
+    return t ? Number(t) : undefined;
+  };
+  // Dois atletas com o mesmo número não deixam avançar
+  const contagem = new Map<number, number>();
+  for (const id of convocados) {
+    const n = numeroDe(id);
+    if (n !== undefined) contagem.set(n, (contagem.get(n) ?? 0) + 1);
+  }
+  const repetido = (id: string) => {
+    const n = numeroDe(id);
+    return n !== undefined && (contagem.get(n) ?? 0) > 1;
+  };
+  const numerosOk = [...convocados].every((id) => !repetido(id));
+
+  // A cor, a sigla e o número de quem está numa posição
+  const infoDe = (id?: string) => {
+    const pl = id ? players.find((x) => x.id === id) : undefined;
+    const pos = posicaoDaCor(pl, liberoId);
+    return { numero: id ? numeroDe(id) : undefined, cor: pos ? cores[pos] : undefined, sigla: siglaDa(pos) };
+  };
+
+  // O levantador em P1…P6: gira o time inteiro até ele cair ali
+  const setterId = onCourt.find((id) => players.find((x) => x.id === id)?.positions.volei === 'levantador');
+  const posDoLevantador = setterId
+    ? (Number(Object.entries(court).find(([, id]) => id === setterId)?.[0]) as CourtPosition)
+    : undefined;
+  function levantadorEm(pos: CourtPosition) {
+    if (!setterId) return;
+    const girado = allRotations(court).find((c) => c[pos] === setterId);
+    if (girado) setCourt(girado);
+  }
+
+  function irParaPosicoes() {
+    // Quem saiu da convocação sai da quadra e do líbero
+    setCourt((c) => {
+      const next: Court = {};
+      for (const [pos, id] of Object.entries(c)) {
+        if (id && convocados.has(id)) next[Number(pos) as CourtPosition] = id;
+      }
+      return next;
+    });
+    if (liberoId && !convocados.has(liberoId)) setLiberoId(undefined);
+    setPasso(2);
+    window.scrollTo(0, 0);
+  }
+
+  function alternar(id: string) {
+    setConvocados((c) => {
+      const n = new Set(c);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
   function place(pos: CourtPosition, playerId: string) {
     setCourt((c) => {
       const next: Court = { ...c };
@@ -158,7 +234,13 @@ function LineupEditor() {
     ) {
       return;
     }
-    saveLineup({ ...lineup, id: uid() });
+    const nums = Object.fromEntries(
+      [...convocados].flatMap((id) => {
+        const n = numeroDe(id);
+        return n !== undefined ? [[id, n]] : [];
+      }),
+    );
+    saveLineup({ ...lineup, id: uid(), convocados: [...convocados], numeros: nums });
     const home: MatchTeam = {
       id: uid(),
       name: teamName.trim() || 'Meu time',
@@ -175,7 +257,7 @@ function LineupEditor() {
       sport: 'volei',
       teams: [home, away],
       scout: { mode: 'atleta' },
-      lineup: { system, court, liberoId },
+      lineup: { system, court, liberoId, numeros: nums, adversarioSaca },
       // Amistoso ou campeonato: escolhido no "Novo jogo" da aba Jogo
       ...(competicao ? { competicao } : {}),
       // Veio de um jogo da agenda (fase 2): a partida fica nele
@@ -187,16 +269,23 @@ function LineupEditor() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-lg flex-col px-4 pb-32">
       <header className="safe-top flex items-center gap-3 pt-6 pb-4">
-        <button onClick={() => navigate('/profissional/jogo')} className="p-1 text-ink-400">
+        <button
+          onClick={() => (passo === 2 ? setPasso(1) : navigate('/profissional/jogo'))}
+          className="p-1 text-ink-400"
+          aria-label={passo === 2 ? 'Voltar à escalação' : 'Voltar ao jogo'}
+        >
           <ArrowLeft size={22} />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold">Escalação</h1>
+          <p className="text-[11px] text-ink-500">Passo {passo} de 2</p>
+          <h1 className="text-xl font-bold">{passo === 1 ? 'Escalação' : 'Posição em quadra'}</h1>
           <p className="truncate text-xs text-ink-400">
-            🏐 {scope} · {volleyPlayers.length}{' '}
-            {volleyPlayers.length === 1 ? 'atleta' : 'atletas'}
+            {passo === 1
+              ? `Quem joga e com qual camisa · ${volleyPlayers.length} marcados`
+              : `🏐 ${volleyPlayers.length} ${volleyPlayers.length === 1 ? 'atleta' : 'atletas'}`}
           </p>
         </div>
+        {passo === 2 && (
         <button
           onClick={handleAuto}
           disabled={volleyPlayers.length < 6}
@@ -205,6 +294,7 @@ function LineupEditor() {
           <Wand2 size={14} />
           Sugerir
         </button>
+        )}
       </header>
 
       {volleyPlayers.length < 6 && (
@@ -214,6 +304,104 @@ function LineupEditor() {
         </p>
       )}
 
+      {passo === 1 && (
+        <>
+          <section>
+            <p className="mb-2 text-sm font-medium text-ink-300">Atletas do jogo</p>
+            <div className="flex flex-col">
+              {elenco.map((pl) => {
+                const marcado = convocados.has(pl.id);
+                const pos = posicaoDaCor(pl, liberoId);
+                const rep2 = marcado && repetido(pl.id);
+                return (
+                  <div
+                    key={pl.id}
+                    className={cn('flex items-center gap-3 border-t border-ink-800 py-2.5', !marcado && 'opacity-50')}
+                  >
+                    <button
+                      onClick={() => alternar(pl.id)}
+                      aria-pressed={marcado}
+                      aria-label={`${marcado ? 'Tirar' : 'Marcar'} ${pl.name}`}
+                      className={cn(
+                        'flex size-6 shrink-0 items-center justify-center rounded-md border',
+                        marcado ? 'border-brand-500 bg-brand-500 text-ink-950' : 'border-ink-600',
+                      )}
+                    >
+                      {marcado && <Check size={15} strokeWidth={3} />}
+                    </button>
+                    <span
+                      aria-hidden
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ background: pos ? cores[pos] : 'transparent' }}
+                    />
+                    <button onClick={() => alternar(pl.id)} className="min-w-0 flex-1 truncate text-left text-[15px] text-ink-100">
+                      {pl.name}
+                      {pos && <span className="ml-1.5 text-xs text-ink-500">{siglaDa(pos)}</span>}
+                    </button>
+                    <input
+                      value={numeros[pl.id] ?? ''}
+                      onChange={(e) =>
+                        setNumeros((n) => ({ ...n, [pl.id]: e.target.value.replace(/\D/g, '').slice(0, 2) }))
+                      }
+                      inputMode="numeric"
+                      placeholder="Nº"
+                      aria-label={`Número da camisa de ${pl.name}`}
+                      disabled={!marcado}
+                      className={cn(
+                        'h-10 w-14 shrink-0 rounded-lg bg-ink-800 text-center text-[15px] text-ink-50 placeholder:text-ink-600 outline-none',
+                        rep2 && 'ring-2 ring-red-500',
+                      )}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {!numerosOk && (
+              <p className="mt-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                Dois atletas com o mesmo número. Troque um deles para continuar.
+              </p>
+            )}
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+              O número vem do cadastro do atleta. Mudar aqui vale só para este jogo.
+            </p>
+          </section>
+
+          <section className="mt-5">
+            <p className="mb-2 text-sm font-medium text-ink-300">
+              Líbero{' '}
+              <span className="text-xs font-normal text-ink-500">— entra no fundo, não ataca nem saca</span>
+            </p>
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+              <button
+                onClick={() => setLiberoId(undefined)}
+                className={cn(
+                  'shrink-0 rounded-xl border px-3 py-2 text-sm font-medium',
+                  !liberoId ? 'border-brand-500 bg-brand-500/15 text-brand-300' : 'border-ink-800 bg-ink-900 text-ink-400',
+                )}
+              >
+                Sem líbero
+              </button>
+              {volleyPlayers.map((pl) => (
+                <button
+                  key={pl.id}
+                  onClick={() => setLiberoId(pl.id === liberoId ? undefined : pl.id)}
+                  className={cn(
+                    'shrink-0 rounded-xl border px-3 py-2 text-sm font-medium',
+                    liberoId === pl.id
+                      ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                      : 'border-ink-800 bg-ink-900 text-ink-400',
+                  )}
+                >
+                  {pl.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+
+      {passo === 2 && (
+      <>
       {/* Sistema */}
       <section>
         <p className="mb-2 text-sm font-medium text-ink-300">Sistema de jogo</p>
@@ -234,6 +422,32 @@ function LineupEditor() {
           ))}
         </div>
         <p className="mt-2 text-xs text-ink-500">{ROTATIONS[system].summary}</p>
+      </section>
+
+      {/* O levantador em P1…P6 (08/10/2026): gira o time inteiro */}
+      <section className="mt-5">
+        <p className="mb-2 text-sm font-medium text-ink-300">Começar com o levantador em</p>
+        {setterId ? (
+          <div className="flex flex-wrap gap-2">
+            {([1, 6, 5, 4, 3, 2] as CourtPosition[]).map((pos) => (
+              <button
+                key={pos}
+                onClick={() => levantadorEm(pos)}
+                aria-pressed={posDoLevantador === pos}
+                className={cn(
+                  'h-10 min-w-12 rounded-xl border px-3 text-sm font-semibold',
+                  posDoLevantador === pos
+                    ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                    : 'border-ink-800 bg-ink-900 text-ink-400',
+                )}
+              >
+                P{pos}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-ink-500">Escale um levantador na quadra para escolher onde ele começa.</p>
+        )}
       </section>
 
       {/* Quadra */}
@@ -265,6 +479,7 @@ function LineupEditor() {
                 key={pos}
                 pos={pos}
                 name={nameOf(court[pos])}
+                {...infoDe(court[pos])}
                 onClick={() => setPicking(pos)}
               />
             ))}
@@ -275,6 +490,7 @@ function LineupEditor() {
                 key={pos}
                 pos={pos}
                 name={nameOf(court[pos])}
+                {...infoDe(court[pos])}
                 serves={pos === 1}
                 onClick={() => setPicking(pos)}
               />
@@ -282,7 +498,7 @@ function LineupEditor() {
           </div>
 
           <p className="mt-2.5 text-center text-[11px] text-ink-600">
-            A posição 1 saca primeiro. O rodízio é horário.
+            Quem está em P1 saca. O rodízio é horário.
           </p>
         </div>
       </section>
@@ -307,42 +523,28 @@ function LineupEditor() {
         </div>
       )}
 
-      {/* Líbero e reservas */}
+      {/* Quem saca primeiro (08/10/2026): decidido antes de começar */}
       <section className="mt-5">
-        <p className="mb-2 text-sm font-medium text-ink-300">
-          Líbero{' '}
-          <span className="text-xs font-normal text-ink-500">
-            — entra no fundo, não ataca nem saca
-          </span>
-        </p>
-        <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-          <button
-            onClick={() => setLiberoId(undefined)}
-            className={cn(
-              'shrink-0 rounded-xl border px-3 py-2 text-sm font-medium',
-              !liberoId
-                ? 'border-brand-500 bg-brand-500/15 text-brand-300'
-                : 'border-ink-800 bg-ink-900 text-ink-400',
-            )}
-          >
-            Sem líbero
-          </button>
-          {volleyPlayers
-            .filter((p) => !onCourt.includes(p.id) || p.id === liberoId)
-            .map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setLiberoId(p.id === liberoId ? undefined : p.id)}
-                className={cn(
-                  'shrink-0 rounded-xl border px-3 py-2 text-sm font-medium',
-                  liberoId === p.id
-                    ? 'border-brand-500 bg-brand-500/15 text-brand-300'
-                    : 'border-ink-800 bg-ink-900 text-ink-400',
-                )}
-              >
-                {p.name}
-              </button>
-            ))}
+        <p className="mb-2 text-sm font-medium text-ink-300">Quem saca primeiro?</p>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { id: false, nome: teamName.trim() || 'Meu time' },
+            { id: true, nome: awayName.trim() || 'Adversário' },
+          ].map((t) => (
+            <button
+              key={String(t.id)}
+              onClick={() => setAdversarioSaca(t.id)}
+              aria-pressed={adversarioSaca === t.id}
+              className={cn(
+                'h-11 truncate rounded-xl border px-3 text-sm font-semibold',
+                adversarioSaca === t.id
+                  ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                  : 'border-ink-800 bg-ink-900 text-ink-400',
+              )}
+            >
+              {t.nome}
+            </button>
+          ))}
         </div>
       </section>
 
@@ -361,7 +563,9 @@ function LineupEditor() {
                 <span
                   key={id}
                   className="rounded-lg border border-ink-800 bg-ink-950 px-2.5 py-1.5 text-xs text-ink-300"
+                  style={{ borderColor: infoDe(id).cor }}
                 >
+                  {numeroDe(id) !== undefined && <strong className="mr-1 text-ink-100">{numeroDe(id)}</strong>}
                   {p.name}
                   <span className="ml-1.5 text-ink-600">
                     {linhaDePosicoes(p.positions.volei, p.outrasPosicoes) || getPositionLabel('volei', p.positions.volei)}
@@ -422,17 +626,31 @@ function LineupEditor() {
         </div>
       </section>
 
+      </>
+      )}
+
       <div className="safe-bottom fixed inset-x-0 bottom-0 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-lg">
-          <Button
-            size="lg"
-            className="w-full"
-            disabled={blocked}
-            onClick={handleStart}
-          >
-            <PlayCircle size={19} strokeWidth={2.5} />
-            {blocked ? 'Complete a escalação' : 'Começar partida'}
-          </Button>
+          {passo === 1 ? (
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={volleyPlayers.length < 6 || !numerosOk}
+              onClick={irParaPosicoes}
+            >
+              {volleyPlayers.length < 6 ? 'Marque pelo menos 6 atletas' : 'Próximo: posição em quadra'}
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button size="lg" variant="secondary" className="shrink-0" onClick={() => setPasso(1)}>
+                Voltar
+              </Button>
+              <Button size="lg" className="flex-1" disabled={blocked} onClick={handleStart}>
+                <PlayCircle size={19} strokeWidth={2.5} />
+                {blocked ? 'Complete a escalação' : 'Começar partida'}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -580,11 +798,19 @@ function LineupEditor() {
 function CourtCell({
   pos,
   name,
+  numero,
+  cor,
+  sigla,
   serves,
   onClick,
 }: {
   pos: CourtPosition;
   name?: string;
+  /** O número da camisa neste jogo (08/10/2026) */
+  numero?: number;
+  /** A cor da posição do atleta, e a sigla que vai junto */
+  cor?: string;
+  sigla?: string;
   serves?: boolean;
   onClick: () => void;
 }) {
@@ -598,8 +824,8 @@ function CourtCell({
           : 'border-dashed border-ink-700 bg-ink-950',
       )}
     >
-      <span className="absolute top-1.5 left-2 text-[10px] font-bold text-ink-600">
-        {pos}
+      <span className="absolute top-1.5 left-2 text-[10px] font-bold text-ink-500">
+        P{pos}
       </span>
       {serves && (
         <CircleDot
@@ -609,12 +835,20 @@ function CourtCell({
       )}
       {name ? (
         <>
-          <span className="flex size-7 items-center justify-center rounded-full bg-brand-500/20 text-[11px] font-bold text-brand-200">
-            {initials(name)}
+          <span
+            className="flex size-8 items-center justify-center rounded-full border-2 bg-ink-900 text-[12px] font-bold text-ink-50"
+            style={{ borderColor: cor ?? 'transparent' }}
+          >
+            {numero ?? initials(name)}
           </span>
           <span className="mt-1 w-full truncate px-1 text-center text-[11px] text-ink-200">
             {name}
           </span>
+          {sigla && (
+            <span className="text-[10px] font-semibold" style={{ color: cor }}>
+              {sigla}
+            </span>
+          )}
         </>
       ) : (
         <span className="text-[11px] text-ink-600">vazio</span>

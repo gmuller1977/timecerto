@@ -6,6 +6,7 @@ import {
   CalendarClock,
   ChevronRight,
   Crown,
+  Palette,
   UserRound,
   Users,
   Wallet,
@@ -29,6 +30,9 @@ const PromocaoAjustes = lazy(() =>
   import('@/components/cloud/PromocaoAjustes').then((m) => ({ default: m.PromocaoAjustes })),
 );
 const AvisosDoAdmin = lazy(() => import('@/components/cloud/Avisos').then((m) => ({ default: m.AvisosDoAdmin })));
+const CoresDasPosicoes = lazy(() =>
+  import('@/components/cloud/CoresDasPosicoes').then((m) => ({ default: m.CoresDasPosicoes })),
+);
 const SairDaConta = lazy(() => import('@/components/cloud/SairDaConta').then((m) => ({ default: m.SairDaConta })));
 const ExcluirGrupo = lazy(() => import('@/components/cloud/ExcluirGrupo').then((m) => ({ default: m.ExcluirGrupo })));
 
@@ -41,6 +45,8 @@ interface Secao {
   conta?: boolean;
   /** Só no amador */
   pelada?: boolean;
+  /** Só no profissional */
+  time?: boolean;
   perigo?: boolean;
   conteudo: () => ReactNode;
 }
@@ -95,6 +101,16 @@ const SECOES: Secao[] = [
     pelada: true,
     conteudo: () => <AvisosDoAdmin />,
   },
+  // Só no profissional: as cores da quadra e da escalação (08/10/2026)
+  {
+    id: 'cores',
+    titulo: 'Cores das posições',
+    resumo: 'Levantador, oposto, ponteiro, central e líbero',
+    icone: Palette,
+    conta: true,
+    time: true,
+    conteudo: () => <CoresDasPosicoes />,
+  },
   {
     id: 'conta',
     titulo: 'Conta',
@@ -118,7 +134,7 @@ const SECOES: Secao[] = [
 function useSecoes(): Secao[] {
   const pelada = (useAppStore((s) => s.mode) ?? 'amador') === 'amador';
   const comConta = hasSavedSession();
-  return SECOES.filter((s) => (!s.conta || comConta) && (!s.pelada || pelada));
+  return SECOES.filter((s) => (!s.conta || comConta) && (!s.pelada || pelada) && (!s.time || !pelada));
 }
 
 export function AjustesPage() {

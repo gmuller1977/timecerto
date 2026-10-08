@@ -55,6 +55,8 @@ export interface CloudGroup {
   naipe: Naipe | null;
   /** Inscrição em duas fases (migração 028); sem `dias`, o grupo não usa */
   promocao: PromocaoDoGrupo;
+  /** Cores das posições do time (migração 039). Nulo = as padrão */
+  coresPosicoes: Record<string, string> | null;
 }
 
 export interface CloudEvent {
@@ -98,7 +100,7 @@ export interface PublishedTeams {
 export type Attendance = Record<string, { status: 'vou' | 'nao_vou'; answeredAt: string }>;
 
 const GROUP_COLS =
-  'id, name, mode, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia, vip_ate, vip_teste_ate, age_group, naipe, promocao_dias, promocao_hora, preferencia_permanente';
+  'id, name, mode, invite_code, guest_code, register_code, owner_id, teste_ate, pago_ate, cortesia, vip_ate, vip_teste_ate, age_group, naipe, promocao_dias, promocao_hora, preferencia_permanente, cores_posicoes';
 const toGroup = (d: {
   id: string;
   name: string;
@@ -117,6 +119,7 @@ const toGroup = (d: {
   promocao_dias: number | null;
   promocao_hora: string | null;
   preferencia_permanente: boolean | null;
+  cores_posicoes: Record<string, string> | null;
 }): CloudGroup => ({
   id: d.id,
   name: d.name,
@@ -134,6 +137,7 @@ const toGroup = (d: {
   },
   ageGroup: d.age_group,
   naipe: d.naipe,
+  coresPosicoes: d.cores_posicoes ?? null,
   promocao: {
     dias: d.promocao_dias,
     hora: d.promocao_hora ? d.promocao_hora.slice(0, 5) : null,
@@ -581,6 +585,7 @@ async function enviarAtletas(groupId: string) {
     height_cm: p.heightCm ?? null,
     weight_kg: p.weightKg ?? null,
     outras_posicoes: p.outrasPosicoes ?? [],
+    numero: p.numero ?? null,
     deleted_at: null,
     updated_at: p.updatedAt,
   });
@@ -618,7 +623,7 @@ async function enviarAtletas(groupId: string) {
 
 const PLAYER_SYNC_COLS =
   'id, name, nickname, skills, positions, is_keeper, kind, pending, birth_date, phone, ' +
-  'age_group, naipe, height_cm, weight_kg, invite_token, outras_posicoes, ' +
+  'age_group, naipe, height_cm, weight_kg, invite_token, outras_posicoes, numero, ' +
   'added_via_link, active, deleted_at, updated_at, synced_at, created_at';
 
 interface LinhaJogador {
@@ -638,6 +643,7 @@ interface LinhaJogador {
   weight_kg: number | string | null;
   invite_token: string | null;
   outras_posicoes: string[] | null;
+  numero: number | null;
   added_via_link: boolean | null;
   active: boolean;
   deleted_at: string | null;
@@ -663,6 +669,7 @@ const doJogador = (r: LinhaJogador) => ({
   weightKg: r.weight_kg != null ? Number(r.weight_kg) : undefined,
   inviteToken: r.invite_token ?? undefined,
   outrasPosicoes: r.outras_posicoes?.length ? r.outras_posicoes : undefined,
+  numero: r.numero ?? undefined,
   remoteId: r.id,
   updatedAt: r.updated_at,
   enviadoEm: r.updated_at,
@@ -1402,11 +1409,17 @@ function trocarJogadores(m: Match, de: Map<string, string>): Match {
     const novo = um(id);
     if (novo) scorers[novo] = n;
   }
+  const camisas: Record<string, number> = {};
+  for (const [id, n] of Object.entries(m.camisas ?? {})) {
+    const novo = um(id);
+    if (novo) camisas[novo] = n;
+  }
   return {
     ...m,
     teams: m.teams.map((t) => ({ ...t, playerIds: lista(t.playerIds) })),
     attendance: lista(m.attendance),
     scorers,
+    ...(m.camisas ? { camisas } : {}),
     games: m.games.map((g) => ({
       ...g,
       rallies: g.rallies?.map((r) => {
@@ -1954,6 +1967,12 @@ export async function assinarPlano(groupId: string, plano: 'pago' | 'vip', email
 /** Cancela no Mercado Pago. O plano vale até o fim do mês já pago */
 export async function cancelarAssinatura(groupId: string): Promise<void> {
   await chamarAssinatura({ acao: 'cancelar', group_id: groupId });
+}
+
+/** As cores das posições do time (migração 039). Nulo = as padrão */
+export async function salvarCoresPosicoes(groupId: string, cores: Record<string, string> | null): Promise<void> {
+  const { error } = await db().rpc('salvar_cores_posicoes', { p_group: groupId, p_cores: cores });
+  if (error) throw error;
 }
 
 export async function desfazerInformado(cobrancaId: string): Promise<void> {

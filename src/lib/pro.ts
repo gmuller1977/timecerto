@@ -79,6 +79,7 @@ export function comoPro(p: Player): ProPlayer {
     weightKg: p.weightKg,
     position: p.positions.volei,
     outrasPosicoes: p.outrasPosicoes,
+    numero: p.numero,
     createdAt: p.createdAt,
     remoteId: p.remoteId,
     inviteToken: p.inviteToken,
@@ -95,6 +96,7 @@ export function camposDoPro(d: Partial<ProPlayer>, atual?: Player): Partial<Play
   if ('heightCm' in d) out.heightCm = d.heightCm;
   if ('weightKg' in d) out.weightKg = d.weightKg;
   if ('outrasPosicoes' in d) out.outrasPosicoes = d.outrasPosicoes?.length ? d.outrasPosicoes : undefined;
+  if ('numero' in d) out.numero = d.numero;
   if ('position' in d) {
     const { volei: _v, ...outras } = atual?.positions ?? {};
     void _v;

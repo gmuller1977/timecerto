@@ -206,6 +206,7 @@ export function ScoreboardPage() {
           beforeFirstRally={rallies.length === 0}
           rotates={rotates}
           liberoId={pro.liberoId}
+          numeros={pro.numeros}
           players={players}
           onFirstServe={setFirstServe}
           onStartCourt={setStartCourt}

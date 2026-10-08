@@ -38,6 +38,8 @@ export interface ProSetup {
   homeTeamId: string;
   system: RotationSystem;
   liberoId?: string;
+  /** O número de cada atleta nesta partida (08/10/2026) */
+  numeros?: Record<string, number>;
 }
 
 /** Partida apagada que já estava na nuvem: a exclusão ainda precisa subir */
@@ -61,7 +63,14 @@ interface MatchState {
     teams: [MatchTeam, MatchTeam];
     scout?: Partial<ScoutSettings>;
     /** Escalação do time da casa — teams[0] */
-    lineup?: { system: RotationSystem; court: Court; liberoId?: string };
+    lineup?: {
+      system: RotationSystem;
+      court: Court;
+      liberoId?: string;
+      numeros?: Record<string, number>;
+      /** Quem saca primeiro: o time da casa (padrão) ou o adversário */
+      adversarioSaca?: boolean;
+    };
     /** Jogo a que a partida pertence (amador) */
     jogoId?: string;
     /** Profissional: amistoso ou campeonato */
@@ -138,7 +147,7 @@ export const useMatchStore = create<MatchState>()(
                 teams,
                 lineup && {
                   court: lineup.court,
-                  firstServeTeamId: teams[0].id,
+                  firstServeTeamId: lineup.adversarioSaca ? teams[1].id : teams[0].id,
                   subs: [],
                 },
               ),
@@ -150,6 +159,7 @@ export const useMatchStore = create<MatchState>()(
                 homeTeamId: teams[0].id,
                 system: lineup.system,
                 liberoId: lineup.liberoId,
+                ...(lineup.numeros ? { numeros: lineup.numeros } : {}),
               },
             }),
           },
@@ -349,6 +359,7 @@ export const useMatchStore = create<MatchState>()(
           mode: live.pro ? 'profissional' : 'amador',
           ...(live.jogoId ? { jogoId: live.jogoId } : {}),
           ...(live.competicao ? { competicao: live.competicao } : {}),
+          ...(live.pro?.numeros ? { camisas: live.pro.numeros } : {}),
           updatedAt: new Date().toISOString(),
         };
 

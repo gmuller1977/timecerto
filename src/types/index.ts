@@ -68,6 +68,8 @@ export interface Player {
   naipe?: Naipe;
   heightCm?: number;
   weightKg?: number;
+  /** Nº da camisa (migração 039): o de sempre; cada jogo pode trocar */
+  numero?: number;
   /** Token do link pessoal do atleta — vem do banco, nunca nasce no aparelho */
   inviteToken?: string;
   /**
@@ -395,6 +397,8 @@ export interface ProPlayer {
   position?: string;
   /** As outras posições, em ordem de preferência (migração 026) */
   outrasPosicoes?: string[];
+  /** Nº da camisa (migração 039) */
+  numero?: number;
   createdAt: string;
   /** Id na nuvem (players.id), depois que o grupo foi criado no banco */
   remoteId?: string;
@@ -420,6 +424,10 @@ export interface Lineup {
   court: Partial<Record<CourtPosition, string>>;
   liberoId?: string;
   bench: string[];
+  /** Quem foi marcado no passo 1 (08/10/2026) */
+  convocados?: string[];
+  /** O número de cada um no último jogo */
+  numeros?: Record<string, number>;
   createdAt: string;
 }
 
@@ -470,6 +478,8 @@ export interface Match {
   mode?: AppMode;
   /** Profissional: amistoso ou campeonato (pedido do Guilherme, 30/09/2026) */
   competicao?: TipoDeJogo;
+  /** Profissional: o número de cada atleta NESTA partida (08/10/2026) */
+  camisas?: Record<string, number>;
   /** Jogo (id LOCAL) a que a partida pertence */
   jogoId?: string;
   /** Id na nuvem (matches.id) */

@@ -75,6 +75,8 @@ export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onC
   );
   const alternar = (id: string) =>
     setPosicoes((atual) => (atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id]));
+  // O número de sempre; cada jogo pode trocar na escalação (08/10/2026)
+  const [numero, setNumero] = useState(player?.numero != null ? String(player.numero) : '');
   const [error, setError] = useState<string | null>(null);
 
   const age = birthDate ? ageOn(birthDate) : null;
@@ -98,7 +100,12 @@ export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onC
     if (weightKg === null) return setError('Peso inválido — use 78 ou 78,5.');
     if (weightKg === undefined) return setError('Falta o peso.');
     if (posicoes.length === 0) return setError('Escolha pelo menos uma posição.');
+    const n = numero.trim() === '' ? undefined : Number(numero);
+    if (n !== undefined && (!Number.isInteger(n) || n < 0 || n > 99)) {
+      return setError('Número da camisa de 0 a 99.');
+    }
     onSave({
+      numero: n,
       name: name.trim(),
       birthDate: birthDate || undefined,
       ageGroup,
@@ -195,6 +202,16 @@ export function ProPlayerSheet({ player, defaults, doTime, onSave, onDelete, onC
         )}
 
         <div className="mt-4 flex gap-3">
+          <div className="w-20 shrink-0">
+            <label className="block text-xs font-medium text-ink-400">Nº camisa</label>
+            <input
+              value={numero}
+              onChange={(e) => setNumero(e.target.value.replace(/\D/g, '').slice(0, 2))}
+              inputMode="numeric"
+              placeholder="7"
+              className="mt-1 w-full rounded-xl bg-ink-800 px-3 py-3 text-center text-[15px] text-ink-50 placeholder:text-ink-600 outline-none"
+            />
+          </div>
           <div className="min-w-0 flex-1">
             <label className="block text-xs font-medium text-ink-400">Altura (m)</label>
             <input

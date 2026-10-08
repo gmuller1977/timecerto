@@ -12,6 +12,7 @@ import {
 } from '@/lib/court';
 import { getPositionLabel } from '@/lib/sports';
 import { cn } from '@/lib/utils';
+import { posicaoDaCor, siglaDa, useCoresDasPosicoes } from '@/lib/posicoes';
 
 interface Props {
   home: MatchTeam;
@@ -22,6 +23,8 @@ interface Props {
   beforeFirstRally: boolean;
   rotates: boolean;
   liberoId?: string;
+  /** O número de cada atleta nesta partida (08/10/2026) */
+  numeros?: Record<string, number>;
   players: Player[];
   onFirstServe: (teamId: string) => void;
   onStartCourt: (court: Court) => void;
@@ -41,16 +44,32 @@ export function CourtPanel({
   beforeFirstRally,
   rotates,
   liberoId,
+  numeros,
   players,
   onFirstServe,
   onStartCourt,
   onSubstitute,
 }: Props) {
   const [picking, setPicking] = useState<CourtPosition | null>(null);
+  const cores = useCoresDasPosicoes();
 
   const byId = new Map(players.map((p) => [p.id, p]));
   const firstName = (id?: string) =>
     id ? (byId.get(id)?.name.split(' ')[0] ?? '?') : '—';
+  // "7 · Ana": o número desta partida, ou o do cadastro
+  const comNumero = (id?: string) => {
+    if (!id) return '—';
+    const n = numeros?.[id] ?? byId.get(id)?.numero;
+    return n != null ? `${n} · ${firstName(id)}` : firstName(id);
+  };
+  const corDe = (id?: string) => {
+    const pos = posicaoDaCor(id ? byId.get(id) : undefined, liberoId);
+    return { cor: pos ? cores[pos] : undefined, sigla: siglaDa(pos) };
+  };
+  // Como o vôlei chama a rotação: onde está o levantador (08/10/2026)
+  const posDoLevantador = (Object.keys(state.court) as unknown as CourtPosition[])
+    .map(Number)
+    .find((p) => byId.get(state.court[p as CourtPosition] ?? '')?.positions.volei === 'levantador');
 
   const homeServes = state.servingTeamId === home.id;
   const onCourt = courtPlayerIds(state.court);
@@ -83,9 +102,12 @@ export function CourtPanel({
     <div className="mx-2 mt-2 rounded-2xl border border-ink-800 bg-ink-900 px-3 pt-2.5 pb-3">
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
         <span className="font-semibold text-ink-200">{home.name}</span>
-        {rotates && (
-          <span className="text-ink-400">Rotação {(state.rotations % 6) + 1}</span>
-        )}
+        {rotates &&
+          (posDoLevantador ? (
+            <span className="font-medium text-ink-300">Levantador em P{posDoLevantador}</span>
+          ) : (
+            <span className="text-ink-400">Rotação {(state.rotations % 6) + 1}</span>
+          ))}
         <span className={cn(subsLeft <= 0 ? 'text-amber-300' : 'text-ink-400')}>
           Subst. {state.subsUsed}/{SUBS_PER_SET}
         </span>
@@ -93,37 +115,40 @@ export function CourtPanel({
           <span className="text-ink-400">Líbero {firstName(liberoId)}</span>
         )}
         <span className="ml-auto font-medium text-brand-300">
-          {homeServes ? `Saca ${firstName(state.court[1])}` : 'Recebendo'}
+          {homeServes ? `Saca ${comNumero(state.court[1])}` : 'Recebendo'}
         </span>
       </div>
 
       <div className="grid grid-cols-3 gap-1.5">
         {[...FRONT_ROW, ...BACK_ROW].map((pos) => {
           const serving = homeServes && pos === 1;
+          const { cor, sigla } = corDe(state.court[pos]);
           return (
             <button
               key={pos}
               onClick={() => setPicking(pos)}
               className={cn(
-                'relative flex h-11 items-center justify-center rounded-lg border px-1 active:scale-[0.98]',
-                serving
-                  ? 'border-brand-500 bg-brand-500/15'
-                  : FRONT_ROW.includes(pos)
-                    ? 'border-ink-700 bg-ink-800'
-                    : 'border-ink-800 bg-ink-950',
+                'relative flex h-12 flex-col items-center justify-center rounded-lg border-2 px-1 active:scale-[0.98]',
+                serving ? 'bg-brand-500/15' : FRONT_ROW.includes(pos) ? 'bg-ink-800' : 'bg-ink-950',
               )}
+              style={{ borderColor: cor ?? (serving ? undefined : 'transparent') }}
             >
-              <span className="absolute top-0.5 left-1.5 text-[9px] font-bold text-ink-600">
-                {pos}
+              <span className="absolute top-0.5 left-1.5 text-[9px] font-bold text-ink-500">
+                P{pos}
               </span>
               <span
                 className={cn(
-                  'truncate text-[13px] font-medium',
+                  'max-w-full truncate text-[13px] font-medium',
                   serving ? 'text-brand-200' : 'text-ink-100',
                 )}
               >
-                {firstName(state.court[pos])}
+                {comNumero(state.court[pos])}
               </span>
+              {sigla && (
+                <span className="text-[9px] font-semibold leading-none" style={{ color: cor }}>
+                  {sigla}
+                </span>
+              )}
             </button>
           );
         })}
