@@ -3,6 +3,8 @@ import { unificarElenco } from '@/store/unificarElenco';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
 import { useHydrated } from '@/store/useHydrated';
 import { useJogoStore } from '@/store/useJogoStore';
+import { useAppStore } from '@/store/useAppStore';
+import { useGrupoAtivo } from '@/store/useGrupoAtivo';
 import { HashRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { HomePage } from '@/pages/HomePage';
 import { AberturaPage } from '@/pages/AberturaPage';
@@ -58,6 +60,29 @@ function MigracaoPresent() {
   return null;
 }
 
+/**
+ * Com um grupo ativo, o modo do app é SEMPRE o do grupo. Relatado em
+ * 08/10/2026: o Audax, time profissional, abriu a aba Atletas da pelada
+ * (mensalista/convidado) — o modo guardado no aparelho tinha ficado "amador"
+ * enquanto o grupo ativo era o time. Em vez de caçar cada caminho que pode
+ * desalinhar os dois, a regra fica num lugar só e corrige na hora.
+ */
+function ElencoDaPelada() {
+  const mode = useAppStore((s) => s.mode);
+  return mode === 'profissional' ? <Navigate to="/profissional" replace /> : <RosterPage />;
+}
+
+function ModoDoGrupo() {
+  const hydrated = useHydrated();
+  const ativo = useGrupoAtivo();
+  const mode = useAppStore((s) => s.mode);
+  useEffect(() => {
+    if (!hydrated || !ativo) return;
+    if (mode !== ativo.mode) useAppStore.getState().setMode(ativo.mode);
+  }, [hydrated, ativo, mode]);
+  return null;
+}
+
 // Base única: atletas, jogos, sorteios e respostas iguais em todos os aparelhos
 const SincronizacaoNuvem = lazy(() =>
   import('@/components/cloud/SincronizacaoNuvem').then((m) => ({
@@ -103,6 +128,7 @@ export default function App() {
   return (
     <HashRouter>
       <MigracaoPresent />
+      <ModoDoGrupo />
       <Nuvem />
       <Suspense fallback={null}>
         <Routes>
@@ -131,7 +157,8 @@ export default function App() {
               <Route path="/partida" element={<QuickMatchPage />} />
               <Route path="/partida/:id" element={<MatchSummaryPage />} />
               <Route path="/historico" element={<HistoryPage />} />
-              <Route path="/elenco" element={<RosterPage />} />
+              {/* A tela de atletas da pelada (mensalista/convidado) nunca abre num time */}
+              <Route path="/elenco" element={<ElencoDaPelada />} />
               <Route path="/jogador/:id" element={<PlayerProfilePage />} />
               <Route
                 path="/financeiro"
