@@ -1,5 +1,5 @@
 import type { jsPDF as JsPDF } from 'jspdf';
-import type { Match, Player, Rally, VolleyAction } from '@/types';
+import type { Game, Match, Player, Rally, VolleyAction } from '@/types';
 import { ERROR_ACTIONS } from '@/lib/volley';
 import { allRallies, hasDetail, readGiftedShare, SERIES, setsWonBy, teamScout } from '@/lib/volleyStats';
 import { getPositionLabel } from '@/lib/sports';
@@ -112,7 +112,19 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
     r.y += 2;
   });
 
-  // ── 3 e 4. Pontos e erros, do fundamento a quem fez ──
+  // ── 3. A evolução do placar, ponto a ponto, uma página deitada por set ──
+  const curto = (id?: string) => {
+    if (!id) return '';
+    const p = jogadorDe(id);
+    const n = match.camisas?.[id] ?? p?.numero;
+    const c = p ? p.nickname?.trim() || p.name.split(' ')[0] : 'Jogador';
+    return n != null ? `${n} · ${c}` : c;
+  };
+  match.games.forEach((g, i) => {
+    if ((g.rallies ?? []).length) graficoDoSet(doc, match, g, i, curto);
+  });
+
+  // ── 4 e 5. Pontos e erros, do fundamento a quem fez ──
   const rallies = allRallies(match);
   const comElenco = times.filter((t) => rallies.some((x) => x.playerId && t.playerIds.includes(x.playerId)));
   const quem = (lista: Rally[]) => {
@@ -129,7 +141,7 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
 
   for (const t of comElenco) {
     r.novaPagina();
-    r.secao(`3. Pontos — ${t.name}`);
+    r.secao(`4. Pontos — ${t.name}`);
     const meus = rallies.filter((x) => x.kind === 'ponto' && x.teamId === t.id);
     r.sozinha(`${meus.length} pontos de mérito`, origem(match, t.id).filter((f) => f.label !== 'Erro do adversário'));
     for (const p of PONTOS) {
@@ -139,7 +151,7 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
 
     r.espaco(80);
     r.y += 4;
-    r.secao(`4. Erros — ${t.name}`);
+    r.secao(`5. Erros — ${t.name}`);
     const erros = rallies.filter((x) => x.kind === 'erro' && x.teamId !== t.id);
     r.sozinha(`${erros.length} erros cometidos`, errosDe(match, t.id));
     for (const e of ERROS) {
@@ -159,7 +171,7 @@ export async function gerarRelatorioDoScout(match: Match, jogadorDe: (id: string
       })
       .sort((a, b) => b.saldo - a.saldo || b.feitos.length - a.feitos.length);
     r.novaPagina();
-    r.secao(`5. Jogadores — ${t.name}`);
+    r.secao(`6. Jogadores — ${t.name}`);
     r.nota('Ordenados pelo saldo: pontos feitos menos erros cometidos.');
     for (const j of linhas) {
       const p = jogadorDe(j.id);
@@ -190,8 +202,11 @@ function rodape(doc: JsPDF): JsPDF {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(140);
-    doc.text('Scout feito no TimeCerto', 15, 290);
-    doc.text(`${i} / ${n}`, 195, 290, { align: 'right' });
+    // A página do gráfico é deitada: o rodapé segue o tamanho de cada uma
+    const w = doc.internal.pageSize.getWidth();
+    const h = doc.internal.pageSize.getHeight();
+    doc.text('Scout feito no TimeCerto', 15, h - 7);
+    doc.text(`${i} / ${n}`, w - 15, h - 7, { align: 'right' });
   }
   return doc;
 }
@@ -222,6 +237,157 @@ async function entregar(doc: JsPDF, match: Match) {
   doc.save(nome);
 }
 
+/**
+ * O gráfico de linha de um set (pedido do Guilherme em 08/10/2026): o placar
+ * dos dois times rally a rally, uma bolinha em cada ponto na linha de quem
+ * pontuou, com a cor do fundamento. A descrição de cada ponto vai numa faixa
+ * — em cima a do primeiro time, embaixo a do segundo — alinhada à bolinha:
+ * escrita em cima do gráfico, num set de 45 pontos, ninguém leria nada.
+ */
+function graficoDoSet(doc: JsPDF, match: Match, g: Game, idx: number, curto: (id?: string) => string) {
+  doc.addPage('a4', 'landscape');
+  const [teamA, teamB] = match.teams;
+  const rallies = g.rallies ?? [];
+  const L = 22;
+  const R = 282;
+  const faixaA = [24, 56] as const;
+  const area = [60, 150] as const;
+  const faixaB = [154, 186] as const;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(30);
+  doc.setFillColor('#1e3a8a');
+  doc.rect(15, 9, 2, 7, 'F');
+  doc.text(`3. Evolução do placar — ${idx + 1}º set, ${g.scoreA} x ${g.scoreB}`, 20, 14);
+
+  // Legenda: as duas linhas e os fundamentos
+  const LINHA_A = '#1e293b';
+  const LINHA_B = '#94a3b8';
+  let lx = 20;
+  // Cada item: o desenho (recebe o x onde começa) e o texto ao lado
+  const legenda = (desenho: (x: number) => void, texto: string) => {
+    desenho(lx);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(60);
+    doc.text(texto, lx + 6, 20.5);
+    lx += 8 + doc.getTextWidth(texto) + 4;
+  };
+  const traco = (cor: string) => (x: number) => {
+    doc.setDrawColor(cor);
+    doc.setLineWidth(0.8);
+    doc.line(x, 19.5, x + 4.5, 19.5);
+    doc.setLineWidth(0.2);
+  };
+  legenda(traco(LINHA_A), teamA.name);
+  legenda(traco(LINHA_B), teamB.name);
+  for (const p of PONTOS) {
+    legenda((x) => {
+      doc.setFillColor(SERIES[p.action]);
+      doc.circle(x + 2, 19.5, 1.3, 'F');
+    }, p.label);
+  }
+  legenda((x) => {
+    doc.setDrawColor('#6e6e6e');
+    doc.setFillColor('#ffffff');
+    doc.setLineWidth(0.35);
+    doc.circle(x + 2, 19.5, 1.2, 'FD');
+    doc.setLineWidth(0.2);
+  }, 'Erro do adversário');
+
+  // Escalas
+  const n = rallies.length;
+  const maxY = Math.max(g.scoreA, g.scoreB, 1);
+  const X = (i: number) => L + ((R - L) * i) / Math.max(n, 1);
+  const Y = (v: number) => area[1] - ((area[1] - area[0]) * v) / maxY;
+
+  // Grade a cada 5 pontos
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  for (let v = 0; v <= maxY; v += 5) {
+    doc.setDrawColor(232);
+    doc.line(L, Y(v), R, Y(v));
+    doc.setTextColor(130);
+    doc.text(String(v), L - 2, Y(v) + 1, { align: 'right' });
+  }
+  doc.setDrawColor(190);
+  doc.line(L, area[1], R, area[1]);
+
+  // Guia vertical fraca de cada ponto até a faixa da descrição
+  rallies.forEach((r, i) => {
+    const doA = r.teamId === g.teamAId;
+    const x = X(i + 1);
+    const y = Y(doA ? r.scoreA : r.scoreB);
+    doc.setDrawColor(238);
+    doc.setLineDashPattern([0.6, 0.8], 0);
+    doc.line(x, doA ? faixaA[1] + 1 : y, x, doA ? y : faixaB[0] - 1);
+    doc.setLineDashPattern([], 0);
+  });
+
+  // As duas linhas
+  const linha = (cor: string, valor: (r: Rally) => number) => {
+    doc.setDrawColor(cor);
+    doc.setLineWidth(0.6);
+    let px = X(0);
+    let py = Y(0);
+    rallies.forEach((r, i) => {
+      const x = X(i + 1);
+      const y = Y(valor(r));
+      doc.line(px, py, x, y);
+      px = x;
+      py = y;
+    });
+    doc.setLineWidth(0.2);
+  };
+  linha(LINHA_B, (r) => r.scoreB);
+  linha(LINHA_A, (r) => r.scoreA);
+
+  // A bolinha de cada ponto e a descrição na faixa do time
+  const raio = Math.min(1.4, ((R - L) / Math.max(n, 1)) * 0.3);
+  const fonte = Math.min(6.5, Math.max(4.5, ((R - L) / Math.max(n, 1)) * 1.3));
+  rallies.forEach((r, i) => {
+    const doA = r.teamId === g.teamAId;
+    const x = X(i + 1);
+    const y = Y(doA ? r.scoreA : r.scoreB);
+    if (r.kind === 'ponto') {
+      doc.setFillColor(SERIES[r.action]);
+      doc.circle(x, y, raio, 'F');
+    } else {
+      doc.setDrawColor('#6e6e6e');
+      doc.setFillColor('#ffffff');
+      doc.setLineWidth(0.35);
+      doc.circle(x, y, raio * 0.9, 'FD');
+      doc.setLineWidth(0.2);
+    }
+
+    const tipo =
+      r.kind === 'ponto'
+        ? (PONTOS.find((p) => p.action === r.action)?.label ?? 'Ponto')
+        : (ERROS.find((e) => e.action === r.action)?.label ?? 'Erro');
+    const quem = curto(r.playerId);
+    const texto =
+      r.kind === 'ponto'
+        ? [quem, tipo].filter(Boolean).join(' · ')
+        : `Erro: ${tipo.replace(/^Erro de /, '')}${quem ? ` (${quem})` : ''}`;
+    doc.setFont('helvetica', r.kind === 'ponto' ? 'bold' : 'normal');
+    doc.setFontSize(fonte);
+    doc.setTextColor(r.kind === 'ponto' ? 40 : 120);
+    const larg = Math.min(doc.getTextWidth(texto), 31);
+    // Texto de baixo para cima; em cima encosta no gráfico, embaixo também
+    if (doA) doc.text(texto, x + fonte * 0.12, faixaA[1], { angle: 90, maxWidth: 31 });
+    else doc.text(texto, x + fonte * 0.12, faixaB[0] + larg, { angle: 90, maxWidth: 31 });
+  });
+
+  // Nome das faixas
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(LINHA_A);
+  doc.text(teamA.name, L - 2, faixaA[1], { angle: 90 });
+  doc.setTextColor(LINHA_B);
+  doc.text(teamB.name, L - 2, faixaB[1], { angle: 90 });
+}
+
 /** O desenho do relatório: posição vertical, quebra de página, pizza e legenda */
 class Relatorio {
   y = 18;
@@ -244,7 +410,8 @@ class Relatorio {
   }
 
   novaPagina() {
-    this.doc.addPage();
+    // Em pé: a página anterior pode ser a deitada do gráfico
+    this.doc.addPage('a4', 'portrait');
     this.y = 18;
   }
 
