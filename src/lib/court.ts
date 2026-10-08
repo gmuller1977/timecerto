@@ -89,6 +89,33 @@ export function courtPlayerIds(court: Court): string[] {
   return COURT_ORDER.map((p) => court[p]).filter((x): x is string => Boolean(x));
 }
 
+/**
+ * Quem está DE FATO em quadra, com o líbero (pedido do Guilherme em
+ * 08/10/2026): o líbero joga no lugar do central que está no fundo (P5, P6,
+ * P1). A exceção é o saque: central em P1 com o saque do time saca ele mesmo;
+ * quando o saque vai para o outro time, o líbero entra. Quando o central volta
+ * para a rede, em P4, reaparece.
+ *
+ * É derivado a cada rally, nunca guardado, e não conta como substituição — a
+ * troca do líbero é livre na regra. Os dois centrais ficam opostos no rodízio,
+ * então no máximo um está no fundo de cada vez.
+ */
+export function comLibero(
+  court: Court,
+  liberoId: string | undefined,
+  sacando: boolean,
+  ehCentral: (id: string) => boolean,
+): Court {
+  if (!liberoId || courtPlayerIds(court).includes(liberoId)) return court;
+  for (const pos of BACK_ROW) {
+    const id = court[pos];
+    if (!id || !ehCentral(id)) continue;
+    if (pos === 1 && sacando) continue;
+    return { ...court, [pos]: liberoId };
+  }
+  return court;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Validação da escalação
 // ─────────────────────────────────────────────────────────────

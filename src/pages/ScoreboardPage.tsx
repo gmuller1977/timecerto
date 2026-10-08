@@ -8,7 +8,7 @@ import { PointSheet, type PointDraft } from '@/components/scout/PointSheet';
 import { CourtPanel } from '@/components/scout/CourtPanel';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ACTION_LABEL, POINTS_OPTIONS, currentRun } from '@/lib/volley';
-import { courtPlayerIds, courtStateAt } from '@/lib/court';
+import { comLibero, courtPlayerIds, courtStateAt } from '@/lib/court';
 import { ROTATIONS } from '@/lib/rotation';
 import type { MatchTeam, ScoutMode } from '@/types';
 import { cn } from '@/lib/utils';
@@ -57,17 +57,21 @@ export function ScoreboardPage() {
       ? courtStateAt(current.lineup, rallies, pro.homeTeamId, rotates)
       : null;
 
-  // No scout do atleta, "quem fez?" lista só quem está em quadra
+  // Quem está de fato em quadra: o líbero no lugar do central do fundo
+  const quadra =
+    courtState && pro
+      ? comLibero(
+          courtState.court,
+          pro.liberoId,
+          courtState.servingTeamId === pro.homeTeamId,
+          (id) => id !== pro.levantadorId && players.find((p) => p.id === id)?.positions.volei === 'central',
+        )
+      : null;
+
+  // No scout do atleta, "quem fez?" lista só quem está em quadra — e o líbero
+  // só quando está jogando, no lugar do central
   const active = (team: MatchTeam): MatchTeam =>
-    courtState && team.id === pro?.homeTeamId
-      ? {
-          ...team,
-          playerIds: [
-            ...courtPlayerIds(courtState.court),
-            ...(pro.liberoId ? [pro.liberoId] : []),
-          ],
-        }
-      : team;
+    quadra && team.id === pro?.homeTeamId ? { ...team, playerIds: courtPlayerIds(quadra) } : team;
 
   const setsWon = live.teams.map(
     (t) =>
@@ -310,7 +314,7 @@ export function ScoreboardPage() {
                   liberoId: pro.liberoId,
                   levantadorId: pro.levantadorId,
                   numeros: pro.numeros,
-                  quadra: courtState?.court,
+                  quadra: quadra ?? undefined,
                   homeTeamId: pro.homeTeamId,
                 }
               : undefined

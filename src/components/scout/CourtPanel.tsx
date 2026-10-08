@@ -6,6 +6,7 @@ import {
   FRONT_ROW,
   POSITION_LABEL,
   SUBS_PER_SET,
+  comLibero,
   courtPlayerIds,
   type Court,
   type CourtState,
@@ -78,6 +79,11 @@ export function CourtPanel({
     });
 
   const homeServes = state.servingTeamId === home.id;
+  // O que se vê: o líbero no lugar do central do fundo. O rodízio e as
+  // substituições continuam valendo sobre a escalação de verdade (state.court).
+  const ehCentral = (id: string) => id !== levantadorId && byId.get(id)?.positions.volei === 'central';
+  const quadra = comLibero(state.court, liberoId, homeServes, ehCentral);
+  const centralNoBanco = Object.entries(quadra).find(([p, id]) => id === liberoId && state.court[Number(p) as CourtPosition] !== liberoId)?.[0];
   const onCourt = courtPlayerIds(state.court);
   const bench = home.playerIds.filter(
     (id) => !onCourt.includes(id) && id !== liberoId && byId.has(id),
@@ -118,7 +124,10 @@ export function CourtPanel({
           Subst. {state.subsUsed}/{SUBS_PER_SET}
         </span>
         {liberoId && (
-          <span className="text-ink-400">Líbero {firstName(liberoId)}</span>
+          <span className="text-ink-400">
+            Líbero {firstName(liberoId)}
+            {centralNoBanco && ` · no lugar de ${firstName(state.court[Number(centralNoBanco) as CourtPosition])}`}
+          </span>
         )}
         <span className="ml-auto font-medium text-brand-300">
           {homeServes ? `Saca ${comNumero(state.court[1])}` : 'Recebendo'}
@@ -128,7 +137,7 @@ export function CourtPanel({
       <div className="grid grid-cols-3 gap-1.5">
         {[...FRONT_ROW, ...BACK_ROW].map((pos) => {
           const serving = homeServes && pos === 1;
-          const { cor, sigla } = corDe(state.court[pos]);
+          const { cor, sigla } = corDe(quadra[pos]);
           return (
             <button
               key={pos}
@@ -147,7 +156,7 @@ export function CourtPanel({
               <span
                 className={cn('max-w-full truncate text-[13px] font-semibold', cor ? 'text-ink-950' : 'text-ink-100')}
               >
-                {comNumero(state.court[pos])}
+                {comNumero(quadra[pos])}
               </span>
               {sigla && (
                 <span className={cn('text-[9px] font-bold leading-none', cor ? 'text-ink-950/80' : 'text-ink-400')}>
@@ -199,6 +208,11 @@ export function CourtPanel({
                 <p className="text-xs text-ink-500">
                   Posição {picking} · {POSITION_LABEL[picking]}
                 </p>
+                {quadra[picking] !== state.court[picking] && (
+                  <p className="mt-1 text-xs text-ink-400">
+                    O líbero está no lugar dela agora; a troca vale para quem volta na rede.
+                  </p>
+                )}
               </div>
               <button onClick={() => setPicking(null)} className="p-1 text-ink-500">
                 <X size={20} />
