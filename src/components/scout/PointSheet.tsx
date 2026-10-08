@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, X } from 'lucide-react';
-import type { MatchTeam, Player, ScoutMode, VolleyAction } from '@/types';
+import type { CourtPosition, MatchTeam, Player, ScoutMode, VolleyAction } from '@/types';
+import { BACK_ROW, FRONT_ROW, type Court } from '@/lib/court';
 import { ERROR_ACTIONS, POINT_ACTIONS } from '@/lib/volley';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { cn } from '@/lib/utils';
@@ -21,7 +22,14 @@ interface Props {
   players: Player[];
   mode: ScoutMode;
   /** No profissional: pinta cada atleta com a cor da posição (08/10/2026) */
-  pro?: { liberoId?: string; levantadorId?: string; numeros?: Record<string, number> };
+  pro?: {
+    liberoId?: string;
+    levantadorId?: string;
+    numeros?: Record<string, number>;
+    /** A quadra no momento do ponto: a lista sai na mesma disposição */
+    quadra?: Court;
+    homeTeamId?: string;
+  };
   onConfirm: (draft: PointDraft) => void;
   onClose: () => void;
 }
@@ -79,7 +87,63 @@ export function PointSheet({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {(() => {
+          const byId = new Map(list.map((p) => [p.id, p]));
+          // Como na quadra (08/10/2026): rede em cima (P4 P3 P2), fundo embaixo
+          // (P5 P6 P1), e o líbero numa linha à parte
+          const naQuadra = pro?.quadra && team.id === pro.homeTeamId;
+          if (!naQuadra) return null;
+          const celula = (pos: CourtPosition) => {
+            const p = byId.get(pro.quadra![pos] ?? '');
+            if (!p) return <div key={pos} />;
+            const cp = posicaoDaCor(p, pro.liberoId, pro.levantadorId);
+            const cor = cp ? cores[cp] : undefined;
+            const numero = pro.numeros?.[p.id] ?? p.numero;
+            return (
+              <button
+                key={pos}
+                onClick={() => onConfirm({ ...draft, playerId: p.id })}
+                className={cn(
+                  'relative flex h-20 flex-col items-center justify-center rounded-xl border px-1 active:scale-[0.98]',
+                  cor ? 'border-transparent text-ink-950' : 'border-ink-700 bg-ink-800 text-ink-50',
+                )}
+                style={cor ? { background: cor } : undefined}
+              >
+                <span className="absolute top-1 left-1.5 text-[9px] font-bold opacity-70">P{pos}</span>
+                <span className="flex size-8 items-center justify-center rounded-full bg-ink-950/20 text-[10px] font-bold">
+                  {siglaDa(cp)}
+                </span>
+                <span className="mt-1 max-w-full truncate text-[13px] font-semibold">
+                  {numero != null ? `${numero} · ${nomeCurto(p)}` : nomeCurto(p)}
+                </span>
+              </button>
+            );
+          };
+          const libero = pro.liberoId ? byId.get(pro.liberoId) : undefined;
+          const naQuadraIds = new Set(Object.values(pro.quadra!));
+          return (
+            <>
+              <div className="grid grid-cols-3 gap-2">
+                {FRONT_ROW.map(celula)}
+                {BACK_ROW.map(celula)}
+              </div>
+              {libero && !naQuadraIds.has(libero.id) && (
+                <button
+                  onClick={() => onConfirm({ ...draft, playerId: libero.id })}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-[14px] font-semibold text-ink-950 active:scale-[0.98]"
+                  style={{ background: cores.libero }}
+                >
+                  <span className="text-[10px] font-bold opacity-75">LIB</span>
+                  {(pro.numeros?.[libero.id] ?? libero.numero) != null
+                    ? `${pro.numeros?.[libero.id] ?? libero.numero} · ${nomeCurto(libero)}`
+                    : nomeCurto(libero)}
+                </button>
+              )}
+            </>
+          );
+        })()}
+
+        <div className={cn('grid grid-cols-2 gap-2', pro?.quadra && team.id === pro.homeTeamId && 'hidden')}>
           {list.map((p) => {
             // No profissional, a caixa pintada como na quadra: sigla, número e apelido
             const pos = pro ? posicaoDaCor(p, pro.liberoId, pro.levantadorId) : null;

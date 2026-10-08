@@ -304,7 +304,17 @@ export function ScoreboardPage() {
           opponentTeam={pending.opp}
           players={players}
           mode={live.scout.mode}
-          pro={pro ? { liberoId: pro.liberoId, levantadorId: pro.levantadorId, numeros: pro.numeros } : undefined}
+          pro={
+            pro
+              ? {
+                  liberoId: pro.liberoId,
+                  levantadorId: pro.levantadorId,
+                  numeros: pro.numeros,
+                  quadra: courtState?.court,
+                  homeTeamId: pro.homeTeamId,
+                }
+              : undefined
+          }
           onConfirm={confirm}
           onClose={() => setPending(null)}
         />
