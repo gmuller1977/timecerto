@@ -94,10 +94,10 @@ export function MatchSummaryPage() {
         }))
     : [];
 
-  // O scout vai em PDF, não em texto (pedido do Guilherme em 08/10/2026)
+  // O scout vai em PDF, não em texto: um relatório do jogo ao atleta (08/10/2026)
   async function shareSummary() {
     const { compartilharScoutEmPdf } = await import('@/lib/scoutPdf');
-    await compartilharScoutEmPdf(match!, nameOf);
+    await compartilharScoutEmPdf(match!, (pid) => players.find((p) => p.id === pid));
   }
 
   return (
