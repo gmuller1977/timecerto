@@ -21,7 +21,6 @@ import {
   teamScout,
 } from '@/lib/volleyStats';
 import { DivergingBars, RankedBars, StackedBar, type Slice } from '@/components/charts/Bars';
-import { shareOnWhatsApp } from '@/lib/share';
 import { formatDate } from '@/lib/stats';
 import { cn } from '@/lib/utils';
 
@@ -95,23 +94,10 @@ export function MatchSummaryPage() {
         }))
     : [];
 
-  function shareSummary() {
-    const lines = [
-      `🏐 *${teamA.name} ${setsWonBy(match!, teamA.id)} x ${setsWonBy(match!, teamB.id)} ${teamB.name}*`,
-      '',
-      ...match!.games.map(
-        (g, i) => `${i + 1}º set: ${g.scoreA} x ${g.scoreB}`,
-      ),
-    ];
-    if (detailed) {
-      lines.push(
-        '',
-        `*${teamA.name}* — ${scoutA.earned} pontos conquistados, ${scoutA.errors} erros`,
-        `*${teamB.name}* — ${scoutB.earned} pontos conquistados, ${scoutB.errors} erros`,
-      );
-    }
-    lines.push('', '_Scout feito no TimeCerto_ ⚡');
-    shareOnWhatsApp(lines.join('\n'));
+  // O scout vai em PDF, não em texto (pedido do Guilherme em 08/10/2026)
+  async function shareSummary() {
+    const { compartilharScoutEmPdf } = await import('@/lib/scoutPdf');
+    await compartilharScoutEmPdf(match!, nameOf);
   }
 
   return (
@@ -124,7 +110,7 @@ export function MatchSummaryPage() {
           <h1 className="text-xl font-bold">{match.mode === 'profissional' ? 'Resumo da partida' : 'Resumo do jogo'}</h1>
           <p className="text-xs text-ink-400">{formatDate(match.date)}</p>
         </div>
-        <button onClick={shareSummary} className="p-1.5 text-ink-400">
+        <button onClick={shareSummary} aria-label="Compartilhar o scout em PDF" className="p-1.5 text-ink-400">
           <Share2 size={19} />
         </button>
       </header>
