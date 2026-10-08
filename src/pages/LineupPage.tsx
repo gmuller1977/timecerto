@@ -185,23 +185,48 @@ function LineupEditor() {
   const posDoLevantador = setterId
     ? (Number(Object.entries(court).find(([, id]) => id === setterId)?.[0]) as CourtPosition)
     : undefined;
+  // Quem os chips movem: o escolhido no passo 1, mesmo antes de estar em quadra
+  const levantadorDoJogo = levantadorId ?? setterId;
   function levantadorEm(pos: CourtPosition) {
-    if (!setterId) return;
-    const girado = allRotations(court).find((c) => c[pos] === setterId);
+    if (!levantadorDoJogo) return;
+    // Fora da quadra, entra direto na posição; em quadra, gira o time inteiro
+    if (!onCourt.includes(levantadorDoJogo)) return place(pos, levantadorDoJogo);
+    const girado = allRotations(court).find((c) => c[pos] === levantadorDoJogo);
     if (girado) setCourt(girado);
+  }
+
+  /*
+   * A função que cabe em cada posição, contada a partir do levantador (pedido
+   * do Guilherme em 08/10/2026). No 5x1, com ele em P1: oposto em P4, centrais
+   * em P3 e P6, ponteiros em P2 e P5. O rodízio preserva a distância, então a
+   * mesma conta vale com o levantador em qualquer posição.
+   */
+  function funcaoEsperada(pos: CourtPosition): { id: string; plural: string } | undefined {
+    if (system !== '5x1' || !posDoLevantador || pos === posDoLevantador) return undefined;
+    const d = (((pos - posDoLevantador) % 6) + 6) % 6;
+    if (d === 3) return { id: 'oposto', plural: 'Opostos' };
+    if (d === 2 || d === 5) return { id: 'central', plural: 'Centrais' };
+    return { id: 'ponteiro', plural: 'Ponteiros' };
   }
 
   function irParaPosicoes() {
     // Quem saiu da convocação sai da quadra e do líbero
+    const lev = levantadorId && convocados.has(levantadorId) ? levantadorId : undefined;
     setCourt((c) => {
       const next: Court = {};
       for (const [pos, id] of Object.entries(c)) {
         if (id && convocados.has(id)) next[Number(pos) as CourtPosition] = id;
       }
+      // O levantador escolhido no passo 1 já chega em quadra (08/10/2026): na
+      // primeira posição livre a partir de P1, ou em P1 se a quadra estiver cheia
+      if (lev && !Object.values(next).includes(lev)) {
+        const livre = ([1, 6, 5, 4, 3, 2] as CourtPosition[]).find((x) => !next[x]) ?? 1;
+        next[livre] = lev;
+      }
       return next;
     });
     if (liberoId && !convocados.has(liberoId)) setLiberoId(undefined);
-    if (levantadorId && !convocados.has(levantadorId)) setLevantadorId(undefined);
+    if (!lev) setLevantadorId(undefined);
     setPasso(2);
     window.scrollTo(0, 0);
   }
@@ -479,10 +504,15 @@ function LineupEditor() {
         <p className="mt-2 text-xs text-ink-500">{ROTATIONS[system].summary}</p>
       </section>
 
-      {/* O levantador em P1…P6 (08/10/2026): gira o time inteiro */}
+      {/* O levantador em P1…P6 (08/10/2026): coloca ou gira o time inteiro */}
       <section className="mt-5">
-        <p className="mb-2 text-sm font-medium text-ink-300">Começar com o levantador em</p>
-        {setterId ? (
+        <p className="mb-2 text-sm font-medium text-ink-300">
+          Posição do levantador em quadra
+          {levantadorDoJogo && (
+            <span className="font-normal text-ink-500"> — {nameOf(levantadorDoJogo)}</span>
+          )}
+        </p>
+        {levantadorDoJogo ? (
           <div className="flex flex-wrap gap-2">
             {([1, 6, 5, 4, 3, 2] as CourtPosition[]).map((pos) => (
               <button
@@ -501,7 +531,7 @@ function LineupEditor() {
             ))}
           </div>
         ) : (
-          <p className="text-xs text-ink-500">Escale um levantador na quadra para escolher onde ele começa.</p>
+          <p className="text-xs text-ink-500">Escolha o levantador na escalação para posicioná-lo aqui.</p>
         )}
       </section>
 
@@ -729,9 +759,13 @@ function LineupEditor() {
           </p>
 
           <div className="flex flex-col gap-2">
-            {volleyPlayers
-              .filter((p) => p.id !== liberoId)
-              .map((p) => {
+            {(() => {
+              // Primeiro quem é da função da posição, depois os outros
+              const esperada = funcaoEsperada(picking);
+              const lista = volleyPlayers.filter((p) => p.id !== liberoId);
+              const daFuncao = esperada ? lista.filter((p) => p.positions.volei === esperada.id) : [];
+              const outros = lista.filter((p) => !daFuncao.includes(p));
+              const item = (p: (typeof lista)[number]) => {
                 const already = onCourt.includes(p.id);
                 const { cor, sigla, numero } = infoDe(p.id);
                 return (
@@ -781,7 +815,20 @@ function LineupEditor() {
                     </select>
                   </div>
                 );
-              })}
+              };
+              return (
+                <>
+                  {daFuncao.length > 0 && esperada && (
+                    <p className="mt-1 text-[11px] font-semibold tracking-wide text-ink-500 uppercase">{esperada.plural}</p>
+                  )}
+                  {daFuncao.map(item)}
+                  {daFuncao.length > 0 && outros.length > 0 && (
+                    <p className="mt-1 text-[11px] font-semibold tracking-wide text-ink-500 uppercase">Outros jogadores</p>
+                  )}
+                  {outros.map(item)}
+                </>
+              );
+            })()}
           </div>
 
           {court[picking] && (
