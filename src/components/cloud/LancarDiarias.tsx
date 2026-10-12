@@ -152,12 +152,18 @@ export function LancarDiarias({
           {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
         </>
       )}
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="secondary" onClick={onFechar}>
           {feito !== null || pendentes.length === 0 ? 'Fechar' : 'Agora não'}
         </Button>
-        {onCobrar && temParaCobrar && (antecipada || pendentes.length === 0) && (
-          <Button size="sm" className="flex-1" onClick={onCobrar}>
+        {/* Cobrar no grupo também sem lançar (12/10/2026): a mensagem sai com os convidados que jogaram */}
+        {onCobrar && (temParaCobrar || convidados.length > 0) && (
+          <Button
+            size="sm"
+            variant={pendentes.length > 0 && !antecipada ? 'secondary' : undefined}
+            className="flex-1"
+            onClick={onCobrar}
+          >
             Cobrar agora
           </Button>
         )}
