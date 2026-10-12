@@ -379,12 +379,9 @@ export function GuestGroupPage() {
   const seEntrarAgora: { texto: string; detalhe: string | null; cheio: boolean } | null = !event
     ? null
     : fase.tipo === 'mensalistas' && !fechada
-      ? {
-          // Os mesmos textos da faixa do jogo (06/10/2026)
-          texto: 'Lista aberta para mensalistas.',
-          detalhe: `Deixe seu nome na lista de espera. Na ${diaDaAbertura}, quem estiver na lista de espera entra na lista do jogo.`,
-          cheio: true,
-        }
+      ? // A faixa do topo já explica a lista dos mensalistas: repetir aqui
+        // dizia a mesma coisa duas vezes (pedido do Guilherme, 12/10/2026)
+        null
       : fechada
       ? encerradas
       : event.slots == null
