@@ -490,7 +490,7 @@ function Pagina({
       )}
       {cobrando && (
         <Suspense fallback={null}>
-          <CobrarODia jogo={jogo} onFechar={() => setCobrando(false)} />
+          <CobrarODia jogo={jogo} players={players} onFechar={() => setCobrando(false)} />
         </Suspense>
       )}
 
