@@ -6,7 +6,9 @@ import {
   guestGroup,
   guestInformarPendencias,
   guestMensalidade,
+  guestDiariasDoJogo,
   guestPendencias,
+  type DiariasDoLink,
   guestSalvarWhatsapp,
   guestTemWhatsapp,
   type MensalidadeDoLink,
@@ -21,7 +23,7 @@ import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos, normalizar } from '@/lib/juntar';
 import { iconeDoTipo, textoDaLista } from '@/lib/listaDoJogo';
 import { diaDaPromocao, faseDoJogo } from '@/lib/promocao';
-import { mensagemDaMensalidade, pixCopiaECola } from '@/lib/financeiro';
+import { mensagemDaMensalidade, mensagemDoDia, pixCopiaECola } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
@@ -316,6 +318,7 @@ export function GuestGroupPage() {
       code={code}
       grupo={data.group.name}
       mensalidade={mine.kind === 'mensalista' ? mensalidade : null}
+      convidado={mine.kind === 'convidado'}
       meuId={mine.id}
       onInformado={load}
       sempre
@@ -1060,6 +1063,7 @@ function MeuPagamento({
   code,
   grupo,
   mensalidade,
+  convidado = false,
   meuId,
   onInformado,
   sempre = false,
@@ -1068,6 +1072,8 @@ function MeuPagamento({
   grupo: string;
   /** Só para mensalista no link do jogo, e só se o grupo cobra mensalidade */
   mensalidade: MensalidadeDoLink | null;
+  /** Convidado: depois de confirmar, a lista do jogo com ✅ para mandar no grupo */
+  convidado?: boolean;
   meuId: string;
   onInformado: () => Promise<void> | void;
   /** Na aba Pagamento: aparece mesmo sem nada em aberto, dizendo isso */
@@ -1086,6 +1092,33 @@ function MeuPagamento({
       vivo = false;
     };
   }, [code, meuId]);
+
+  /*
+   * Convidado (pedido do Guilherme em 12/10/2026): a lista do jogo para mandar
+   * de volta no grupo, no modelo da cobrança — todos os convidados do jogo,
+   * quem pagou com ✅, ninguém sai. Sem a migração 040, o botão só não aparece.
+   */
+  const [diarias, setDiarias] = useState<DiariasDoLink | null>(null);
+  const lerDiarias = useCallback(() => {
+    if (!convidado) return;
+    guestDiariasDoJogo(code, meuId)
+      .then(setDiarias)
+      .catch((e) => console.warn('lista do jogo pelo link', e));
+  }, [code, meuId, convidado]);
+  useEffect(() => lerDiarias(), [lerDiarias]);
+  const linkDoPagamento = `${location.href.split('?')[0]}?aba=pagamento`;
+  const listasDoJogo = (diarias?.jogos ?? [])
+    .filter((j) => j.eu)
+    .map((j) => ({
+      data: j.data,
+      texto: mensagemDoDia({
+        grupo,
+        data: j.data,
+        pixChave: diarias?.pixChave ?? null,
+        lista: j.convidados.map((c) => ({ nome: c.name, valorCents: c.valorCents, ok: c.ok })),
+        link: linkDoPagamento,
+      }),
+    }));
 
   const eu = mensalidade?.mensalistas.find((m) => m.id === meuId);
   const mesOk = Boolean(eu && (eu.pago || eu.informadoEm || eu.isento));
@@ -1107,7 +1140,7 @@ function MeuPagamento({
 
   if (!estado) return sempre ? <p className="mt-4 text-sm text-ink-500">Carregando…</p> : null;
   // Nada em aberto e nada para mandar: fora da aba própria, o cartão não aparece
-  if (!estado.emAberto && !lista && !sempre) return null;
+  if (!estado.emAberto && !lista && listasDoJogo.length === 0 && !sempre) return null;
 
   async function confirmar() {
     // Confirmar por engano marca "a conferir" — pergunta antes
@@ -1117,6 +1150,7 @@ function MeuPagamento({
     try {
       await guestInformarPendencias(code, meuId);
       setEstado(await guestPendencias(code, meuId));
+      lerDiarias();
       await onInformado();
     } catch (e) {
       console.error('confirmar pagamento', e);
@@ -1162,6 +1196,15 @@ function MeuPagamento({
           Mandar a lista da mensalidade no grupo
         </button>
       )}
+      {listasDoJogo.map((l) => (
+        <button
+          key={l.data}
+          onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(l.texto)}`, '_blank', 'noopener')}
+          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/50 text-sm font-semibold text-brand-200 active:scale-[0.99]"
+        >
+          Mandar a lista do jogo {l.data.slice(8, 10)}/{l.data.slice(5, 7)} no grupo
+        </button>
+      ))}
       {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
     </div>
   );

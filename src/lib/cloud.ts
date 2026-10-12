@@ -1906,6 +1906,29 @@ export async function guestPendencias(
   return data as { emAberto: boolean; confirmado: boolean };
 }
 
+/**
+ * Pelo link (migração 040): os jogos recentes da pessoa, cada um com todos os
+ * convidados e o ✅ de quem já pagou ou confirmou — a lista que ela manda de
+ * volta no grupo. Só nomes e o valor da diária, que já foi na cobrança.
+ */
+export interface DiariasDoLink {
+  pixChave: string | null;
+  jogos: {
+    referencia: string;
+    /** AAAA-MM-DD */
+    data: string;
+    /** A diária desta pessoa já está paga ou confirmada */
+    eu: boolean;
+    convidados: { name: string; valorCents: number; ok: boolean }[];
+  }[];
+}
+
+export async function guestDiariasDoJogo(code: string, playerId: string): Promise<DiariasDoLink> {
+  const { data, error } = await db().rpc('guest_diarias_do_jogo', { code, p_player: playerId });
+  if (error) throw error;
+  return data as DiariasDoLink;
+}
+
 /** "Confirmar pagamento": tudo o que está em aberto fica a conferir, não é baixa */
 export async function guestInformarPendencias(code: string, playerId: string): Promise<number> {
   const { data, error } = await db().rpc('guest_informar_pendencias', { code, p_player: playerId });

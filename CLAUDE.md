@@ -338,6 +338,12 @@ Na do jogo, quem pagou FICA na lista com ✅ (`listaDoJogo`, também no fim do
 dia); na geral, quem pagou sai. Antes a mensagem dos mensalistas saía para todos. O fim do dia de jogo
 (`CobrarODia`) continua indo direto para o dia.
 
+**A lista do jogo pelo link** (migração 040, 12/10/2026): o convidado que
+confirma o pagamento na aba Pagamento ganha "Mandar a lista do jogo DD/MM no
+grupo", no texto de `mensagemDoDia` — todos os convidados do jogo, ✅ em quem
+pagou ou confirmou (`guest_diarias_do_jogo`, até 3 jogos dos últimos 60 dias
+em que a diária dele já está ok). Sem a 040 no banco, o botão só não aparece.
+
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.
 
