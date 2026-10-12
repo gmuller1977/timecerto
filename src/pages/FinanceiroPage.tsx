@@ -88,9 +88,13 @@ function mensagemDeCobranca(saldo: SaldoDoJogador, nome: string, grupo: CloudGro
     (a) => `• ${rotuloDaCobranca(a.cobranca)}: ${dm(dataDaCobranca(a.cobranca))} — Valor de ${formatBRL(a.faltaCents)}`,
   );
   const pix = dados.config.pixChave ? `\n\nPix: ${dados.config.pixChave}` : '';
-  // O link abre direto na aba Pagamento (06/10/2026)
-  const link = grupo.code
-    ? `\n\nApós o pagamento, clique no link abaixo e confirme o valor.\n${groupLink(grupo.code)}?aba=pagamento`
+  // O link abre direto na aba Pagamento (06/10/2026) e já como a pessoa, com
+  // `eu=`, como o chamado da espera (12/10/2026): sem isso ela tinha de se
+  // procurar na lista. O convidado vai pelo link dos convidados
+  const convidado = dados.jogadores.get(saldo.playerId)?.kind === 'convidado';
+  const base = convidado && grupo.guestCode ? guestLink(grupo.guestCode) : grupo.code ? groupLink(grupo.code) : null;
+  const link = base
+    ? `\n\nApós o pagamento, clique no link abaixo e confirme o valor.\n${base}?aba=pagamento&eu=${saldo.playerId}`
     : '';
   return (
     `Oi, ${nome}!\n\nPassando para lembrar do pagamento dos jogos do ${grupo.name}:\n\n${linhas.join('\n')}\n\n` +
