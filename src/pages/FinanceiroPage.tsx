@@ -2,7 +2,7 @@ import { iconeDoTipo } from '@/lib/listaDoJogo';
 import { normalizar } from '@/lib/juntar';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, MessageCircle, Plus, RotateCcw, TriangleAlert, Wallet, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Copy, ChevronLeft, ChevronRight, MessageCircle, Plus, RotateCcw, TriangleAlert, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/store/useAuth';
 import {
@@ -26,6 +26,7 @@ import {
   emCaixa,
   fimDoMes,
   mensagemDaMensalidade,
+  mensagemDoDia,
   quemDeve,
   reaisParaCentavos,
   resumoDoMes,
@@ -532,6 +533,7 @@ export function CobrarVarios({
   nome,
   recarregar,
   soPendencias = false,
+  dia,
 }: {
   devedores: SaldoDoJogador[];
   grupo: CloudGroup;
@@ -539,9 +541,12 @@ export function CobrarVarios({
   nome: (id: string) => string;
   recarregar: () => void;
   soPendencias?: boolean;
+  /** AAAA-MM-DD: a cobrança é das diárias deste dia, no texto de `mensagemDoDia` */
+  dia?: string;
 }) {
   const [modo, setModo] = useState<'grupo' | 'fila' | null>(null);
   const [valores, setValores] = useState(true);
+  const [copiado, setCopiado] = useState(false);
   // A fila congela quem devia ao começar: pagar no meio não bagunça a ordem
   const [fila, setFila] = useState<SaldoDoJogador[]>([]);
   const [i, setI] = useState(0);
@@ -574,7 +579,15 @@ export function CobrarVarios({
 
   if (modo === 'grupo') {
     const doMes = soPendencias ? null : mensagemDoMes(grupo, dados, saldosPorJogador(dados.cobrancas, dados.pagamentos));
-    const texto = doMes ?? mensagemDoGrupo(devedores, nome, grupo, dados, valores);
+    const doDia = dia
+      ? mensagemDoDia({
+          grupo: grupo.name,
+          data: dia,
+          pixChave: dados.config.pixChave,
+          lista: devedores.map((d) => ({ nome: nome(d.playerId), valorCents: d.saldoCents })),
+        })
+      : null;
+    const texto = doMes ?? doDia ?? mensagemDoGrupo(devedores, nome, grupo, dados, valores);
     return (
       <div className="mb-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
         <div className="flex items-center justify-between gap-2">
@@ -583,7 +596,7 @@ export function CobrarVarios({
             <X size={16} />
           </button>
         </div>
-        {!doMes && (
+        {!doMes && !doDia && (
           <label className="mt-3 flex items-center justify-between gap-3">
             <span className="text-sm text-ink-300">Mostrar os valores</span>
             <input
@@ -600,18 +613,38 @@ export function CobrarVarios({
         <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
           {doMes
             ? 'Quem pagar confirma no link e manda a lista de volta com o ✅. O pagamento fica a conferir aqui até você dar a baixa. No WhatsApp, escolha o grupo da pelada.'
-            : 'O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.'}
+            : doDia
+              ? 'Só quem ainda deve a diária deste dia. No WhatsApp, escolha o grupo da pelada.'
+              : 'O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.'}
         </p>
-        <Button
-          className="mt-3 w-full"
-          onClick={() => {
-            abrirWhatsApp(texto);
-            anotar(grupo, 'grupo', devedores, recarregar);
-          }}
-        >
-          <MessageCircle size={16} />
-          Abrir o WhatsApp
-        </Button>
+        <div className={cn('mt-3 grid gap-2', doDia && 'grid-cols-2')}>
+          {doDia && (
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(texto);
+                  if (!copiado) anotar(grupo, 'grupo', devedores, recarregar);
+                  setCopiado(true);
+                } catch {
+                  setCopiado(false);
+                }
+              }}
+            >
+              {copiado ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+              {copiado ? 'Copiado' : 'Copiar'}
+            </Button>
+          )}
+          <Button
+            onClick={() => {
+              abrirWhatsApp(texto);
+              anotar(grupo, 'grupo', devedores, recarregar);
+            }}
+          >
+            <MessageCircle size={16} />
+            {doDia ? 'WhatsApp' : 'Abrir o WhatsApp'}
+          </Button>
+        </div>
       </div>
     );
   }

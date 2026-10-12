@@ -173,6 +173,34 @@ export function mensagemDaMensalidade(m: {
   );
 }
 
+/**
+ * A cobrança dos convidados de UM dia, no grupo (pedido do Guilherme em
+ * 12/10/2026): o dia, o valor e quem ainda deve a diária, com o ingresso
+ * (🎟️, o ícone do convidado em `listaDoJogo`) antes de cada nome. Valor igual
+ * para todos vai no cabeçalho; diferente, ao lado de cada nome.
+ */
+export function mensagemDoDia(m: {
+  grupo: string;
+  /** AAAA-MM-DD */
+  data: string;
+  pixChave: string | null;
+  lista: { nome: string; valorCents: number }[];
+}): string {
+  const valores = new Set(m.lista.map((x) => x.valorCents));
+  const unico = valores.size === 1 ? m.lista[0].valorCents : null;
+  const linhas = m.lista
+    .map((x) => `🎟️ ${x.nome}${unico === null ? ` — ${formatBRL(x.valorCents)}` : ''}`)
+    .join('\n');
+  const valor = unico !== null ? `\nValor: ${formatBRL(unico)}` : '';
+  const pix = m.pixChave ? `\n\nPix: ${m.pixChave}` : '';
+  return (
+    `⚡ ${m.grupo}\n` +
+    `Jogo ${m.data.slice(8, 10)}/${m.data.slice(5, 7)}${valor}\n\n` +
+    `${linhas}${pix}\n\n` +
+    `Quem já pagou, desconsidere. 🙏`
+  );
+}
+
 /** Quem deve, do maior valor para o menor */
 export function quemDeve(saldos: Map<string, SaldoDoJogador>): SaldoDoJogador[] {
   return [...saldos.values()].filter((s) => s.saldoCents > 0).sort((a, b) => b.saldoCents - a.saldoCents);

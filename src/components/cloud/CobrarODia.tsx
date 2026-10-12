@@ -89,6 +89,7 @@ export function CobrarODia({ jogo, onFechar }: { jogo: Jogo; onFechar: () => voi
             nome={nome}
             recarregar={() => void carregar()}
             soPendencias
+            dia={jogo.date}
           />
         </>
       )}
