@@ -288,7 +288,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
                 className="mt-2 w-full"
                 onClick={() =>
                   convidar(
-                    `⚡ ${group.name}\n${detalhes}\n\nToque no link, procure seu nome e marque se vai. Não é mensalista? Coloque seu nome como convidado no mesmo link.\n${groupLink(group.code)}`,
+                    `⚡ *${group.name}*\n${detalhes}\n\n✅ *Mensalista:* procure seu nome e confirme presença.\n📝 *Convidado:* coloque seu nome na lista de espera.\n\n👉 ${groupLink(group.code)}`,
                   )
                 }
               >
