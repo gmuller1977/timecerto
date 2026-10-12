@@ -569,6 +569,58 @@ export function GuestGroupPage() {
     </div>
   ) : null;
 
+  /*
+   * Convidado que chega pela cobrança do dia (?aba=pagamento, 12/10/2026) num
+   * celular que ainda não sabe quem ele é: procura o nome para confirmar o
+   * pagamento, sem passar pelo formulário de inscrição. A mesma busca de 3
+   * letras de sempre — a lista de convidados não fica exposta.
+   */
+  const souEuNoPagamento = (id: string) => {
+    writeMe(code, id);
+    setMe(id);
+    setBusca('');
+  };
+  if (!mine && viaConvidados && assunto === 'pagamento') {
+    return (
+      <Frame>
+        <p className="text-xs font-semibold tracking-wide text-brand-400 uppercase">Lista de convidados</p>
+        <h1 className="text-2xl font-bold tracking-tight">{data.group.name}</h1>
+        <section className="mt-4 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+          <p className="text-[15px] font-semibold text-ink-50">Confirmar pagamento: quem é você?</p>
+          <p className="mt-1 text-xs text-ink-500">Digite seu nome e toque nele. Este celular lembra da próxima vez.</p>
+          {usadosAqui.length > 0 && (
+            <div className="mt-3 flex flex-col gap-1.5">
+              {usadosAqui.map((p) => (
+                <BotaoSouEu key={p.id} nome={p.name} onClick={() => souEuNoPagamento(p.id)} />
+              ))}
+            </div>
+          )}
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            maxLength={40}
+            placeholder="Procure seu nome"
+            aria-label="Procure seu nome"
+            className="mt-3 w-full rounded-xl bg-ink-800 px-3 py-3 text-[16px] text-ink-50 placeholder:text-ink-500 outline-none"
+          />
+          {convidadosDaBusca.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              {convidadosDaBusca.map((p) => (
+                <BotaoSouEu key={p.id} nome={p.name} onClick={() => souEuNoPagamento(p.id)} />
+              ))}
+            </div>
+          )}
+          {termo.length >= 3 && convidadosDaBusca.length === 0 && (
+            <p className="mt-2 text-xs text-ink-500">Nenhum convidado com esse nome.</p>
+          )}
+          <button onClick={() => setAssunto('jogo')} className="mt-3 text-xs text-ink-500 underline">
+            ir para a lista do jogo
+          </button>
+        </section>
+      </Frame>
+    );
+  }
+
   // Aba Pagamento: só o pagamento — nada de lista nem de "Vou / Não vou"
   if (mine && assunto === 'pagamento') {
     return (
@@ -1506,6 +1558,21 @@ function Times({
  * "Beatriz" na outra, e o celular novo não lembrava de ninguém. Só o nome —
  * o link já mostra os nomes; telefone e nível nunca saem daqui.
  */
+function BotaoSouEu({ nome, onClick }: { nome: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-3 rounded-xl border border-brand-500/40 bg-brand-500/10 px-3 py-3 text-left active:scale-[0.99]"
+    >
+      <span className="min-w-0 flex-1 truncate text-[15px] text-ink-50">
+        <span aria-hidden className="mr-1.5">{iconeDoTipo('convidado')}</span>
+        {nome}
+      </span>
+      <span className="shrink-0 text-xs font-semibold text-brand-300">Sou eu</span>
+    </button>
+  );
+}
+
 function JaJogou({
   convidados,
   onEscolher,

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Copy, MessageCircle, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { findActiveGroup, lerFinanceiro, type CloudGroup, type DadosFinanceiros } from '@/lib/cloud';
+import { findActiveGroup, guestLink, lerFinanceiro, type CloudGroup, type DadosFinanceiros } from '@/lib/cloud';
 import { mensagemDoDia, saldosPorJogador, type SaldoDoJogador } from '@/lib/financeiro';
 import { joga, vagasDoJogo } from '@/lib/vagas';
 import { nomeDeExibicao } from '@/lib/nome';
@@ -94,6 +94,7 @@ export function CobrarODia({ jogo, players, onFechar }: { jogo: Jogo; players: P
               data: jogo.date,
               pixChave: dados.config.pixChave,
               lista: convidados.map((n) => ({ nome: n, valorCents: dados.config.diariaCents! })),
+              link: grupo.guestCode ? `${guestLink(grupo.guestCode)}?aba=pagamento` : null,
             })}
           />
         ) : (

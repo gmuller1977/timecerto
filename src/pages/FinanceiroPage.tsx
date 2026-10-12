@@ -12,6 +12,7 @@ import {
   estornarPagamento,
   findActiveGroup,
   groupLink,
+  guestLink,
   lancarAvulsa,
   lancarDespesa,
   lerFinanceiro,
@@ -585,6 +586,7 @@ export function CobrarVarios({
           data: dia,
           pixChave: dados.config.pixChave,
           lista: devedores.map((d) => ({ nome: nome(d.playerId), valorCents: d.saldoCents })),
+          link: grupo.guestCode ? `${guestLink(grupo.guestCode)}?aba=pagamento` : null,
         })
       : null;
     const texto = doMes ?? doDia ?? mensagemDoGrupo(devedores, nome, grupo, dados, valores);

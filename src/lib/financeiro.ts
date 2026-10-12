@@ -185,6 +185,8 @@ export function mensagemDoDia(m: {
   data: string;
   pixChave: string | null;
   lista: { nome: string; valorCents: number }[];
+  /** O link dos convidados na aba Pagamento, para confirmar (12/10/2026) */
+  link?: string | null;
 }): string {
   const valores = new Set(m.lista.map((x) => x.valorCents));
   const unico = valores.size === 1 ? m.lista[0].valorCents : null;
@@ -197,7 +199,8 @@ export function mensagemDoDia(m: {
     `⚡ ${m.grupo}\n` +
     `Jogo ${m.data.slice(8, 10)}/${m.data.slice(5, 7)}${valor}\n\n` +
     `${linhas}${pix}\n\n` +
-    `Quem já pagou, desconsidere. 🙏`
+    `Quem já pagou, desconsidere. 🙏` +
+    (m.link ? `\n\nQuando fizer o pagamento, entre no link abaixo e confirme o pagamento.\n${m.link}` : '')
   );
 }
 
