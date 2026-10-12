@@ -751,7 +751,7 @@ export function CobrarVarios({
             : doDia
               ? 'Quem já pagou fica na lista com ✅. No WhatsApp, escolha o grupo da pelada.'
               : dosConvidados
-                ? 'Só o que está em aberto: quem pagou sai da lista. No WhatsApp, escolha o grupo da pelada.'
+                ? 'Só o que está em aberto, uma linha por pessoa: quem pagou sai da lista. No WhatsApp, escolha o grupo da pelada.'
                 : 'O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.'}
         </p>
         <div className={cn('mt-3 grid gap-2', copiavel && 'grid-cols-2')}>

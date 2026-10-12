@@ -207,8 +207,8 @@ export function mensagemDoDia(m: {
 
 /**
  * A cobrança GERAL dos convidados, no grupo (pedido do Guilherme em
- * 12/10/2026): todas as pendências de convidado, uma linha por cobrança em
- * aberto — nome, dia do jogo e valor —, com o ingresso antes do nome, como
+ * 12/10/2026): todas as pendências de convidado, uma linha por PESSOA — nome,
+ * os dias dos jogos e o total —, com o ingresso antes do nome, como
  * em `mensagemDoDia`. Separada da mensalidade: antes, "Cobrar no grupo"
  * mandava a lista dos mensalistas mesmo para quem só devia diária.
  */
@@ -219,9 +219,22 @@ export function mensagemDosConvidados(m: {
   linhas: { nome: string; rotulo: string; data: string; valorCents: number }[];
   link?: string | null;
 }): string {
-  const linhas = [...m.linhas]
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.data.localeCompare(b.data))
-    .map((x) => `🎟️ ${x.nome} — ${x.rotulo} ${x.data.slice(8, 10)}/${x.data.slice(5, 7)} — ${formatBRL(x.valorCents)}`)
+  // Uma linha por pessoa, com os jogos juntos (12/10/2026): "Ana — Jogo dia 04/10 e 11/10 — Total R$ 50,00"
+  const ddmm = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+  const emLista = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} e ${xs[xs.length - 1]}`);
+  const porNome = new Map<string, typeof m.linhas>();
+  for (const x of m.linhas) porNome.set(x.nome, [...(porNome.get(x.nome) ?? []), x]);
+  const linhas = [...porNome.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'pt-BR'))
+    .map(([nome, xs]) => {
+      const porRotulo = new Map<string, string[]>();
+      for (const x of [...xs].sort((a, b) => a.data.localeCompare(b.data))) {
+        porRotulo.set(x.rotulo, [...(porRotulo.get(x.rotulo) ?? []), ddmm(x.data)]);
+      }
+      const oque = [...porRotulo.entries()].map(([r, ds]) => `${r} dia ${emLista(ds)}`).join('; ');
+      const total = xs.reduce((t, x) => t + x.valorCents, 0);
+      return `🎟️ ${nome} — ${oque} — Total ${formatBRL(total)}`;
+    })
     .join('\n');
   const pix = m.pixChave ? `\n\nPix: ${m.pixChave}` : '';
   return (

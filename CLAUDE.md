@@ -332,7 +332,7 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
 **Cobrar no grupo escolhe o público** (pedido do Guilherme em 12/10/2026):
 no Financeiro, o botão abre Mensalistas (a lista do mês, `mensagemDoMes`),
 Convidados: todos os pendentes (`mensagemDosConvidados`, uma linha por
-cobrança: 🎟️ nome — Jogo DD/MM — valor) e Convidados por jogo (as diárias em
+pessoa: 🎟️ nome — Jogo dia DD/MM e DD/MM — Total) e Convidados por jogo (as diárias em
 aberto agrupadas pela referência = id do jogo, no texto de `mensagemDoDia`).
 Na do jogo, quem pagou FICA na lista com ✅ (`listaDoJogo`, também no fim do
 dia); na geral, quem pagou sai. Antes a mensagem dos mensalistas saía para todos. O fim do dia de jogo
