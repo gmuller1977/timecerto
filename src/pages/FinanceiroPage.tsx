@@ -28,6 +28,7 @@ import {
   fimDoMes,
   mensagemDaMensalidade,
   mensagemDoDia,
+  mensagemDosConvidados,
   quemDeve,
   reaisParaCentavos,
   resumoDoMes,
@@ -547,6 +548,7 @@ export function CobrarVarios({
 }) {
   const [modo, setModo] = useState<'grupo' | 'fila' | null>(null);
   const [valores, setValores] = useState(true);
+  const [alvo, setAlvo] = useState<{ tipo: 'mensalistas' } | { tipo: 'convidados' } | { tipo: 'jogo'; ref: string } | null>(null);
   const [copiado, setCopiado] = useState(false);
   // A fila congela quem devia ao começar: pagar no meio não bagunça a ordem
   const [fila, setFila] = useState<SaldoDoJogador[]>([]);
@@ -579,26 +581,150 @@ export function CobrarVarios({
   }
 
   if (modo === 'grupo') {
-    const doMes = soPendencias ? null : mensagemDoMes(grupo, dados, saldosPorJogador(dados.cobrancas, dados.pagamentos));
-    const doDia = dia
+    const fechar = () => {
+      setModo(null);
+      setAlvo(null);
+      setCopiado(false);
+    };
+    const linkConvidados = grupo.guestCode ? `${guestLink(grupo.guestCode)}?aba=pagamento` : null;
+    const ehConvidado = (d: SaldoDoJogador) => dados.jogadores.get(d.playerId)?.kind === 'convidado';
+    const mensalistas = devedores.filter((d) => !ehConvidado(d));
+    const convidados = devedores.filter(ehConvidado);
+    const doMesTexto = soPendencias ? null : mensagemDoMes(grupo, dados, saldosPorJogador(dados.cobrancas, dados.pagamentos));
+
+    // As diárias em aberto dos convidados, por jogo (a diária leva o id do jogo como referência)
+    const jogos = new Map<string, { data: string; devedores: SaldoDoJogador[] }>();
+    for (const d of convidados) {
+      for (const a of d.abertas) {
+        if (a.cobranca.tipo !== 'diaria' || !a.cobranca.referencia) continue;
+        const j = jogos.get(a.cobranca.referencia) ?? { data: a.cobranca.venceEm, devedores: [] };
+        const s = j.devedores.find((x) => x.playerId === d.playerId);
+        if (s) {
+          s.abertas.push(a);
+          s.saldoCents += a.faltaCents;
+        } else j.devedores.push({ ...d, abertas: [a], saldoCents: a.faltaCents });
+        jogos.set(a.cobranca.referencia, j);
+      }
+    }
+    const porJogo = [...jogos.entries()]
+      .map(([ref, j]) => ({ ref, ...j, totalCents: j.devedores.reduce((t, d) => t + d.saldoCents, 0) }))
+      .sort((a, b) => b.data.localeCompare(a.data));
+
+    /*
+     * Pedido do Guilherme em 12/10/2026: no Financeiro, "Cobrar no grupo"
+     * mostrava a mensagem dos mensalistas para todo mundo. Agora a cobrança
+     * escolhe o público — mensalistas, todos os convidados, ou os convidados
+     * de um jogo. No fim do dia de jogo (`dia`), segue direto para o dia.
+     */
+    if (!dia && alvo === null) {
+      return (
+        <div className="mb-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[15px] font-semibold text-ink-50">Cobrar no grupo</p>
+            <button onClick={fechar} className="p-1 text-ink-500" aria-label="Fechar">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {(doMesTexto || mensalistas.length > 0) && (
+              <Button variant="secondary" onClick={() => setAlvo({ tipo: 'mensalistas' })}>
+                <span aria-hidden>{iconeDoTipo('mensalista')}</span>
+                Mensalistas{mensalistas.length > 0 && ` (${mensalistas.length})`}
+              </Button>
+            )}
+            {convidados.length > 0 && (
+              <Button variant="secondary" onClick={() => setAlvo({ tipo: 'convidados' })}>
+                <span aria-hidden>{iconeDoTipo('convidado')}</span>
+                Convidados: todos os pendentes ({convidados.length})
+              </Button>
+            )}
+          </div>
+          {porJogo.length > 0 && (
+            <>
+              <p className="mt-4 mb-2 text-xs font-semibold tracking-wide text-ink-500 uppercase">Convidados por jogo</p>
+              <div className="flex flex-col gap-2">
+                {porJogo.map((j) => (
+                  <button
+                    key={j.ref}
+                    onClick={() => setAlvo({ tipo: 'jogo', ref: j.ref })}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-ink-800 bg-ink-950 px-3 py-2.5 text-left"
+                  >
+                    <span className="text-sm text-ink-200">
+                      Jogo {dm(j.data)} · {j.devedores.length} {j.devedores.length === 1 ? 'pessoa' : 'pessoas'}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1 text-sm tabular-nums text-amber-300">
+                      {formatBRL(j.totalCents)}
+                      <ChevronRight size={15} className="text-ink-500" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    const doJogo = alvo?.tipo === 'jogo' ? porJogo.find((j) => j.ref === alvo.ref) : undefined;
+    const diaDaCobranca = dia ?? doJogo?.data;
+    // Quem entra na mensagem — é quem fica anotado no histórico de cobranças
+    const alvos = dia ? devedores : doJogo ? doJogo.devedores : alvo?.tipo === 'convidados' ? convidados : mensalistas;
+    const doMes = alvo?.tipo === 'mensalistas' ? doMesTexto : null;
+    const doDia = diaDaCobranca
       ? mensagemDoDia({
           grupo: grupo.name,
-          data: dia,
+          data: diaDaCobranca,
           pixChave: dados.config.pixChave,
-          lista: devedores.map((d) => ({ nome: nome(d.playerId), valorCents: d.saldoCents })),
-          link: grupo.guestCode ? `${guestLink(grupo.guestCode)}?aba=pagamento` : null,
+          lista: alvos.map((d) => ({ nome: nome(d.playerId), valorCents: d.saldoCents })),
+          link: linkConvidados,
         })
       : null;
-    const texto = doMes ?? doDia ?? mensagemDoGrupo(devedores, nome, grupo, dados, valores);
+    const dosConvidados =
+      alvo?.tipo === 'convidados'
+        ? mensagemDosConvidados({
+            grupo: grupo.name,
+            pixChave: dados.config.pixChave,
+            linhas: convidados.flatMap((d) =>
+              d.abertas.map((a) => ({
+                nome: nome(d.playerId),
+                rotulo: rotuloDaCobranca(a.cobranca),
+                data: dataDaCobranca(a.cobranca),
+                valorCents: a.faltaCents,
+              })),
+            ),
+            link: linkConvidados,
+          })
+        : null;
+    const texto = doMes ?? doDia ?? dosConvidados ?? mensagemDoGrupo(alvos, nome, grupo, dados, valores);
+    const titulo = dia
+      ? 'Cobrar no grupo'
+      : doJogo
+        ? `Convidados do jogo ${dm(doJogo.data)}`
+        : alvo?.tipo === 'convidados'
+          ? 'Convidados: todos os pendentes'
+          : 'Mensalistas';
+    const copiavel = Boolean(doDia || dosConvidados);
     return (
       <div className="mb-2 rounded-2xl border border-ink-800 bg-ink-900 p-4">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[15px] font-semibold text-ink-50">Cobrar no grupo</p>
-          <button onClick={() => setModo(null)} className="p-1 text-ink-500" aria-label="Fechar">
+          {!dia && (
+            <button
+              onClick={() => {
+                setAlvo(null);
+                setCopiado(false);
+              }}
+              className="p-1 text-ink-500"
+              aria-label="Voltar"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
+          <p className="min-w-0 flex-1 text-[15px] font-semibold text-ink-50">{titulo}</p>
+          <button onClick={fechar} className="p-1 text-ink-500" aria-label="Fechar">
             <X size={16} />
           </button>
         </div>
-        {!doMes && !doDia && (
+        {!doMes && !doDia && !dosConvidados && (
           <label className="mt-3 flex items-center justify-between gap-3">
             <span className="text-sm text-ink-300">Mostrar os valores</span>
             <input
@@ -617,16 +743,18 @@ export function CobrarVarios({
             ? 'Quem pagar confirma no link e manda a lista de volta com o ✅. O pagamento fica a conferir aqui até você dar a baixa. No WhatsApp, escolha o grupo da pelada.'
             : doDia
               ? 'Só quem ainda deve a diária deste dia. No WhatsApp, escolha o grupo da pelada.'
-              : 'O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.'}
+              : dosConvidados
+                ? 'Todas as pendências dos convidados, uma linha por jogo. No WhatsApp, escolha o grupo da pelada.'
+                : 'O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.'}
         </p>
-        <div className={cn('mt-3 grid gap-2', doDia && 'grid-cols-2')}>
-          {doDia && (
+        <div className={cn('mt-3 grid gap-2', copiavel && 'grid-cols-2')}>
+          {copiavel && (
             <Button
               variant="secondary"
               onClick={async () => {
                 try {
                   await navigator.clipboard.writeText(texto);
-                  if (!copiado) anotar(grupo, 'grupo', devedores, recarregar);
+                  if (!copiado) anotar(grupo, 'grupo', alvos, recarregar);
                   setCopiado(true);
                 } catch {
                   setCopiado(false);
@@ -640,11 +768,11 @@ export function CobrarVarios({
           <Button
             onClick={() => {
               abrirWhatsApp(texto);
-              anotar(grupo, 'grupo', devedores, recarregar);
+              anotar(grupo, 'grupo', alvos, recarregar);
             }}
           >
             <MessageCircle size={16} />
-            {doDia ? 'WhatsApp' : 'Abrir o WhatsApp'}
+            {copiavel ? 'WhatsApp' : 'Abrir o WhatsApp'}
           </Button>
         </div>
       </div>

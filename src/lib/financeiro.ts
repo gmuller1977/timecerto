@@ -204,6 +204,33 @@ export function mensagemDoDia(m: {
   );
 }
 
+/**
+ * A cobrança GERAL dos convidados, no grupo (pedido do Guilherme em
+ * 12/10/2026): todas as pendências de convidado, uma linha por cobrança em
+ * aberto — nome, dia do jogo e valor —, com o ingresso antes do nome, como
+ * em `mensagemDoDia`. Separada da mensalidade: antes, "Cobrar no grupo"
+ * mandava a lista dos mensalistas mesmo para quem só devia diária.
+ */
+export function mensagemDosConvidados(m: {
+  grupo: string;
+  pixChave: string | null;
+  /** `data` AAAA-MM-DD; `rotulo` é "Jogo" na diária e a descrição na avulsa */
+  linhas: { nome: string; rotulo: string; data: string; valorCents: number }[];
+  link?: string | null;
+}): string {
+  const linhas = [...m.linhas]
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR') || a.data.localeCompare(b.data))
+    .map((x) => `🎟️ ${x.nome} — ${x.rotulo} ${x.data.slice(8, 10)}/${x.data.slice(5, 7)} — ${formatBRL(x.valorCents)}`)
+    .join('\n');
+  const pix = m.pixChave ? `\n\nPix: ${m.pixChave}` : '';
+  return (
+    `⚡ ${m.grupo} · Convidados\n\n` +
+    `${linhas}${pix}\n\n` +
+    `Quem já pagou, desconsidere. 🙏` +
+    (m.link ? `\n\nQuando fizer o pagamento, entre no link abaixo e confirme o pagamento.\n${m.link}` : '')
+  );
+}
+
 /** Quem deve, do maior valor para o menor */
 export function quemDeve(saldos: Map<string, SaldoDoJogador>): SaldoDoJogador[] {
   return [...saldos.values()].filter((s) => s.saldoCents > 0).sort((a, b) => b.saldoCents - a.saldoCents);

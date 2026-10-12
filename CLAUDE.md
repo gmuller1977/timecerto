@@ -329,6 +329,14 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
   tudo continua na lista, no mesmo lugar e marcado "Quitado", até enviar ou
   fechar (primeira versão mostrava no topo da lista, e sumia da vista).
 
+**Cobrar no grupo escolhe o público** (pedido do Guilherme em 12/10/2026):
+no Financeiro, o botão abre Mensalistas (a lista do mês, `mensagemDoMes`),
+Convidados: todos os pendentes (`mensagemDosConvidados`, uma linha por
+cobrança: 🎟️ nome — Jogo DD/MM — valor) e Convidados por jogo (as diárias em
+aberto agrupadas pela referência = id do jogo, no texto de `mensagemDoDia`).
+Antes a mensagem dos mensalistas saía para todos. O fim do dia de jogo
+(`CobrarODia`) continua indo direto para o dia.
+
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.
 
