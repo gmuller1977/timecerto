@@ -184,14 +184,15 @@ export function mensagemDoDia(m: {
   /** AAAA-MM-DD */
   data: string;
   pixChave: string | null;
-  lista: { nome: string; valorCents: number }[];
+  /** `ok`: já pagou (ou informou pelo link) — fica na lista com ✅ (12/10/2026) */
+  lista: { nome: string; valorCents: number; ok?: boolean }[];
   /** O link dos convidados na aba Pagamento, para confirmar (12/10/2026) */
   link?: string | null;
 }): string {
   const valores = new Set(m.lista.map((x) => x.valorCents));
   const unico = valores.size === 1 ? m.lista[0].valorCents : null;
   const linhas = m.lista
-    .map((x) => `🎟️ ${x.nome}${unico === null ? ` — ${formatBRL(x.valorCents)}` : ''}`)
+    .map((x) => `🎟️ ${x.nome}${unico === null && !x.ok ? ` — ${formatBRL(x.valorCents)}` : ''}${x.ok ? ' ✅' : ''}`)
     .join('\n');
   const valor = unico !== null ? `\nValor: ${formatBRL(unico)}` : '';
   const pix = m.pixChave ? `\n\nPix: ${m.pixChave}` : '';
@@ -229,6 +230,38 @@ export function mensagemDosConvidados(m: {
     `Quem já pagou, desconsidere. 🙏` +
     (m.link ? `\n\nQuando fizer o pagamento, entre no link abaixo e confirme o pagamento.\n${m.link}` : '')
   );
+}
+
+/**
+ * Todos os convidados de UM jogo na cobrança do grupo (pedido do Guilherme em
+ * 12/10/2026): quem pagou NÃO sai da lista, ganha ✅ — como na mensalidade.
+ * `referencia` é o id do jogo na nuvem, que a diária leva.
+ */
+export function listaDoJogo(
+  referencia: string,
+  cobrancas: Cobranca[],
+  saldos: Map<string, SaldoDoJogador>,
+  nome: (id: string) => string,
+): { playerId: string; nome: string; valorCents: number; ok: boolean }[] {
+  const porJogador = new Map<string, Cobranca[]>();
+  for (const c of cobrancas) {
+    if (c.tipo !== 'diaria' || c.referencia !== referencia || c.canceladaEm) continue;
+    porJogador.set(c.playerId, [...(porJogador.get(c.playerId) ?? []), c]);
+  }
+  return [...porJogador.entries()]
+    .map(([playerId, doJogo]) => {
+      const ids = new Set(doJogo.map((c) => c.id));
+      const abertas = (saldos.get(playerId)?.abertas ?? []).filter((a) => ids.has(a.cobranca.id));
+      const faltaCents = abertas.reduce((t, a) => t + a.faltaCents, 0);
+      const informou = abertas.length > 0 && abertas.every((a) => a.cobranca.informadoEm);
+      return {
+        playerId,
+        nome: nome(playerId),
+        valorCents: faltaCents > 0 ? faltaCents : doJogo.reduce((t, c) => t + c.valorCents, 0),
+        ok: faltaCents === 0 || informou,
+      };
+    })
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 /** Quem deve, do maior valor para o menor */

@@ -334,7 +334,8 @@ no Financeiro, o botão abre Mensalistas (a lista do mês, `mensagemDoMes`),
 Convidados: todos os pendentes (`mensagemDosConvidados`, uma linha por
 cobrança: 🎟️ nome — Jogo DD/MM — valor) e Convidados por jogo (as diárias em
 aberto agrupadas pela referência = id do jogo, no texto de `mensagemDoDia`).
-Antes a mensagem dos mensalistas saía para todos. O fim do dia de jogo
+Na do jogo, quem pagou FICA na lista com ✅ (`listaDoJogo`, também no fim do
+dia); na geral, quem pagou sai. Antes a mensagem dos mensalistas saía para todos. O fim do dia de jogo
 (`CobrarODia`) continua indo direto para o dia.
 
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico

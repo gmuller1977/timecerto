@@ -122,6 +122,7 @@ export function CobrarODia({ jogo, players, onFechar }: { jogo: Jogo; players: P
             recarregar={() => void carregar()}
             soPendencias
             dia={jogo.date}
+            referencia={jogo.remoteId}
           />
         </>
       )}

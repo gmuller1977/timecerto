@@ -27,6 +27,7 @@ import {
   emCaixa,
   fimDoMes,
   mensagemDaMensalidade,
+  listaDoJogo,
   mensagemDoDia,
   mensagemDosConvidados,
   quemDeve,
@@ -536,6 +537,7 @@ export function CobrarVarios({
   recarregar,
   soPendencias = false,
   dia,
+  referencia,
 }: {
   devedores: SaldoDoJogador[];
   grupo: CloudGroup;
@@ -545,6 +547,8 @@ export function CobrarVarios({
   soPendencias?: boolean;
   /** AAAA-MM-DD: a cobrança é das diárias deste dia, no texto de `mensagemDoDia` */
   dia?: string;
+  /** O id do jogo na nuvem: a lista do dia mostra também quem já pagou, com ✅ */
+  referencia?: string;
 }) {
   const [modo, setModo] = useState<'grupo' | 'fila' | null>(null);
   const [valores, setValores] = useState(true);
@@ -667,6 +671,7 @@ export function CobrarVarios({
 
     const doJogo = alvo?.tipo === 'jogo' ? porJogo.find((j) => j.ref === alvo.ref) : undefined;
     const diaDaCobranca = dia ?? doJogo?.data;
+    const refDoDia = dia ? referencia : doJogo?.ref;
     // Quem entra na mensagem — é quem fica anotado no histórico de cobranças
     const alvos = dia ? devedores : doJogo ? doJogo.devedores : alvo?.tipo === 'convidados' ? convidados : mensalistas;
     const doMes = alvo?.tipo === 'mensalistas' ? doMesTexto : null;
@@ -675,7 +680,9 @@ export function CobrarVarios({
           grupo: grupo.name,
           data: diaDaCobranca,
           pixChave: dados.config.pixChave,
-          lista: alvos.map((d) => ({ nome: nome(d.playerId), valorCents: d.saldoCents })),
+          lista: refDoDia
+            ? listaDoJogo(refDoDia, dados.cobrancas, saldosPorJogador(dados.cobrancas, dados.pagamentos), nome)
+            : alvos.map((d) => ({ nome: nome(d.playerId), valorCents: d.saldoCents })),
           link: linkConvidados,
         })
       : null;
@@ -742,9 +749,9 @@ export function CobrarVarios({
           {doMes
             ? 'Quem pagar confirma no link e manda a lista de volta com o ✅. O pagamento fica a conferir aqui até você dar a baixa. No WhatsApp, escolha o grupo da pelada.'
             : doDia
-              ? 'Só quem ainda deve a diária deste dia. No WhatsApp, escolha o grupo da pelada.'
+              ? 'Quem já pagou fica na lista com ✅. No WhatsApp, escolha o grupo da pelada.'
               : dosConvidados
-                ? 'Todas as pendências dos convidados, uma linha por jogo. No WhatsApp, escolha o grupo da pelada.'
+                ? 'Só o que está em aberto: quem pagou sai da lista. No WhatsApp, escolha o grupo da pelada.'
                 : 'O Pix vai sem valor: cada um deve um valor diferente. No WhatsApp, escolha o grupo da pelada.'}
         </p>
         <div className={cn('mt-3 grid gap-2', copiavel && 'grid-cols-2')}>
