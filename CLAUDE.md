@@ -674,7 +674,10 @@ fala do jogo pelo id da nuvem.
   em `event_id`. As tabelas `games`/`rallies` continuam vazias: o link de
   resultados (`guest_matches`) ainda lê de lá, e é outra etapa.
 - **Excluir partida vira lápide** (`useMatchStore.excluidas`), como o atleta.
-- **Só o amador sobe.** Partida do profissional segue no aparelho.
+- **Sobe a partida do modo do grupo ativo** (15/10/2026): na pelada as do
+  amador, no time as do profissional, para que o scout de um administrador
+  apareça para os outros. Antes só o amador subia, e a partida do time ficava
+  presa no aparelho de quem marcou. Sem grupo ativo (legado) só sobe o amador.
 - **Esporte do jogo recebido**: o evento não tem coluna de esporte; o jogo que
   chega de outro aparelho pega o do sorteio, ou o do aparelho. A Estatística
   usa o esporte das próprias partidas — no teste, um jogo recebido sem sorteio

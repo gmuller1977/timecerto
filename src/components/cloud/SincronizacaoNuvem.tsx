@@ -220,7 +220,7 @@ export function SincronizacaoNuvem() {
     });
     const offPartidas = useMatchStore.subscribe((s, antes) => {
       if (s.matches === antes.matches && s.excluidas === antes.excluidas) return;
-      if (s.excluidas.length > 0 || s.matches.some((m) => m.mode !== 'profissional' && naoEnviado(m))) agendar();
+      if (s.excluidas.length > 0 || s.matches.some((m) => (m.mode === 'profissional') === (lerGrupoAtivo()?.mode === 'profissional') && naoEnviado(m))) agendar();
     });
     return () => {
       offAtletas();

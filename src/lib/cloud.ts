@@ -1457,8 +1457,15 @@ interface LinhaPartida {
   deleted_at: string | null;
 }
 
-/** Só o amador: o profissional segue no modelo antigo, o aparelho é a fonte */
-const partidaDoAmador = (m: Match) => m.mode !== 'profissional';
+/**
+ * Sobe a partida do MESMO modo do grupo ativo: na pelada as do amador, no time
+ * as do profissional (15/10/2026 — o scout de um administrador tem de aparecer
+ * para os outros). Sem grupo ativo o aparelho é de antes da etapa 8 e o
+ * grupo é a pelada; a cópia antiga mistura os modos, e a partida do
+ * profissional não pode subir para ela.
+ */
+const modoDoGrupo = (): AppMode => lerGrupoAtivo()?.mode ?? 'amador';
+const partidaDoGrupo = (m: Match, modo: AppMode) => (m.mode === 'profissional') === (modo === 'profissional');
 const partidaNaoEnviada = (m: Match) => !m.remoteId || m.enviadoEm !== m.updatedAt;
 
 /**
@@ -1473,8 +1480,9 @@ const partidaNaoEnviada = (m: Match) => !m.remoteId || m.enviadoEm !== m.updated
 export async function sincronizarPartidas(groupId: string): Promise<void> {
   // Partida de antes da base única nunca esteve na nuvem: sobe como nova
   const agora = new Date().toISOString();
+  const modo = modoDoGrupo();
   useMatchStore.setState((s) => ({
-    matches: s.matches.map((m) => (partidaDoAmador(m) && !m.updatedAt ? { ...m, updatedAt: agora } : m)),
+    matches: s.matches.map((m) => (partidaDoGrupo(m, modo) && !m.updatedAt ? { ...m, updatedAt: agora } : m)),
   }));
   await receberPartidas(groupId);
   await enviarPartidas(groupId);
@@ -1537,7 +1545,7 @@ function mesclarPartidas(linhas: LinhaPartida[]) {
         ...dados,
         // O id local de quem criou vale só lá; aqui a partida ganha o seu
         id: local?.id ?? novoIdLocal(),
-        mode: 'amador',
+        mode: modoDoGrupo(),
         remoteId: r.id,
         updatedAt: r.updated_at,
         enviadoEm: r.updated_at,
@@ -1552,13 +1560,14 @@ function mesclarPartidas(linhas: LinhaPartida[]) {
 }
 
 async function enviarPartidas(groupId: string) {
+  const modo = modoDoGrupo();
   useMatchStore.setState((s) => ({
     matches: s.matches.map((m) =>
-      partidaDoAmador(m) && !m.remoteId ? { ...m, remoteId: crypto.randomUUID() } : m,
+      partidaDoGrupo(m, modo) && !m.remoteId ? { ...m, remoteId: crypto.randomUUID() } : m,
     ),
   }));
   const { matches, excluidas } = useMatchStore.getState();
-  const vivas = matches.filter((m) => partidaDoAmador(m) && partidaNaoEnviada(m));
+  const vivas = matches.filter((m) => partidaDoGrupo(m, modo) && partidaNaoEnviada(m));
   if (vivas.length === 0 && excluidas.length === 0) return;
 
   const remotoDe = new Map(
