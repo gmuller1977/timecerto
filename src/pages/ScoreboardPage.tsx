@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Check, ChevronRight, Flag, Minus, Plus, Settings2, Undo2, X } from 'lucide-react';
-import { useMatchStore } from '@/store/useMatchStore';
+import { Check, ChevronRight, Flag, Link2, Minus, Plus, Settings2, Undo2, X } from 'lucide-react';
 import { useRoster } from '@/store/useRoster';
 import { useHydrated } from '@/store/useHydrated';
 import { PointSheet, type PointDraft } from '@/components/scout/PointSheet';
 import { CourtPanel } from '@/components/scout/CourtPanel';
+import { usePlacar } from '@/components/scout/PlacarContexto';
+import { PassarParaOLink } from '@/components/scout/PassarParaOLink';
+import { isCloudAvailable } from '@/lib/sessao';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { ACTION_LABEL, POINTS_OPTIONS, currentRun } from '@/lib/volley';
 import { comLibero, courtPlayerIds, courtStateAt } from '@/lib/court';
@@ -21,9 +23,12 @@ const MODE_LABEL: Record<ScoutMode, { title: string; hint: string }> = {
 
 export function ScoreboardPage() {
   const navigate = useNavigate();
+  // O placar do app ou o do link (041): mesma tela, outra fonte
+  const { useStore: useMatchStore, players: elencoDoLink, link } = usePlacar();
   const live = useMatchStore((s) => s.live);
   const hydrated = useHydrated();
-  const players = useRoster();
+  const roster = useRoster();
+  const players = elencoDoLink ?? roster;
   const addRally = useMatchStore((s) => s.addRally);
   const undoRally = useMatchStore((s) => s.undoRally);
   const removePoint = useMatchStore((s) => s.removePoint);
@@ -37,12 +42,13 @@ export function ScoreboardPage() {
 
   const [pending, setPending] = useState<{ team: MatchTeam; opp: MatchTeam } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showLink, setShowLink] = useState(false);
   // Encerrar zera a partida no store. Sem esta trava, o redirecionamento
   // de segurança abaixo dispara antes da navegação e engole o resumo.
   const [leaving, setLeaving] = useState(false);
 
   if (!hydrated || (leaving && !live)) return null;
-  if (!live) return <Navigate to="/" replace />;
+  if (!live) return link ? null : <Navigate to="/" replace />;
 
   const [teamA, teamB] = live.teams;
   const current = live.sets[live.sets.length - 1];
@@ -99,6 +105,10 @@ export function ScoreboardPage() {
   }
 
   function handleFinish() {
+    if (link) {
+      link.aoEncerrar();
+      return;
+    }
     const matchId = live!.id;
     const played = live!.sets.some((g) => (g.rallies?.length ?? 0) > 0);
     setLeaving(true);
@@ -112,17 +122,21 @@ export function ScoreboardPage() {
     <div className="flex h-dvh flex-col bg-ink-950">
       {/* Cabeçalho */}
       <header className="safe-top flex items-center justify-between px-4 pt-3 pb-2">
-        <button
-          onClick={() => {
-            if (confirm2(live.pro ? 'Descartar esta partida? Os pontos serão perdidos.' : 'Descartar este jogo? Os pontos serão perdidos.')) {
-              discardMatch();
-              navigate('/');
-            }
-          }}
-          className="p-1.5 text-ink-500"
-        >
-          <X size={20} />
-        </button>
+        {link ? (
+          <span className="size-8" />
+        ) : (
+          <button
+            onClick={() => {
+              if (confirm2(live.pro ? 'Descartar esta partida? Os pontos serão perdidos.' : 'Descartar este jogo? Os pontos serão perdidos.')) {
+                discardMatch();
+                navigate('/');
+              }
+            }}
+            className="p-1.5 text-ink-500"
+          >
+            <X size={20} />
+          </button>
+        )}
         <div className="text-center">
           <p className="text-xs font-semibold tracking-wide text-ink-300 uppercase">
             {live.sets.length}º set
@@ -131,12 +145,28 @@ export function ScoreboardPage() {
             {setsWon[0]} — {setsWon[1]} em sets · até {live.scout.pointsToWin}
           </p>
         </div>
-        <button
-          onClick={() => setShowSettings(true)}
-          className="p-1.5 text-ink-500"
-        >
-          <Settings2 size={20} />
-        </button>
+        {link ? (
+          <span className="size-8" />
+        ) : (
+          <div className="flex items-center">
+            {/* Scout pelo link (041): outra pessoa marca, os admins acompanham */}
+            {isCloudAvailable && (
+              <button
+                onClick={() => setShowLink(true)}
+                aria-label="Passar o scout para um link"
+                className="p-1.5 text-ink-500"
+              >
+                <Link2 size={20} />
+              </button>
+            )}
+            <button
+              onClick={() => setShowSettings(true)}
+              className="p-1.5 text-ink-500"
+            >
+              <Settings2 size={20} />
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Placar — cada metade é um botão gigante, com + em cima e − embaixo
@@ -321,6 +351,20 @@ export function ScoreboardPage() {
           }
           onConfirm={confirm}
           onClose={() => setPending(null)}
+        />
+      )}
+
+      {showLink && (
+        <PassarParaOLink
+          live={live}
+          onClose={() => setShowLink(false)}
+          onCriado={(id) => {
+            // A partida agora mora na nuvem e é marcada pelo link: este
+            // aparelho para de marcar e passa a acompanhar
+            setLeaving(true);
+            discardMatch();
+            navigate(`/ao-vivo/${id}`, { replace: true });
+          }}
         />
       )}
 

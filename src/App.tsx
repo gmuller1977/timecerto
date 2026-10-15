@@ -39,6 +39,10 @@ const AdminInvitePage = lazy(() =>
 const FinanceiroPage = lazy(() =>
   import('@/pages/FinanceiroPage').then((m) => ({ default: m.FinanceiroPage })),
 );
+const GuestScoutPage = lazy(() =>
+  import('@/pages/GuestScoutPage').then((m) => ({ default: m.GuestScoutPage })),
+);
+const AoVivoPage = lazy(() => import('@/pages/AoVivoPage').then((m) => ({ default: m.AoVivoPage })));
 const GuestAthletePage = lazy(() =>
   import('@/pages/GuestAthletePage').then((m) => ({ default: m.GuestAthletePage })),
 );
@@ -161,6 +165,8 @@ export default function App() {
               <Route path="/resultado" element={<ResultPage />} />
               <Route path="/partida" element={<QuickMatchPage />} />
               <Route path="/partida/:id" element={<MatchSummaryPage />} />
+              {/* Partida marcada pelo link (041): todos os admins acompanham */}
+              <Route path="/ao-vivo/:id" element={<AoVivoPage />} />
               <Route path="/historico" element={<HistoryPage />} />
               {/* Cada modo com a sua tela de atletas: a da pelada nunca abre num time, e vice-versa */}
               <Route path="/elenco" element={<ElencoDaPelada />} />
@@ -183,6 +189,8 @@ export default function App() {
           <Route path="/v/:code" element={<GuestGroupPage />} />
           <Route path="/r/:code" element={<GuestRegisterPage />} />
           <Route path="/a/:token" element={<GuestAthletePage />} />
+          {/* Scout pelo link (041): quem não é admin marca a partida */}
+          <Route path="/s/:token" element={<GuestScoutPage />} />
           {/* Convite de administrador — uso único, 48 h (migração 012) */}
           <Route path="/admin/:token" element={<AdminInvitePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

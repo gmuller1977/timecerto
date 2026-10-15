@@ -6,7 +6,8 @@ import { ativarGrupo, lembrarNome, lembrarPerfil } from '@/store/trocarGrupo';
 import type { PlanoDoGrupo } from '@/lib/plano';
 import { useAppStore } from '@/store/useAppStore';
 import { useJogoStore } from '@/store/useJogoStore';
-import { useMatchStore } from '@/store/useMatchStore';
+import { useMatchStore, type LiveMatch } from '@/store/useMatchStore';
+import { nomeDeExibicao } from '@/lib/nome';
 import { inicioDo, pendentesDeEnvio } from '@/lib/jogo';
 import { uid as novoIdLocal } from '@/lib/utils';
 import type { InscricaoDeAviso } from '@/lib/avisos';
@@ -2096,4 +2097,164 @@ export async function lancarDespesa(groupId: string, d: { descricao: string; val
 export async function estornarDespesa(id: string) {
   const { error } = await db().rpc('estornar_despesa', { p_despesa: id });
   if (error) throw error;
+}
+
+// ── Scout pelo link (migração 041) ──────────────────────────
+
+/**
+ * A partida ao vivo com os ids da nuvem: é o formato que o link marca, que
+ * os administradores leem e que vai para `matches.dados` ao encerrar. O jogo
+ * vai à parte (`event_id`): o id local dele não diz nada fora deste aparelho.
+ */
+function aoVivoComIds(live: LiveMatch, de: Map<string, string>): LiveMatch {
+  const m = trocarJogadores({ ...live, games: live.sets, scorers: {}, attendance: [] } as unknown as Match, de);
+  const um = (id: string | undefined) => (id ? de.get(id) : undefined);
+  const numeros = live.pro?.numeros
+    ? Object.fromEntries(Object.entries(live.pro.numeros).flatMap(([id, n]) => (de.has(id) ? [[de.get(id)!, n]] : [])))
+    : undefined;
+  const { jogoId: _jogo, ...resto } = live;
+  return {
+    ...resto,
+    teams: m.teams as LiveMatch['teams'],
+    sets: m.games,
+    ...(live.pro
+      ? {
+          pro: {
+            ...live.pro,
+            liberoId: um(live.pro.liberoId),
+            levantadorId: um(live.pro.levantadorId),
+            ...(numeros ? { numeros } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+export interface PartidaAoVivo {
+  id: string;
+  token: string;
+  estado: LiveMatch;
+  /** Quem está na partida, com o id da nuvem e o nome de exibição */
+  elenco: Player[];
+  /** Algum aparelho abriu o link e está marcando */
+  emUso: boolean;
+  encerradaEm: string | null;
+  atualizadaEm: string;
+}
+
+const AO_VIVO_COLS = 'id, token, estado, elenco, aparelho, encerrada_em, updated_at';
+
+function paraPartidaAoVivo(d: {
+  id: string;
+  token: string;
+  estado: LiveMatch;
+  elenco: Player[] | null;
+  aparelho: string | null;
+  encerrada_em: string | null;
+  updated_at: string;
+}): PartidaAoVivo {
+  return {
+    id: d.id,
+    token: d.token,
+    estado: d.estado,
+    elenco: d.elenco ?? [],
+    emUso: Boolean(d.aparelho),
+    encerradaEm: d.encerrada_em,
+    atualizadaEm: d.updated_at,
+  };
+}
+
+/** A partida deste aparelho passa a morar na nuvem, marcada pelo link */
+export async function criarLinkDeScout(groupId: string, live: LiveMatch): Promise<{ id: string; token: string }> {
+  // Atleta que ainda não subiu sairia da partida: sobe antes
+  await syncAmador(groupId);
+  const players = useAppStore.getState().players;
+  const remotoDe = new Map(players.filter((p) => p.remoteId).map((p) => [p.id, p.remoteId!]));
+  const ids = new Set([...live.teams.flatMap((t) => t.playerIds), ...(live.pro?.liberoId ? [live.pro.liberoId] : [])]);
+  const elenco: Player[] = players
+    .filter((p) => ids.has(p.id) && p.remoteId)
+    .map((p) => ({
+      id: p.remoteId!,
+      name: nomeDeExibicao(p),
+      skills: {},
+      positions: p.positions,
+      createdAt: p.createdAt,
+      ...(p.numero !== undefined ? { numero: p.numero } : {}),
+    }));
+  const jogo = live.jogoId ? useJogoStore.getState().jogos.find((j) => j.id === live.jogoId) : undefined;
+  const { data, error } = await db().rpc('criar_link_de_scout', {
+    p_group: groupId,
+    p_event: jogo?.remoteId ?? null,
+    p_sport: live.sport,
+    p_estado: aoVivoComIds(live, remotoDe),
+    p_elenco: elenco,
+  });
+  if (error) throw error;
+  return data as { id: string; token: string };
+}
+
+/** As partidas do grupo sendo marcadas por link agora */
+export async function partidasAoVivo(groupId: string): Promise<PartidaAoVivo[]> {
+  const { data, error } = await db()
+    .from('partidas_ao_vivo')
+    .select(AO_VIVO_COLS)
+    .eq('group_id', groupId)
+    .is('encerrada_em', null)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((d) => paraPartidaAoVivo(d as never));
+}
+
+export async function partidaAoVivo(id: string): Promise<PartidaAoVivo | null> {
+  const { data, error } = await db().from('partidas_ao_vivo').select(AO_VIVO_COLS).eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? paraPartidaAoVivo(data as never) : null;
+}
+
+/** Tira o aparelho do link: o próximo que abrir passa a marcar */
+export async function liberarLinkDeScout(id: string): Promise<void> {
+  const { error } = await db().rpc('liberar_link_de_scout', { p_id: id });
+  if (error) throw error;
+}
+
+/** O administrador encerra no lugar do link */
+export async function encerrarPartidaAoVivo(id: string, partida: Match | null): Promise<void> {
+  const { error } = await db().rpc('encerrar_partida_ao_vivo', { p_id: id, p_partida: partida });
+  if (error) throw error;
+}
+
+export const linkDoScout = (token: string) => `${location.origin}${location.pathname}#/s/${token}`;
+
+export type AberturaDoScout =
+  | { situacao: 'aberta'; grupo: string; estado: LiveMatch; elenco: Player[]; atualizadaEm: string }
+  | { situacao: 'em_uso'; grupo: string }
+  | { situacao: 'encerrada'; grupo: string; estado: LiveMatch };
+
+export async function guestScoutAbrir(token: string): Promise<AberturaDoScout> {
+  const { data, error } = await db().rpc('guest_scout_abrir', { p_token: token, p_aparelho: meuAparelho() });
+  if (error) throw error;
+  return data as AberturaDoScout;
+}
+
+export type GravacaoDoScout = 'ok' | 'em_uso' | 'encerrada';
+
+export async function guestScoutSalvar(token: string, estado: LiveMatch): Promise<GravacaoDoScout> {
+  const { data, error } = await db().rpc('guest_scout_salvar', {
+    p_token: token,
+    p_aparelho: meuAparelho(),
+    p_estado: estado,
+  });
+  if (error) throw error;
+  return data as GravacaoDoScout;
+}
+
+export async function guestScoutEncerrar(token: string, estado: LiveMatch, partida: Match | null): Promise<GravacaoDoScout> {
+  const { data, error } = await db().rpc('guest_scout_encerrar', {
+    p_token: token,
+    p_aparelho: meuAparelho(),
+    p_estado: estado,
+    p_partida: partida,
+  });
+  if (error) throw error;
+  return data as GravacaoDoScout;
 }

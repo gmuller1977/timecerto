@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { PartidasPeloLink } from '@/components/scout/PartidasPeloLink';
 import { ArrowLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
@@ -38,6 +39,8 @@ export function HistoryPage() {
           </p>
         </div>
       </header>
+
+      <PartidasPeloLink />
 
       {matches.length === 0 && (
         <div className="mt-12 text-center">

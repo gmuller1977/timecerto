@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { faseNaTela, textoDaFase } from '@/lib/promocao';
 import { NOME_DA_COMPETICAO } from '@/types';
+import { PartidasPeloLink } from '@/components/scout/PartidasPeloLink';
 import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, ChevronDown, ChevronRight, History, MapPin, Radio, Swords, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
@@ -128,6 +129,8 @@ export function JogosPage() {
           {matchCount > 0 && <span className="text-ink-500">{matchCount}</span>}
         </button>
       </header>
+
+      <PartidasPeloLink />
 
       {live && (
         <button

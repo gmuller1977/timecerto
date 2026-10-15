@@ -1,6 +1,6 @@
 import { BASES, chaveInicial } from '@/lib/grupoAtivo';
 import type { TipoDeJogo } from '@/types';
-import { create } from 'zustand';
+import { create, type StoreApi } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type {
   Game,
@@ -129,272 +129,284 @@ function patchLineup(
   return { ...live, sets };
 }
 
-export const useMatchStore = create<MatchState>()(
-  persist(
-    (set, get) => ({
-      live: null,
-      matches: [],
-      excluidas: [],
+/**
+ * A partida ao vivo vira a partida encerrada. `null` quando ninguém marcou
+ * ponto: não há o que guardar. Também usada pelo scout pelo link (041).
+ */
+export function partidaEncerrada(live: LiveMatch): Match | null {
+  const playedSets = live.sets.filter((g) => (g.rallies?.length ?? 0) > 0);
+  if (playedSets.length === 0) return null;
+  const scorers: Record<string, number> = {};
+  for (const g of playedSets) {
+    for (const r of g.rallies ?? []) {
+      if (r.kind === 'ponto' && r.playerId) {
+        scorers[r.playerId] = (scorers[r.playerId] ?? 0) + 1;
+      }
+    }
+  }
+  return {
+    id: live.id,
+    date: live.date,
+    sport: live.sport,
+    teams: live.teams,
+    games: playedSets,
+    scorers,
+    attendance: live.teams.flatMap((t) => t.playerIds),
+    mode: live.pro ? 'profissional' : 'amador',
+    ...(live.jogoId ? { jogoId: live.jogoId } : {}),
+    ...(live.competicao ? { competicao: live.competicao } : {}),
+    ...(live.pro?.numeros ? { camisas: live.pro.numeros } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+}
 
-      startMatch: ({ sport, teams, scout, lineup, jogoId, competicao }) =>
-        set({
-          live: {
-            id: uid(),
-            ...(jogoId ? { jogoId } : {}),
-            ...(competicao ? { competicao } : {}),
-            sport,
-            date: new Date().toISOString(),
+type Set = StoreApi<MatchState>['setState'];
+type Get = StoreApi<MatchState>['getState'];
+
+const criador = (set: Set, get: Get): MatchState => ({
+  live: null,
+  matches: [],
+  excluidas: [],
+
+  startMatch: ({ sport, teams, scout, lineup, jogoId, competicao }) =>
+    set({
+      live: {
+        id: uid(),
+        ...(jogoId ? { jogoId } : {}),
+        ...(competicao ? { competicao } : {}),
+        sport,
+        date: new Date().toISOString(),
+        teams,
+        sets: [
+          newSet(
             teams,
-            sets: [
-              newSet(
-                teams,
-                lineup && {
-                  court: lineup.court,
-                  firstServeTeamId: lineup.adversarioSaca ? teams[1].id : teams[0].id,
-                  subs: [],
-                },
-              ),
-            ],
-            scout: { ...DEFAULT_SCOUT, ...scout },
-            finished: false,
-            ...(lineup && {
-              pro: {
-                homeTeamId: teams[0].id,
-                system: lineup.system,
-                liberoId: lineup.liberoId,
-                ...(lineup.numeros ? { numeros: lineup.numeros } : {}),
-                ...(lineup.levantadorId ? { levantadorId: lineup.levantadorId } : {}),
-              },
-            }),
+            lineup && {
+              court: lineup.court,
+              firstServeTeamId: lineup.adversarioSaca ? teams[1].id : teams[0].id,
+              subs: [],
+            },
+          ),
+        ],
+        scout: { ...DEFAULT_SCOUT, ...scout },
+        finished: false,
+        ...(lineup && {
+          pro: {
+            homeTeamId: teams[0].id,
+            system: lineup.system,
+            liberoId: lineup.liberoId,
+            ...(lineup.numeros ? { numeros: lineup.numeros } : {}),
+            ...(lineup.levantadorId ? { levantadorId: lineup.levantadorId } : {}),
           },
         }),
-
-      updateScout: (patch) =>
-        set((s) =>
-          s.live ? { live: { ...s.live, scout: { ...s.live.scout, ...patch } } } : s,
-        ),
-
-      addRally: ({ teamId, kind, action, playerId }) =>
-        set((s) => {
-          if (!s.live) return s;
-          const sets = [...s.live.sets];
-          const idx = sets.length - 1;
-          const current = { ...sets[idx] };
-          if (current.finished) return s;
-
-          const isA = teamId === current.teamAId;
-          const scoreA = current.scoreA + (isA ? 1 : 0);
-          const scoreB = current.scoreB + (isA ? 0 : 1);
-
-          const rally: Rally = {
-            id: uid(),
-            teamId,
-            kind,
-            action,
-            playerId,
-            scoreA,
-            scoreB,
-            at: new Date().toISOString(),
-          };
-
-          current.scoreA = scoreA;
-          current.scoreB = scoreB;
-          current.rallies = [...(current.rallies ?? []), rally];
-          current.finished = isSetOver(scoreA, scoreB, s.live.scout);
-          sets[idx] = current;
-
-          return { live: { ...s.live, sets } };
-        }),
-
-      undoRally: () =>
-        set((s) => {
-          if (!s.live) return s;
-          const sets = [...s.live.sets];
-          let idx = sets.length - 1;
-
-          // Substituição feita depois do último rally sai primeiro:
-          // desfazer volta a última coisa que a pessoa fez, seja qual for.
-          const lu = sets[idx].lineup;
-          const played = sets[idx].rallies?.length ?? 0;
-          if (lu && lu.subs.length > 0 && lu.subs[lu.subs.length - 1].atRally >= played) {
-            sets[idx] = { ...sets[idx], lineup: { ...lu, subs: lu.subs.slice(0, -1) } };
-            return { live: { ...s.live, sets } };
-          }
-
-          // Se o set atual está vazio, volta para o anterior
-          if (played === 0 && idx > 0) {
-            sets.pop();
-            idx--;
-          }
-          const current = { ...sets[idx] };
-          const rallies = [...(current.rallies ?? [])];
-          if (rallies.length === 0) return s;
-
-          rallies.pop();
-          const last = rallies[rallies.length - 1];
-          current.rallies = rallies;
-          current.scoreA = last?.scoreA ?? 0;
-          current.scoreB = last?.scoreB ?? 0;
-          current.finished = false;
-          sets[idx] = current;
-
-          return { live: { ...s.live, sets } };
-        }),
-
-      removePoint: (teamId) =>
-        set((s) => {
-          if (!s.live) return s;
-          const sets = [...s.live.sets];
-          const idx = sets.length - 1;
-          const current = sets[idx];
-          const old = current.rallies ?? [];
-          let cut = -1;
-          for (let i = old.length - 1; i >= 0; i--) {
-            if (old[i].teamId === teamId) {
-              cut = i;
-              break;
-            }
-          }
-          if (cut < 0) return s;
-
-          // O placar gravado em cada rally é o de depois dele — tirar um do
-          // meio exige recontar os seguintes
-          let scoreA = 0;
-          let scoreB = 0;
-          const rallies = old
-            .filter((_, i) => i !== cut)
-            .map((r) => {
-              if (r.teamId === current.teamAId) scoreA++;
-              else scoreB++;
-              return { ...r, scoreA, scoreB };
-            });
-
-          // Substituição feita depois do ponto removido anda uma casa para trás
-          const lineup = current.lineup && {
-            ...current.lineup,
-            subs: current.lineup.subs.map((sub) =>
-              sub.atRally > cut ? { ...sub, atRally: sub.atRally - 1 } : sub,
-            ),
-          };
-
-          sets[idx] = {
-            ...current,
-            rallies,
-            scoreA,
-            scoreB,
-            finished: isSetOver(scoreA, scoreB, s.live.scout),
-            ...(lineup ? { lineup } : {}),
-          };
-          return { live: { ...s.live, sets } };
-        }),
-
-      startNextSet: () =>
-        set((s) => {
-          if (!s.live) return s;
-          // O set seguinte começa com a escalação inicial do anterior e o
-          // primeiro saque alternado. Dá para ajustar antes do primeiro ponto.
-          const prev = s.live.sets[s.live.sets.length - 1].lineup;
-          const [a, b] = s.live.teams;
-          const lineup: SetLineup | undefined = prev && {
-            court: prev.court,
-            firstServeTeamId: prev.firstServeTeamId === a.id ? b.id : a.id,
-            subs: [],
-          };
-          return {
-            live: { ...s.live, sets: [...s.live.sets, newSet(s.live.teams, lineup)] },
-          };
-        }),
-
-      setFirstServe: (teamId) =>
-        set((s) => {
-          const live =
-            s.live &&
-            patchLineup(s.live, (lu, played) =>
-              played === 0 ? { ...lu, firstServeTeamId: teamId } : null,
-            );
-          return live ? { live } : s;
-        }),
-
-      setStartCourt: (court) =>
-        set((s) => {
-          const live =
-            s.live &&
-            patchLineup(s.live, (lu, played) =>
-              played === 0 ? { ...lu, court, subs: [] } : null,
-            );
-          return live ? { live } : s;
-        }),
-
-      substitute: (outId, inId) =>
-        set((s) => {
-          const live =
-            s.live &&
-            patchLineup(s.live, (lu, played) => ({
-              ...lu,
-              subs: [...lu.subs, { atRally: played, outId, inId }],
-            }));
-          return live ? { live } : s;
-        }),
-
-      finishMatch: () => {
-        const live = get().live;
-        if (!live) return;
-
-        const playedSets = live.sets.filter(
-          (g) => (g.rallies?.length ?? 0) > 0,
-        );
-        const scorers: Record<string, number> = {};
-        for (const g of playedSets) {
-          for (const r of g.rallies ?? []) {
-            if (r.kind === 'ponto' && r.playerId) {
-              scorers[r.playerId] = (scorers[r.playerId] ?? 0) + 1;
-            }
-          }
-        }
-
-        const match: Match = {
-          id: live.id,
-          date: live.date,
-          sport: live.sport,
-          teams: live.teams,
-          games: playedSets,
-          scorers,
-          attendance: live.teams.flatMap((t) => t.playerIds),
-          mode: live.pro ? 'profissional' : 'amador',
-          ...(live.jogoId ? { jogoId: live.jogoId } : {}),
-          ...(live.competicao ? { competicao: live.competicao } : {}),
-          ...(live.pro?.numeros ? { camisas: live.pro.numeros } : {}),
-          updatedAt: new Date().toISOString(),
-        };
-
-        set((s) => ({
-          live: null,
-          matches: playedSets.length > 0 ? [match, ...s.matches] : s.matches,
-        }));
       },
-
-      discardMatch: () => set({ live: null }),
-
-      // Apagar é uma edição como as outras: a lápide leva a exclusão aos outros aparelhos
-      removeMatch: (id) =>
-        set((s) => {
-          const m = s.matches.find((x) => x.id === id);
-          return {
-            matches: s.matches.filter((x) => x.id !== id),
-            excluidas: m?.remoteId
-              ? [...s.excluidas, { remoteId: m.remoteId, sport: m.sport, date: m.date, at: new Date().toISOString() }]
-              : s.excluidas,
-          };
-        }),
     }),
-    {
-      name: chaveInicial(BASES.partidas),
+
+  updateScout: (patch) =>
+    set((s) =>
+      s.live ? { live: { ...s.live, scout: { ...s.live.scout, ...patch } } } : s,
+    ),
+
+  addRally: ({ teamId, kind, action, playerId }) =>
+    set((s) => {
+      if (!s.live) return s;
+      const sets = [...s.live.sets];
+      const idx = sets.length - 1;
+      const current = { ...sets[idx] };
+      if (current.finished) return s;
+
+      const isA = teamId === current.teamAId;
+      const scoreA = current.scoreA + (isA ? 1 : 0);
+      const scoreB = current.scoreB + (isA ? 0 : 1);
+
+      const rally: Rally = {
+        id: uid(),
+        teamId,
+        kind,
+        action,
+        playerId,
+        scoreA,
+        scoreB,
+        at: new Date().toISOString(),
+      };
+
+      current.scoreA = scoreA;
+      current.scoreB = scoreB;
+      current.rallies = [...(current.rallies ?? []), rally];
+      current.finished = isSetOver(scoreA, scoreB, s.live.scout);
+      sets[idx] = current;
+
+      return { live: { ...s.live, sets } };
+    }),
+
+  undoRally: () =>
+    set((s) => {
+      if (!s.live) return s;
+      const sets = [...s.live.sets];
+      let idx = sets.length - 1;
+
+      // Substituição feita depois do último rally sai primeiro:
+      // desfazer volta a última coisa que a pessoa fez, seja qual for.
+      const lu = sets[idx].lineup;
+      const played = sets[idx].rallies?.length ?? 0;
+      if (lu && lu.subs.length > 0 && lu.subs[lu.subs.length - 1].atRally >= played) {
+        sets[idx] = { ...sets[idx], lineup: { ...lu, subs: lu.subs.slice(0, -1) } };
+        return { live: { ...s.live, sets } };
+      }
+
+      // Se o set atual está vazio, volta para o anterior
+      if (played === 0 && idx > 0) {
+        sets.pop();
+        idx--;
+      }
+      const current = { ...sets[idx] };
+      const rallies = [...(current.rallies ?? [])];
+      if (rallies.length === 0) return s;
+
+      rallies.pop();
+      const last = rallies[rallies.length - 1];
+      current.rallies = rallies;
+      current.scoreA = last?.scoreA ?? 0;
+      current.scoreB = last?.scoreB ?? 0;
+      current.finished = false;
+      sets[idx] = current;
+
+      return { live: { ...s.live, sets } };
+    }),
+
+  removePoint: (teamId) =>
+    set((s) => {
+      if (!s.live) return s;
+      const sets = [...s.live.sets];
+      const idx = sets.length - 1;
+      const current = sets[idx];
+      const old = current.rallies ?? [];
+      let cut = -1;
+      for (let i = old.length - 1; i >= 0; i--) {
+        if (old[i].teamId === teamId) {
+          cut = i;
+          break;
+        }
+      }
+      if (cut < 0) return s;
+
+      // O placar gravado em cada rally é o de depois dele — tirar um do
+      // meio exige recontar os seguintes
+      let scoreA = 0;
+      let scoreB = 0;
+      const rallies = old
+        .filter((_, i) => i !== cut)
+        .map((r) => {
+          if (r.teamId === current.teamAId) scoreA++;
+          else scoreB++;
+          return { ...r, scoreA, scoreB };
+        });
+
+      // Substituição feita depois do ponto removido anda uma casa para trás
+      const lineup = current.lineup && {
+        ...current.lineup,
+        subs: current.lineup.subs.map((sub) =>
+          sub.atRally > cut ? { ...sub, atRally: sub.atRally - 1 } : sub,
+        ),
+      };
+
+      sets[idx] = {
+        ...current,
+        rallies,
+        scoreA,
+        scoreB,
+        finished: isSetOver(scoreA, scoreB, s.live.scout),
+        ...(lineup ? { lineup } : {}),
+      };
+      return { live: { ...s.live, sets } };
+    }),
+
+  startNextSet: () =>
+    set((s) => {
+      if (!s.live) return s;
+      // O set seguinte começa com a escalação inicial do anterior e o
+      // primeiro saque alternado. Dá para ajustar antes do primeiro ponto.
+      const prev = s.live.sets[s.live.sets.length - 1].lineup;
+      const [a, b] = s.live.teams;
+      const lineup: SetLineup | undefined = prev && {
+        court: prev.court,
+        firstServeTeamId: prev.firstServeTeamId === a.id ? b.id : a.id,
+        subs: [],
+      };
+      return {
+        live: { ...s.live, sets: [...s.live.sets, newSet(s.live.teams, lineup)] },
+      };
+    }),
+
+  setFirstServe: (teamId) =>
+    set((s) => {
+      const live =
+        s.live &&
+        patchLineup(s.live, (lu, played) =>
+          played === 0 ? { ...lu, firstServeTeamId: teamId } : null,
+        );
+      return live ? { live } : s;
+    }),
+
+  setStartCourt: (court) =>
+    set((s) => {
+      const live =
+        s.live &&
+        patchLineup(s.live, (lu, played) =>
+          played === 0 ? { ...lu, court, subs: [] } : null,
+        );
+      return live ? { live } : s;
+    }),
+
+  substitute: (outId, inId) =>
+    set((s) => {
+      const live =
+        s.live &&
+        patchLineup(s.live, (lu, played) => ({
+          ...lu,
+          subs: [...lu.subs, { atRally: played, outId, inId }],
+        }));
+      return live ? { live } : s;
+    }),
+
+  finishMatch: () => {
+    const live = get().live;
+    if (!live) return;
+    const match = partidaEncerrada(live);
+    set((s) => ({
+      live: null,
+      matches: match ? [match, ...s.matches] : s.matches,
+    }));
+  },
+
+  discardMatch: () => set({ live: null }),
+
+  // Apagar é uma edição como as outras: a lápide leva a exclusão aos outros aparelhos
+  removeMatch: (id) =>
+    set((s) => {
+      const m = s.matches.find((x) => x.id === id);
+      return {
+        matches: s.matches.filter((x) => x.id !== id),
+        excluidas: m?.remoteId
+          ? [...s.excluidas, { remoteId: m.remoteId, sport: m.sport, date: m.date, at: new Date().toISOString() }]
+          : s.excluidas,
+      };
+    }),
+});
+
+/** Um store de partida guardado na chave dada. O do link (041) tem o seu */
+export function criarStoreDePartida(name: string) {
+  return create<MatchState>()(
+    persist(criador, {
+      name,
       partialize: (s) => ({
         live: s.live,
         matches: s.matches,
         excluidas: s.excluidas,
         leituraPartidas: s.leituraPartidas,
       }),
-    },
-  ),
-);
+    }),
+  );
+}
+
+export const useMatchStore = criarStoreDePartida(chaveInicial(BASES.partidas));
+export type StoreDePartida = typeof useMatchStore;

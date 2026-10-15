@@ -685,6 +685,35 @@ fala do jogo pelo id da nuvem.
 - Jogador que não está no elenco do aparelho sai do sorteio e da partida
   recebidos, em vez de virar um id solto.
 
+### Scout pelo link (migração 041)
+
+Pedido do Guilherme em 15/10/2026 — exceção pedida por ele ao congelamento
+do vôlei. Dentro da partida, o ícone de link no cabeçalho do placar
+(`PassarParaOLink`) sobe a partida ao vivo para `partidas_ao_vivo` e manda
+quem marca para `/#/s/TOKEN` (`GuestScoutPage`), sem conta.
+
+- **Uma fonte por partida.** Ao criar o link, a partida SAI do aparelho do
+  administrador (`discardMatch`) e ele vai para `/ao-vivo/:id` (`AoVivoPage`).
+  Duas fontes marcando a mesma partida não se juntam.
+- **O mesmo placar.** `ScoreboardPage` lê o store e o elenco de
+  `PlacarContexto`: no app, `useMatchStore` e `useRoster`; no link, um store
+  próprio (`criarStoreDePartida('timecerto:scout-link')`) e o elenco que veio
+  com o link. No link não há descartar nem ajustes do scout — marca pontos,
+  tipo de ponto, jogador, substituição e próximo set, no detalhe que o admin
+  escolheu.
+- **Um celular por link** (`aparelho` = `meuAparelho()`): o primeiro que abre
+  fica com ele; os outros veem "link em uso". Não expira sozinho — o admin
+  libera em `/ao-vivo/:id`, e o celular antigo passa a receber `em_uso`.
+- **Offline**: o link guarda a partida no aparelho e sobe 800 ms depois de
+  cada toque, quando a rede volta e a cada 15 s. O ponto nunca espera a rede.
+- **Ids da nuvem** no `estado` (`aoVivoComIds`); o jogo vai em `event_id`.
+- **Encerrar** (pelo link ou pelo admin) grava em `matches.dados` com
+  `partidaEncerrada`, e a partida chega ao histórico de todos pela
+  sincronização. O link reaberto mostra "Jogo encerrado".
+- **Os admins acompanham** lendo a tabela a cada 3 s (sem realtime); o cartão
+  "Ao vivo pelo link" (`PartidasPeloLink`) aparece em Jogo e em Partidas. Os
+  gráficos são os do resumo (`ScoutDaPartida`).
+
 ## Mapa
 
 ```
