@@ -36,10 +36,10 @@ import { vagasDoJogo, joga, type Situacao } from '@/lib/vagas';
 import { hasSavedSession, isCloudAvailable } from '@/lib/sessao';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { computeAllStats, formatDate } from '@/lib/stats';
-import { SPORTS } from '@/lib/sports';
+import { SPORTS, nomeDaPosicao } from '@/lib/sports';
 import { setsWonBy } from '@/lib/volleyStats';
 import { cn, formatBRL, initials } from '@/lib/utils';
-import type { Jogo, Player } from '@/types';
+import type { Jogo, Player, SportId } from '@/types';
 
 // A parte dos links traz o Supabase: só para quem tem sessão salva
 const LinksDoJogo = lazy(() =>
@@ -663,7 +663,15 @@ function Confirmados({
     const q = query.trim().toLowerCase();
     const list = (
       q ? players.filter((p) => p.name.toLowerCase().includes(q) || p.nickname?.toLowerCase().includes(q)) : players
-    ).sort((a, b) => Number(a.kind === 'convidado') - Number(b.kind === 'convidado'));
+    );
+    // Lista única (pedido do Guilherme em 17/10/2026): mensalista e convidado
+    // juntos, na ordem em que confirmaram; o ícone ao lado diz quem é quem
+    const seq = new Map(jogo.confirmations.map((c) => [c.playerId, c.seq]));
+    list.sort(
+      (a, b) =>
+        (seq.get(a.id) ?? Infinity) - (seq.get(b.id) ?? Infinity) ||
+        nomeDeExibicao(a).localeCompare(nomeDeExibicao(b), 'pt-BR'),
+    );
     const tipo = (p: Player) => dist.situacao.get(p.id)?.tipo;
     const posicao = (p: Player) => {
       const s = dist.situacao.get(p.id);
@@ -678,7 +686,7 @@ function Confirmados({
         (p) => !['confirmado', 'vaga', 'fila', 'chamado', 'espera'].includes(tipo(p) ?? ''),
       ),
     };
-  }, [players, query, dist]);
+  }, [players, query, dist, jogo.confirmations]);
 
   // Chegou alguém de última hora: só o nome, já confirmado e como convidado
   function handleAvulso(e: React.FormEvent) {
@@ -721,11 +729,11 @@ function Confirmados({
         </div>
       )}
 
-      <Grupo titulo="Confirmados" players={grupos.vao} sit={sit} onToggle={onToggle} dividas={dividas} />
-      <Grupo titulo="Fila" players={grupos.fila} sit={sit} onToggle={onToggle} dividas={dividas} />
-      <Grupo titulo="Chamados da espera" players={grupos.chamados} sit={sit} onToggle={onToggle} dividas={dividas} />
-      <Grupo titulo="Fila de espera" players={grupos.espera} sit={sit} onToggle={onToggle} dividas={dividas} />
-      <Grupo titulo="Ausentes" players={grupos.ausentes} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo sport={jogo.sport} titulo="Confirmados" players={grupos.vao} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo sport={jogo.sport} titulo="Fila" players={grupos.fila} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo sport={jogo.sport} titulo="Chamados da espera" players={grupos.chamados} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo sport={jogo.sport} titulo="Fila de espera" players={grupos.espera} sit={sit} onToggle={onToggle} dividas={dividas} />
+      <Grupo sport={jogo.sport} titulo="Ausentes" players={grupos.ausentes} sit={sit} onToggle={onToggle} dividas={dividas} />
 
       {editavel &&
         (avulsoOpen ? (
@@ -765,12 +773,14 @@ function Confirmados({
 }
 
 function Grupo({
+  sport,
   titulo,
   players,
   sit,
   onToggle,
   dividas,
 }: {
+  sport: SportId;
   titulo: string;
   players: Player[];
   sit: (p: Player) => Situacao | undefined;
@@ -785,7 +795,7 @@ function Grupo({
       </p>
       <div className="flex flex-col gap-2">
         {players.map((p) => (
-          <PresenceRow key={p.id} player={p} situacao={sit(p)} onToggle={() => onToggle(p.id)} divida={dividas.get(p.id)} />
+          <PresenceRow key={p.id} player={p} sport={sport} situacao={sit(p)} onToggle={() => onToggle(p.id)} divida={dividas.get(p.id)} />
         ))}
       </div>
     </section>
@@ -795,11 +805,13 @@ function Grupo({
 /** A linha inteira é o alvo: um toque alterna confirmado ↔ sem resposta */
 function PresenceRow({
   player,
+  sport,
   situacao,
   onToggle,
   divida,
 }: {
   player: Player;
+  sport: SportId;
   situacao: Situacao | undefined;
   onToggle: () => void;
   /** Em centavos, quando deve algo */
@@ -844,6 +856,9 @@ function PresenceRow({
       </span>
       <span className={cn('min-w-0 flex-1 truncate text-[15px] font-medium', vai ? 'text-ink-50' : 'text-ink-400')}>
         {nomeDeExibicao(player)}
+        {nomeDaPosicao(sport, player.positions[sport]) && (
+          <span className="ml-1.5 text-xs font-normal text-ink-500">· {nomeDaPosicao(sport, player.positions[sport])}</span>
+        )}
         {situacao?.tipo === 'nao_vou' && <span className="ml-2 text-xs font-normal text-ink-500">não vai</span>}
         {divida ? <span className="block text-xs font-normal text-amber-300">deve {formatBRL(divida)}</span> : null}
         {situacao?.tipo === 'pulado' && (
