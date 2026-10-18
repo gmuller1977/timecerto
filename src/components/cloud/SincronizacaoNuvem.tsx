@@ -4,7 +4,7 @@ import { useAuth } from '@/store/useAuth';
 import { usePlano } from '@/store/usePlano';
 import { useJogoStore } from '@/store/useJogoStore';
 import { useMatchStore } from '@/store/useMatchStore';
-import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador, promoverVencidos } from '@/lib/cloud';
+import { anunciarJogo, copiaEDoGrupo, findMyGroup, gerarMensalidades, limparOutrosGrupos, sincronizarDiarias, sincronizarJogos, sincronizarPartidas, syncAmador, promoverVencidos, TrocouDeGrupo } from '@/lib/cloud';
 import { pendentesDeEnvio } from '@/lib/jogo';
 import { lerGrupoAtivo } from '@/lib/grupoAtivo';
 import { ativarGrupo, esquecerGrupo, lembrarNome, lembrarPerfil } from '@/store/trocarGrupo';
@@ -96,13 +96,27 @@ async function rodar(): Promise<void> {
     } else {
       grupo = await grupoDoLegado(meuId);
     }
+    // Saiu de todo grupo no meio (o aparelho volta à chave antiga): o noGrupo
+    // de lib/cloud.ts não vê, porque sem grupo ativo a chave antiga vale
+    const inicio = lerGrupoAtivo()?.id ?? null;
+    const seguir = () => {
+      if ((lerGrupoAtivo()?.id ?? null) !== inicio) throw new TrocouDeGrupo();
+    };
     if (grupo) {
       // Promoção preguiçosa (migração 028), antes de ler os jogos: a marca
       // dispara a diária antecipada. Falhar aqui não trava a sincronização
       await promoverVencidos(grupo).catch((e) => console.warn('promover jogos vencidos', e));
+      seguir();
       await syncAmador(grupo);
+      seguir();
       await sincronizarJogos(grupo);
+      seguir();
       await sincronizarPartidas(grupo);
+      // O que a troca de grupo no meio da rodada misturou antes de 18/10/2026
+      await limparOutrosGrupos(grupo).catch((e) => {
+        if (e instanceof TrocouDeGrupo) throw e;
+        console.warn('limpar o que é de outro grupo', e);
+      });
       // O jogo que virou o próximo porque o anterior passou da janela de 12 h:
       // nada muda no banco nessa hora, então quem anuncia é esta rodada.
       // Falhar aqui não pode travar a sincronização
@@ -112,7 +126,9 @@ async function rodar(): Promise<void> {
       await sincronizarDiarias(grupo).catch((e) => console.warn('sincronizar diárias', e));
     }
   } catch (e) {
-    console.error('sincronizar com a nuvem', e);
+    // Trocou de grupo no meio: a rodada para e outra começa, já no grupo novo
+    if (e instanceof TrocouDeGrupo) deNovo = true;
+    else console.error('sincronizar com a nuvem', e);
   } finally {
     rodando = false;
     if (deNovo) {

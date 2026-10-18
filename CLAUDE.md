@@ -415,6 +415,16 @@ junto" de sempre.
 O banco de teste (`mock-persistente.js`) não aplica RLS: para testar perda
 de acesso nele, o grupo tem de sumir da tabela, não só mudar de dono.
 
+**Trocar de grupo no meio da sincronização** (bug de 18/10/2026: "jogos de um
+grupo aparecendo em todos"). A rodada roda com o id do grupo de quando
+começou; trocar de grupo durante ela apontava os stores para o outro, e o
+que vinha da nuvem do grupo A caía na cópia do B (e os jogos novos do B
+subiam para o A). Hoje toda leitura/escrita nos stores depois de um `await`
+passa por `noGrupo` (`lib/cloud.ts`), que interrompe com `TrocouDeGrupo`; a
+rodada para e outra começa no grupo novo. `limparOutrosGrupos` tira da cópia
+do grupo, uma vez por abertura, o atleta, jogo ou partida que a nuvem
+confirma ser de OUTRO grupo — só com o grupo ativo, nunca na chave antiga.
+
 ### Perder o acesso limpa o aparelho
 
 Bug de 29/09/2026: o administrador removido continuava vendo jogos e atletas.

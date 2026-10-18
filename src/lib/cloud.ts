@@ -496,7 +496,29 @@ export function syncAmador(groupId: string): Promise<number> {
 /** Hora das edições anteriores à base única: perdem para qualquer outra */
 const LEGADO = new Date(0).toISOString();
 
+/**
+ * A rodada é do grupo que estava ativo quando começou. Trocar de grupo no meio
+ * dela aponta os stores para o OUTRO grupo, e o que a rodada lesse ou
+ * enviasse dali em diante cruzava os dois: os jogos do grupo A caíam na cópia
+ * do grupo B, e os jogos novos do B subiam para o A (bug relatado pelo
+ * Guilherme em 18/10/2026: "jogos de um grupo aparecendo em todos"). Toda
+ * leitura e escrita nos stores depois de um `await` confere antes.
+ */
+export class TrocouDeGrupo extends Error {
+  constructor() {
+    super('O grupo ativo mudou durante a sincronização');
+    this.name = 'TrocouDeGrupo';
+  }
+}
+
+function noGrupo(groupId: string) {
+  // Sem grupo ativo é o aparelho de antes da etapa 8: a chave antiga é do grupo
+  const ativo = lerGrupoAtivo();
+  if (ativo && ativo.id !== groupId) throw new TrocouDeGrupo();
+}
+
 async function sincronizarAtletas(groupId: string): Promise<number> {
+  noGrupo(groupId);
   prepararLegado();
   await enviarAtletas(groupId);
   const novos = await receberAtletas(groupId);
@@ -510,6 +532,7 @@ async function sincronizarAtletas(groupId: string): Promise<number> {
  * quando falta. É o que a sincronização própria do time fazia antes da fase 2.
  */
 async function trazerLinksPessoais(groupId: string) {
+  noGrupo(groupId);
   const sem = useAppStore
     .getState()
     .players.filter((p) => p.remoteId && !p.inviteToken)
@@ -522,6 +545,7 @@ async function trazerLinksPessoais(groupId: string) {
       .in('id', sem.slice(i, i + 100));
     if (error) throw error;
     const token = new Map((data ?? []).map((r) => [r.id as string, r.invite_token as string]));
+    noGrupo(groupId);
     useAppStore.setState((st) => ({
       players: st.players.map((p) =>
         p.remoteId && !p.inviteToken && token.get(p.remoteId) ? { ...p, inviteToken: token.get(p.remoteId) } : p,
@@ -596,6 +620,7 @@ async function enviarAtletas(groupId: string) {
   ];
   const { error } = await db().rpc('salvar_jogadores', { p_group: groupId, p_rows: rows });
   if (error) throw error;
+  noGrupo(groupId);
 
   // Só marca como enviado o que não mudou enquanto ia
   const enviado = new Map(vivos.map((p) => [p.id, p.updatedAt]));
@@ -618,6 +643,7 @@ async function enviarAtletas(groupId: string) {
       .select(PLAYER_SYNC_COLS)
       .in('id', ids.slice(i, i + 100));
     if (e2) throw e2;
+    noGrupo(groupId);
     mesclar((data ?? []) as unknown as LinhaJogador[]);
   }
 }
@@ -688,6 +714,7 @@ const doJogador = (r: LinhaJogador) => ({
  * - quem existe: vale o mais recente. Edição local não enviada e mais nova fica.
  */
 async function receberAtletas(groupId: string): Promise<number> {
+  noGrupo(groupId);
   let novos = 0;
   for (;;) {
     const desde = useAppStore.getState().leituraNuvem ?? LEGADO;
@@ -700,6 +727,7 @@ async function receberAtletas(groupId: string): Promise<number> {
       .limit(500);
     if (error) throw error;
     const linhas = (data ?? []) as unknown as LinhaJogador[];
+    noGrupo(groupId);
     if (linhas.length === 0) return novos;
     novos += mesclar(linhas);
     useAppStore.setState({ leituraNuvem: linhas[linhas.length - 1].synced_at });
@@ -1220,10 +1248,11 @@ const jogoNaoEnviado = (j: Jogo) => !j.remoteId || j.enviadoEm !== j.updatedAt;
  * outro — foi o que a "adoção" fazia na tela; agora é aqui, uma vez só.
  */
 export async function sincronizarJogos(groupId: string): Promise<void> {
+  noGrupo(groupId);
   prepararJogosLegado();
   await receberJogos(groupId);
   await enviarJogos(groupId);
-  await sincronizarRespostas();
+  await sincronizarRespostas(groupId);
 }
 
 /** Jogo de antes da base única, já na nuvem, segue a nuvem; os outros sobem */
@@ -1237,6 +1266,7 @@ function prepararJogosLegado() {
 }
 
 async function receberJogos(groupId: string) {
+  noGrupo(groupId);
   for (;;) {
     const desde = useJogoStore.getState().leituraJogos ?? LEGADO;
     const { data, error } = await db()
@@ -1248,6 +1278,7 @@ async function receberJogos(groupId: string) {
       .limit(500);
     if (error) throw error;
     const linhas = (data ?? []) as unknown as LinhaJogo[];
+    noGrupo(groupId);
     if (linhas.length === 0) return;
     mesclarJogos(linhas);
     useJogoStore.setState({ leituraJogos: linhas[linhas.length - 1].synced_at });
@@ -1285,6 +1316,7 @@ function mesclarJogos(linhas: LinhaJogo[]) {
 }
 
 async function enviarJogos(groupId: string) {
+  noGrupo(groupId);
   // O id da nuvem nasce aqui. O migrado que não achou evento para adotar
   // (receberJogos roda antes) também sobe, como jogo novo
   useJogoStore.setState((s) => ({
@@ -1311,6 +1343,7 @@ async function enviarJogos(groupId: string) {
   }));
   const { error } = await db().rpc('salvar_jogos', { p_group: groupId, p_rows: rows });
   if (error) throw error;
+  noGrupo(groupId);
 
   const enviado = new Map(vivos.map((j) => [j.id, j.updatedAt]));
   useJogoStore.setState((s) => ({
@@ -1325,6 +1358,7 @@ async function enviarJogos(groupId: string) {
       .select(EVENT_SYNC_COLS)
       .in('id', ids.slice(i, i + 100));
     if (e2) throw e2;
+    noGrupo(groupId);
     mesclarJogos((data ?? []) as unknown as LinhaJogo[]);
   }
 }
@@ -1335,7 +1369,8 @@ async function enviarJogos(groupId: string) {
  * é gravado, não apagado — é o que deixa os outros aparelhos saberem que o
  * organizador desmarcou alguém.
  */
-async function sincronizarRespostas() {
+async function sincronizarRespostas(groupId: string) {
+  noGrupo(groupId);
   const limite = Date.now() - 24 * 3600 * 1000;
   const ativos = useJogoStore
     .getState()
@@ -1356,6 +1391,7 @@ async function sincronizarRespostas() {
       .select('player_id, status, answered_at, espera_desde, chamado_em, vaga_de')
       .eq('event_id', j.remoteId!);
     if (error) throw error;
+    noGrupo(groupId);
     const mapa = localDe();
     useJogoStore.getState().importarDoLink(
       j.id,
@@ -1379,6 +1415,7 @@ async function sincronizarRespostas() {
   for (const j of ativos) {
     await receber(j);
 
+    noGrupo(groupId);
     const atual = useJogoStore.getState().jogos.find((x) => x.id === j.id);
     const itens = atual ? pendentesDeEnvio(atual) : [];
     if (itens.length === 0) continue;
@@ -1388,11 +1425,49 @@ async function sincronizarRespostas() {
       return remoteId ? [{ remoteId, status: c.status, at: c.at }] : [];
     });
     await enviarRespostas(j.remoteId!, envio);
+    noGrupo(groupId);
     useJogoStore.getState().marcarEnviados(j.id, itens.map((c) => ({ playerId: c.playerId, at: c.at })));
     // O envio pode ter aberto vaga e o banco já chamou alguém: lê de novo,
     // para o administrador ver quem foi chamado sem esperar a próxima rodada
     if (j.listaFechada) await receber(j);
   }
+}
+
+/**
+ * O que a troca de grupo no meio da rodada já tinha misturado (antes da
+ * correção de 18/10/2026): atletas, jogos e partidas que estão na cópia deste
+ * grupo, mas que na nuvem são de OUTRO grupo. Saem daqui — continuam no
+ * grupo deles. Só sai o que a nuvem confirma que é de outro grupo; o que ela
+ * não devolve (sem acesso, sem rede) fica. Uma vez por grupo a cada abertura.
+ */
+const conferidos = new Set<string>();
+
+export async function limparOutrosGrupos(groupId: string): Promise<number> {
+  if (conferidos.has(groupId)) return 0;
+  // Só na cópia do próprio grupo: a chave antiga (sem grupo ativo) mistura os dois modos
+  if (lerGrupoAtivo()?.id !== groupId) return 0;
+  const doOutro = async (tabela: 'players' | 'events' | 'matches', ids: string[]) => {
+    const fora = new Set<string>();
+    for (let i = 0; i < ids.length; i += 100) {
+      const { data, error } = await db().from(tabela).select('id, group_id').in('id', ids.slice(i, i + 100));
+      if (error) throw error;
+      for (const r of data ?? []) if (r.group_id !== groupId) fora.add(r.id as string);
+    }
+    return fora;
+  };
+  const daNuvem = (xs: { remoteId?: string; enviadoEm?: string }[]) =>
+    xs.flatMap((x) => (x.remoteId && x.enviadoEm ? [x.remoteId] : []));
+
+  const atletas = await doOutro('players', daNuvem(useAppStore.getState().players));
+  const jogos = await doOutro('events', daNuvem(useJogoStore.getState().jogos));
+  const partidas = await doOutro('matches', daNuvem(useMatchStore.getState().matches));
+  noGrupo(groupId);
+  const fora = (x: { remoteId?: string }) => Boolean(x.remoteId && (atletas.has(x.remoteId) || jogos.has(x.remoteId) || partidas.has(x.remoteId)));
+  if (atletas.size) useAppStore.setState((s) => ({ players: s.players.filter((p) => !fora(p)) }));
+  if (jogos.size) useJogoStore.setState((s) => ({ jogos: s.jogos.filter((j) => !fora(j)) }));
+  if (partidas.size) useMatchStore.setState((s) => ({ matches: s.matches.filter((m) => !fora(m)) }));
+  conferidos.add(groupId);
+  return atletas.size + jogos.size + partidas.size;
 }
 
 // ── Base única — fase 2: partidas (migração 013) ────────────
@@ -1479,6 +1554,7 @@ const partidaNaoEnviada = (m: Match) => !m.remoteId || m.enviadoEm !== m.updated
  * placar. Ela aparece nos outros quando termina.
  */
 export async function sincronizarPartidas(groupId: string): Promise<void> {
+  noGrupo(groupId);
   // Partida de antes da base única nunca esteve na nuvem: sobe como nova
   const agora = new Date().toISOString();
   const modo = modoDoGrupo();
@@ -1490,6 +1566,7 @@ export async function sincronizarPartidas(groupId: string): Promise<void> {
 }
 
 async function receberPartidas(groupId: string) {
+  noGrupo(groupId);
   for (;;) {
     const desde = useMatchStore.getState().leituraPartidas ?? LEGADO;
     const { data, error } = await db()
@@ -1501,6 +1578,7 @@ async function receberPartidas(groupId: string) {
       .limit(200);
     if (error) throw error;
     const linhas = (data ?? []) as unknown as LinhaPartida[];
+    noGrupo(groupId);
     if (linhas.length === 0) return;
     mesclarPartidas(linhas);
     useMatchStore.setState({ leituraPartidas: linhas[linhas.length - 1].synced_at });
@@ -1561,6 +1639,7 @@ function mesclarPartidas(linhas: LinhaPartida[]) {
 }
 
 async function enviarPartidas(groupId: string) {
+  noGrupo(groupId);
   const modo = modoDoGrupo();
   useMatchStore.setState((s) => ({
     matches: s.matches.map((m) =>
@@ -1605,6 +1684,7 @@ async function enviarPartidas(groupId: string) {
     const { error } = await db().rpc('salvar_partidas', { p_group: groupId, p_rows: rows.slice(i, i + 50) });
     if (error) throw error;
   }
+  noGrupo(groupId);
 
   const enviada = new Map(vivas.map((m) => [m.id, m.updatedAt]));
   const exclusoesEnviadas = new Set(excluidas.map((e) => e.remoteId + e.at));
@@ -1621,6 +1701,7 @@ async function enviarPartidas(groupId: string) {
       .select(MATCH_SYNC_COLS)
       .in('id', ids.slice(i, i + 100));
     if (error) throw error;
+    noGrupo(groupId);
     mesclarPartidas((data ?? []) as unknown as LinhaPartida[]);
   }
 }
