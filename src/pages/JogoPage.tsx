@@ -653,6 +653,9 @@ function Confirmados({
   };
   const [avulsoOpen, setAvulsoOpen] = useState(false);
   const [avulso, setAvulso] = useState('');
+  // Filtro só dos ausentes (pedido do Guilherme em 19/10/2026): achar rápido
+  // quem cobrar entre os mensalistas ou chamar entre os convidados
+  const [filtroAusentes, setFiltroAusentes] = useState<'todos' | 'mensalista' | 'convidado'>('todos');
   const editavel = jogo.status === 'aberto';
 
   const sit = (p: Player) => dist.situacao.get(p.id);
@@ -687,6 +690,20 @@ function Confirmados({
       ),
     };
   }, [players, query, dist, jogo.confirmations]);
+
+  const ausentesConvidados = grupos.ausentes.filter((p) => p.kind === 'convidado');
+  const ausentesMensalistas = grupos.ausentes.filter((p) => p.kind !== 'convidado');
+  const ausentesFiltrados =
+    filtroAusentes === 'convidado'
+      ? ausentesConvidados
+      : filtroAusentes === 'mensalista'
+        ? ausentesMensalistas
+        : grupos.ausentes;
+  const chip = (ativo: boolean) =>
+    cn(
+      'h-8 shrink-0 rounded-lg border px-3 text-xs font-semibold',
+      ativo ? 'border-brand-500 bg-brand-500/15 text-brand-300' : 'border-ink-800 bg-ink-950 text-ink-400',
+    );
 
   // Chegou alguém de última hora: só o nome, já confirmado e como convidado
   function handleAvulso(e: React.FormEvent) {
@@ -733,7 +750,38 @@ function Confirmados({
       <Grupo sport={jogo.sport} titulo="Fila" players={grupos.fila} sit={sit} onToggle={onToggle} dividas={dividas} />
       <Grupo sport={jogo.sport} titulo="Chamados da espera" players={grupos.chamados} sit={sit} onToggle={onToggle} dividas={dividas} />
       <Grupo sport={jogo.sport} titulo="Fila de espera" players={grupos.espera} sit={sit} onToggle={onToggle} dividas={dividas} />
-      <Grupo sport={jogo.sport} titulo="Ausentes" players={grupos.ausentes} sit={sit} onToggle={onToggle} dividas={dividas} />
+      {grupos.ausentes.length > 0 && (
+        <Grupo
+          sport={jogo.sport}
+          titulo="Ausentes"
+          total={grupos.ausentes.length}
+          players={ausentesFiltrados}
+          sit={sit}
+          onToggle={onToggle}
+          dividas={dividas}
+          vazio={filtroAusentes === 'convidado' ? 'Nenhum convidado ausente.' : 'Nenhum mensalista ausente.'}
+          filtro={
+            <div className="no-scrollbar mb-2 flex gap-1.5 overflow-x-auto" aria-label="Filtrar ausentes">
+              {(
+                [
+                  ['todos', 'Todos', grupos.ausentes.length],
+                  ['mensalista', 'Mensalistas', ausentesMensalistas.length],
+                  ['convidado', 'Convidados', ausentesConvidados.length],
+                ] as const
+              ).map(([id, rotulo, n]) => (
+                <button
+                  key={id}
+                  className={chip(filtroAusentes === id)}
+                  aria-pressed={filtroAusentes === id}
+                  onClick={() => setFiltroAusentes(id)}
+                >
+                  {rotulo} ({n})
+                </button>
+              ))}
+            </div>
+          }
+        />
+      )}
 
       {editavel &&
         (avulsoOpen ? (
@@ -779,6 +827,9 @@ function Grupo({
   sit,
   onToggle,
   dividas,
+  total,
+  filtro,
+  vazio,
 }: {
   sport: SportId;
   titulo: string;
@@ -786,13 +837,21 @@ function Grupo({
   sit: (p: Player) => Situacao | undefined;
   onToggle: (id: string) => void;
   dividas: Map<string, number>;
+  /** Contagem do título quando a lista vem filtrada */
+  total?: number;
+  /** Filtro mostrado entre o título e a lista */
+  filtro?: React.ReactNode;
+  /** Com filtro, o que dizer quando ele não acha ninguém */
+  vazio?: string;
 }) {
-  if (players.length === 0) return null;
+  if (players.length === 0 && !filtro) return null;
   return (
     <section className="mt-4">
       <p className="mb-2 text-[11px] font-semibold tracking-wide text-ink-500 uppercase">
-        {titulo} ({players.length})
+        {titulo} ({total ?? players.length})
       </p>
+      {filtro}
+      {players.length === 0 && vazio && <p className="py-2 text-sm text-ink-500">{vazio}</p>}
       <div className="flex flex-col gap-2">
         {players.map((p) => (
           <PresenceRow key={p.id} player={p} sport={sport} situacao={sit(p)} onToggle={() => onToggle(p.id)} divida={dividas.get(p.id)} />
