@@ -69,32 +69,24 @@ export function HistoryPage() {
               >
                 <span className="shrink-0 text-xl">{SPORTS[m.sport].emoji}</span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className={cn(
-                        'size-2 shrink-0 rounded-full',
-                        TEAM_COLOR_CLASSES[a.color].bg,
-                      )}
-                    />
-                    <span className="truncate text-[15px] font-medium text-ink-50">
-                      {a.name}
+                  {/* Os nomes inteiros em cima; placar e data embaixo, em branco (pedido do Guilherme, 19/10/2026) */}
+                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[15px] font-medium text-ink-50">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className={cn('size-2 shrink-0 rounded-full', TEAM_COLOR_CLASSES[a.color].bg)} />
+                      <span className="break-words">{a.name}</span>
                     </span>
-                    <span className="shrink-0 text-sm font-bold tabular-nums text-ink-100">
-                      {sa} × {sb}
-                    </span>
-                    <span
-                      className={cn(
-                        'size-2 shrink-0 rounded-full',
-                        TEAM_COLOR_CLASSES[b.color].bg,
-                      )}
-                    />
-                    <span className="truncate text-[15px] font-medium text-ink-50">
-                      {b.name}
+                    <span className="text-ink-400">x</span>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className={cn('size-2 shrink-0 rounded-full', TEAM_COLOR_CLASSES[b.color].bg)} />
+                      <span className="break-words">{b.name}</span>
                     </span>
                   </span>
-                  <span className="mt-0.5 block text-xs text-ink-500">
-                    {formatDate(m.date)} · {m.games.length}{' '}
-                    {m.games.length === 1 ? 'set' : 'sets'}
+                  <span className="mt-1 block text-[13px] text-ink-50">
+                    <span className="font-bold tabular-nums">
+                      {sa} × {sb}
+                    </span>
+                    {' · '}
+                    {formatDate(m.date)} · {m.games.length} {m.games.length === 1 ? 'set' : 'sets'}
                     {hasDetail(m) ? ' · com scout' : ' · só placar'}
                   </span>
                 </span>
