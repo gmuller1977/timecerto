@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PartidasPeloLink } from '@/components/scout/PartidasPeloLink';
-import { ArrowLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Trash2, X } from 'lucide-react';
 import { useMatchStore } from '@/store/useMatchStore';
 import { useAppStore } from '@/store/useAppStore';
 import { TEAM_COLOR_CLASSES } from '@/lib/draw';
@@ -9,12 +10,32 @@ import { hasDetail, setsWonBy } from '@/lib/volleyStats';
 import { formatDate } from '@/lib/stats';
 import { cn } from '@/lib/utils';
 
+// O dia da partida no horário do aparelho, AAAA-MM-DD — o formato do <input type="date">
+const diaLocal = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// O período sobrevive a abrir uma partida e voltar. Memória da sessão
+let periodoGuardado = { de: '', ate: '' };
+
 export function HistoryPage() {
   const navigate = useNavigate();
   const all = useMatchStore((s) => s.matches);
   // Cada modo vê só as próprias partidas; sem modo gravado é amador
   const pro = useAppStore((s) => s.mode) === 'profissional';
-  const matches = all.filter((m) => (m.mode === 'profissional') === pro);
+  const doModo = all.filter((m) => (m.mode === 'profissional') === pro);
+  // Filtro por período (pedido do Guilherme, 19/10/2026): de/até, um dos dois basta
+  const [periodo, setPeriodoState] = useState(periodoGuardado);
+  const setPeriodo = (p: Partial<typeof periodo>) => {
+    periodoGuardado = { ...periodo, ...p };
+    setPeriodoState(periodoGuardado);
+  };
+  const filtrando = Boolean(periodo.de || periodo.ate);
+  const matches = doModo.filter((m) => {
+    const dia = diaLocal(m.date);
+    return (!periodo.de || dia >= periodo.de) && (!periodo.ate || dia <= periodo.ate);
+  });
   const removeMatch = useMatchStore((s) => s.removeMatch);
 
   return (
@@ -29,7 +50,9 @@ export function HistoryPage() {
         <div>
           <h1 className="text-xl font-bold">{pro ? 'Partidas' : 'Jogos'}</h1>
           <p className="text-xs text-ink-400">
-            {matches.length === 0
+            {filtrando && doModo.length > 0
+              ? `${matches.length} de ${doModo.length} no período`
+              : matches.length === 0
               ? pro
                 ? 'Nenhuma ainda'
                 : 'Nenhum ainda'
@@ -42,7 +65,45 @@ export function HistoryPage() {
 
       <PartidasPeloLink />
 
-      {matches.length === 0 && (
+      {doModo.length > 0 && (
+        <section className="mb-3 flex items-end gap-2" aria-label="Filtrar por data">
+          <label className="min-w-0 flex-1">
+            <span className="mb-1 block text-[11px] text-ink-400">De</span>
+            <input
+              type="date"
+              value={periodo.de}
+              max={periodo.ate || undefined}
+              onChange={(e) => setPeriodo({ de: e.target.value })}
+              className={cn(CAMPO, !periodo.de && 'text-ink-500')}
+            />
+          </label>
+          <label className="min-w-0 flex-1">
+            <span className="mb-1 block text-[11px] text-ink-400">Até</span>
+            <input
+              type="date"
+              value={periodo.ate}
+              min={periodo.de || undefined}
+              onChange={(e) => setPeriodo({ ate: e.target.value })}
+              className={cn(CAMPO, !periodo.ate && 'text-ink-500')}
+            />
+          </label>
+          {filtrando && (
+            <button
+              onClick={() => setPeriodo({ de: '', ate: '' })}
+              className="flex h-10 shrink-0 items-center gap-1 rounded-lg border border-ink-800 px-2.5 text-xs text-ink-300"
+              aria-label="Limpar o filtro de data"
+            >
+              <X size={14} /> Limpar
+            </button>
+          )}
+        </section>
+      )}
+
+      {filtrando && doModo.length > 0 && matches.length === 0 && (
+        <p className="mt-8 text-center text-sm text-ink-400">Nenhuma partida nesse período.</p>
+      )}
+
+      {doModo.length === 0 && (
         <div className="mt-12 text-center">
           <p className="text-5xl">🏐</p>
           <p className="mt-3 text-sm leading-relaxed text-ink-400">
@@ -108,3 +169,6 @@ export function HistoryPage() {
     </div>
   );
 }
+
+const CAMPO =
+  'h-10 w-full rounded-lg border border-ink-800 bg-ink-950 px-2.5 text-xs text-ink-200 outline-none [color-scheme:dark]';
