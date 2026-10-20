@@ -905,6 +905,16 @@ engolindo a tela de resumo. `ScoreboardPage` usa um estado `leaving` para isso.
 **Overflow horizontal.** Linha com botão de largura fixa ao lado de conteúdo
 flexível estoura a viewport no celular. Use `flex-wrap`, `min-w-0` e `shrink-0`.
 
+**Grants em tabela nova (Supabase, desde 30/10/2026).** O Supabase deixou de
+dar acesso automático pela API a tabela nova no schema `public`. Toda migração
+que cria tabela traz os GRANTs na mesma migração, senão o app recebe
+"permission denied for table". Regra: `anon` nada (links passam pelas funções
+`guest_*`), `authenticated` só os verbos que o app usa direto e que têm
+política RLS, `service_role` tudo (Edge Functions). Modelo pronto em
+`supabase/modelo_tabela_nova.sql`. Ao recriar o banco (projeto novo, preview,
+`db reset`), rode `supabase/grants.sql` depois do esquema e das migrações e
+acrescente nele cada tabela nova.
+
 ## Testes
 
 Não há suíte automatizada. O padrão usado até aqui, e que funciona bem:

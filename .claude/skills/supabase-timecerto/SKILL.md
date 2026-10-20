@@ -39,6 +39,12 @@ Dinheiro em `bigint` de centavos, sempre. `expenses.amount_cents`,
 Ligada em todas as tabelas. Sem ela, qualquer um com a chave pública lê o banco
 inteiro — a chave anon vai no bundle do navegador, ela é pública por natureza.
 
+**Tabela nova precisa de GRANT** (Supabase, desde 30/10/2026): sem ele a API
+devolve "permission denied". Na mesma migração da tabela: nada para `anon`,
+para `authenticated` só os verbos com política RLS que o app usa direto, tudo
+para `service_role`. Copie `supabase/modelo_tabela_nova.sql` e acrescente a
+tabela em `supabase/grants.sql`.
+
 Duas funções `security definer` fazem o trabalho:
 
 - `is_group_member(gid)` — leitura
