@@ -726,7 +726,19 @@ function Confirmados({
         {/* Com a lista fechada, marcar todos furaria a fila de espera */}
         {editavel && !jogo.listaFechada && players.length > 0 && (
           <button
-            onClick={() => marcarTodos(jogo.id, players.map((p) => p.id), confirmados !== players.length)}
+            onClick={() => {
+              // Um toque marcava os 34 do grupo de uma vez (relatado pelo
+              // Guilherme em 07/11/2026): com vagas e a promoção passada, a
+              // ordem dos marcados é alfabética e convidados tomam as vagas
+              const marcar = confirmados !== players.length;
+              const faltam = players.length - confirmados;
+              const texto = marcar
+                ? `Marcar ${faltam} ${faltam === 1 ? 'pessoa' : 'pessoas'} como confirmadas de uma vez?` +
+                  (jogo.vagas != null ? ` O jogo tem ${jogo.vagas} vagas; quem passar disso vai para a fila.` : '')
+                : `Desmarcar todos os ${players.length} confirmados?`;
+              if (!window.confirm(texto)) return;
+              marcarTodos(jogo.id, players.map((p) => p.id), marcar);
+            }}
             className="text-xs font-medium text-brand-400"
           >
             {confirmados === players.length ? 'Desmarcar todos' : 'Marcar todos'}
