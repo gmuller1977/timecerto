@@ -644,7 +644,6 @@ function Confirmados({
 }) {
   const addPlayer = useAppStore((s) => s.addPlayer);
   const alternar = useJogoStore((s) => s.alternar);
-  const marcarTodos = useJogoStore((s) => s.marcarTodos);
   const responder = useJogoStore((s) => s.responder);
   const [query, setQueryState] = useState(buscaGuardada);
   const setQuery = (q: string) => {
@@ -723,30 +722,9 @@ function Confirmados({
         <p className="text-sm text-ink-400">
           <strong className="text-ink-100">{confirmados}</strong> de {players.length} marcados
         </p>
-        {/* Com a lista fechada, marcar todos furaria a fila de espera */}
-        {/* Com vagas, "Marcar todos" não aparece: confirmar todo mundo de uma vez
-            enche as vagas na ordem alfabética (07/11/2026). Desmarcar continua */}
-        {editavel && !jogo.listaFechada && players.length > 0 &&
-          (jogo.vagas == null || confirmados === players.length) && (
-          <button
-            onClick={() => {
-              // Um toque marcava os 34 do grupo de uma vez (relatado pelo
-              // Guilherme em 07/11/2026): com vagas e a promoção passada, a
-              // ordem dos marcados é alfabética e convidados tomam as vagas
-              const marcar = confirmados !== players.length;
-              const faltam = players.length - confirmados;
-              const texto = marcar
-                ? `Marcar ${faltam} ${faltam === 1 ? 'pessoa' : 'pessoas'} como confirmadas de uma vez?` +
-                  (jogo.vagas != null ? ` O jogo tem ${jogo.vagas} vagas; quem passar disso vai para a fila.` : '')
-                : `Desmarcar todos os ${players.length} confirmados?`;
-              if (!window.confirm(texto)) return;
-              marcarTodos(jogo.id, players.map((p) => p.id), marcar);
-            }}
-            className="text-xs font-medium text-brand-400"
-          >
-            {confirmados === players.length ? 'Desmarcar todos' : 'Marcar todos'}
-          </button>
-        )}
+        {/* Sem "Marcar todos" (decisão do Guilherme em 07/11/2026): um toque
+            confirmou o grupo inteiro e encheu as vagas em ordem alfabética.
+            Confirma o atleta pelo link ou o administrador, um a um */}
       </div>
 
       {players.length > 6 && (

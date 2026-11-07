@@ -62,8 +62,6 @@ interface JogoState {
   guardarSorteio: (id: string, sorteio: DrawResult) => void;
   /** Um toque na lista: confirmado ↔ sem resposta */
   alternar: (jogoId: string, playerId: string) => void;
-  /** "Marcar todos" / "Desmarcar todos" */
-  marcarTodos: (jogoId: string, playerIds: string[], confirmado: boolean) => void;
   /** Resposta do organizador com status explícito (ex.: o avulso chega confirmado) */
   responder: (jogoId: string, playerId: string, status: ConfirmacaoStatus) => void;
   /** Respostas que chegaram pelos links, por id LOCAL */
@@ -122,18 +120,6 @@ export const useJogoStore = create<JogoState>()(
               'organizador',
             );
           }),
-        })),
-
-      marcarTodos: (jogoId, playerIds, confirmado) =>
-        set((s) => ({
-          jogos: noJogo(s.jogos, jogoId, (j) =>
-            playerIds.reduce((acc, id) => {
-              const c = acc.confirmations.find((x) => x.playerId === id);
-              // Desmarcar não apaga quem disse "não vou": isso é uma resposta
-              if (!confirmado && c?.status !== 'confirmado') return acc;
-              return responder(acc, id, confirmado ? 'confirmado' : 'sem-resposta', 'organizador');
-            }, j),
-          ),
         })),
 
       responder: (jogoId, playerId, status) =>
