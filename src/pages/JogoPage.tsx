@@ -724,7 +724,10 @@ function Confirmados({
           <strong className="text-ink-100">{confirmados}</strong> de {players.length} marcados
         </p>
         {/* Com a lista fechada, marcar todos furaria a fila de espera */}
-        {editavel && !jogo.listaFechada && players.length > 0 && (
+        {/* Com vagas, "Marcar todos" não aparece: confirmar todo mundo de uma vez
+            enche as vagas na ordem alfabética (07/11/2026). Desmarcar continua */}
+        {editavel && !jogo.listaFechada && players.length > 0 &&
+          (jogo.vagas == null || confirmados === players.length) && (
           <button
             onClick={() => {
               // Um toque marcava os 34 do grupo de uma vez (relatado pelo
