@@ -8,7 +8,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { vagasDoJogo } from '@/lib/vagas';
 import { haQuantoChamado } from '@/lib/jogo';
 import { textoDaLista } from '@/lib/listaDoJogo';
-import { compartilharNoGrupo } from '@/lib/share';
+import { AVISO_COLAR, compartilharNoGrupo } from '@/lib/share';
 import { nomeDeExibicao } from '@/lib/nome';
 import { whatsappTo } from '@/lib/phone';
 import {
@@ -17,6 +17,7 @@ import {
   avisarInscritos,
   groupLink,
   inscritosComAviso,
+  linkDoGrupoWhatsapp,
   guestLink,
   setListClosed,
   sincronizarJogos,
@@ -119,6 +120,12 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
   const [name, setName] = useState('Pelada');
   const [busy, setBusy] = useState(false);
   const [linkAdded, setLinkAdded] = useState(0);
+  // Link do grupo do WhatsApp (migração 042): abre o grupo direto
+  const [linkGrupo, setLinkGrupo] = useState<string | null>(null);
+  const [colar, setColar] = useState(false);
+  const noGrupo = (text: string) => {
+    if (compartilharNoGrupo(text, linkGrupo) === 'copiado') setColar(true);
+  };
   // Ids da NUVEM dos atletas com aviso no celular (migração 016). Vazio se a
   // migração ainda não rodou — aí o painel só não mostra quem tem aviso
   const [comAviso, setComAviso] = useState<Set<string>>(new Set());
@@ -134,6 +141,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
         if (!alive) return;
         setGroup(g);
         if (g) void lerAvisos(g);
+        if (g) void linkDoGrupoWhatsapp(g.id).then((l) => alive && setLinkGrupo(l));
       })
       .catch((e) => {
         if (!alive) return;
@@ -181,7 +189,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
   // O WhatsApp abre primeiro — depois de um await o navegador pode barrar a
   // janela — e a sincronização vem em seguida, em segundo plano
   function convidar(text: string) {
-    void compartilharNoGrupo(text);
+    noGrupo(text);
     if (group) sincronizar(group).catch((e) => setError(explain(e)));
   }
 
@@ -298,11 +306,12 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
               <Button
                 variant="secondary"
                 className="mt-2 w-full"
-                onClick={() => void compartilharNoGrupo(listaDoJogo(jogo, players, group))}
+                onClick={() => noGrupo(listaDoJogo(jogo, players, group))}
               >
                 <MessageCircle size={17} />
                 Mandar a lista no grupo
               </Button>
+              {colar && <p className="mt-2 text-xs leading-relaxed text-brand-200">{AVISO_COLAR}</p>}
               <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
                 As respostas dos links entram na lista de confirmados e atualizam sozinhas.
               </p>

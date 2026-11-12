@@ -446,6 +446,42 @@ export async function renomearGrupo(groupId: string, nome: string): Promise<stri
 }
 
 /**
+ * O link do grupo do WhatsApp (migração 042). Lido à parte, fora do
+ * GROUP_COLS: antes de a migração rodar, a coluna não existe e o resto do
+ * app não pode quebrar por isso — sem link, cai no compartilhar de sempre.
+ */
+export function normalizarLinkDoGrupo(texto: string): string | null {
+  const m = texto.trim().match(/chat\.whatsapp\.com\/(?:invite\/)?([A-Za-z0-9]+)/);
+  return m ? `https://chat.whatsapp.com/${m[1]}` : null;
+}
+
+export async function linkDoGrupoWhatsapp(groupId: string): Promise<string | null> {
+  try {
+    const { data, error } = await db().from('groups').select('link_whatsapp').eq('id', groupId).maybeSingle();
+    if (error) return null;
+    return (data?.link_whatsapp as string | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function salvarLinkDoGrupoWhatsapp(groupId: string, link: string | null): Promise<void> {
+  const { data, error } = await db().from('groups').update({ link_whatsapp: link }).eq('id', groupId).select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Só o dono ou um administrador do grupo pode trocar o link.');
+}
+
+export async function guestLinkDoGrupoWhatsapp(code: string): Promise<string | null> {
+  try {
+    const { data, error } = await db().rpc('guest_link_do_grupo', { code });
+    if (error) return null;
+    return (data as string | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Base única do elenco amador (fase 1): envia o que ESTE aparelho editou e
  * traz o que os outros editaram. Vale a edição mais recente (`updatedAt`), e
  * quem decide é o servidor (`salvar_jogadores`, migração 010) — um aparelho

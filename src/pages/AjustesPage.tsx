@@ -18,6 +18,9 @@ import { cn } from '@/lib/utils';
 
 // Cada seção traz o Supabase: só carrega quando é aberta
 const NomeDoGrupo = lazy(() => import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })));
+const LinkDoGrupoWhatsapp = lazy(() =>
+  import('@/components/cloud/LinkDoGrupoWhatsapp').then((m) => ({ default: m.LinkDoGrupoWhatsapp })),
+);
 const PerfilDoTime = lazy(() => import('@/components/cloud/PerfilDoTime').then((m) => ({ default: m.PerfilDoTime })));
 const PlanoDoGrupo = lazy(() => import('@/components/cloud/PlanoDoGrupo').then((m) => ({ default: m.PlanoDoGrupo })));
 const FinanceiroAjustes = lazy(() =>
@@ -68,6 +71,7 @@ const SECOES: Secao[] = [
     conteudo: () => (
       <>
         <NomeDoGrupo />
+        <LinkDoGrupoWhatsapp />
         <PerfilDoTime />
         <Administradores />
         <ExcluirGrupo />

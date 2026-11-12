@@ -59,26 +59,54 @@ export async function nativeShare(text: string): Promise<boolean> {
 }
 
 /**
- * Mensagem para o GRUPO do WhatsApp (pedido do Guilherme em 12/11/2026: "já
- * ser enviado direto no grupo sem precisar procurar").
+ * Mensagem para o GRUPO do WhatsApp (pedido do Guilherme em 12/11/2026:
+ * "clicar e já abrir o grupo, onde o usuário clica" — nada é postado sozinho).
  *
- * O link wa.me não aponta para grupo, e postar sozinho no grupo só com robô
- * (risco de banir o número) ou a API oficial de grupos (só grupos criados
- * pela empresa, conta verificada, pago). O que dá sem custo: no celular, a
- * folha de compartilhar do sistema, que mostra as conversas recentes do
- * WhatsApp — o grupo da pelada aparece no topo e vai com um toque. Sem a
- * folha (computador), cai no wa.me de sempre.
+ * O wa.me não aponta para grupo. Com o link do grupo salvo em Ajustes
+ * (migração 042), a lista vai para a área de transferência e o grupo abre;
+ * a pessoa cola e envia. Sem o link: no celular, a folha de compartilhar do
+ * sistema (o grupo recente aparece no topo); no computador, o wa.me.
+ *
+ * Tudo síncrono até o window.open: depois de um await o navegador barra a
+ * janela. Devolve 'copiado' quando abriu o grupo, para a tela avisar "cole".
  */
-export async function compartilharNoGrupo(text: string): Promise<void> {
+export function compartilharNoGrupo(text: string, linkDoGrupo?: string | null): 'copiado' | 'compartilhado' {
+  if (linkDoGrupo) {
+    copiarJa(text);
+    window.open(linkDoGrupo, '_blank', 'noopener');
+    return 'copiado';
+  }
   const celular = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (celular && typeof navigator.share === 'function') {
-    try {
-      await navigator.share({ text });
-      return;
-    } catch (e) {
+    navigator.share({ text }).catch((e) => {
       // Fechou a folha sem escolher: não abre mais nada
-      if (e instanceof DOMException && e.name === 'AbortError') return;
-    }
+      if (!(e instanceof DOMException && e.name === 'AbortError')) {
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+      }
+    });
+    return 'compartilhado';
   }
   window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  return 'compartilhado';
 }
+
+/** Copia ainda dentro do toque: o jeito antigo (síncrono) e, por cima, a API nova */
+function copiarJa(text: string) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+  } catch {
+    /* segue para a API nova */
+  }
+  navigator.clipboard?.writeText(text).catch(() => {});
+}
+
+/** O aviso que aparece depois de abrir o grupo com a lista copiada */
+export const AVISO_COLAR = 'Lista copiada. No grupo, toque e segure na caixa de mensagem, Colar e enviar.';

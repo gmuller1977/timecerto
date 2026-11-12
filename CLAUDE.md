@@ -900,11 +900,12 @@ significa — é isso que separa este app de um placar.
 
 **Mensagem para o grupo do WhatsApp.** `wa.me` não aponta para grupo. Convite
 do jogo e "Mandar a lista no grupo" (admin e link do atleta) usam
-`compartilharNoGrupo` (`lib/share.ts`): no celular abre a folha de compartilhar
-do sistema, onde o grupo recente aparece no topo (um toque); no computador cai
-no `wa.me`. Postar sozinho no grupo só com robô (banimento) ou a API oficial de
-grupos da Meta (só grupos criados pela empresa, conta verificada, pago) —
-descartado em 12/11/2026.
+`compartilharNoGrupo` (`lib/share.ts`). Com o link de convite do grupo salvo em
+Ajustes › Grupo do WhatsApp (migração 042, `groups.link_whatsapp`, lido à parte
+do GROUP_COLS para não quebrar sem a migração), copia a lista e abre o grupo; a
+pessoa cola e envia. Sem link: folha de compartilhar no celular, `wa.me` no
+computador. Nada é postado sozinho (robô bane; API oficial de grupos da Meta só
+serve a grupos criados pela empresa e é paga) — decidido em 12/11/2026.
 
 **Hidratação.** `localStorage` não é lido instantaneamente. Qualquer página que
 redirecione quando não encontra algo (`<Navigate>`) precisa esperar
