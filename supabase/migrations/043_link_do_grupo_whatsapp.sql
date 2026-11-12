@@ -9,7 +9,7 @@
 -- O administrador cola o link em Ajustes. O link do atleta lê pela função
 -- guest_link_do_grupo (nenhuma tabela aberta para anônimo).
 --
--- Rodar uma vez no SQL Editor, DEPOIS da 042 (cadastro_entra_direto). Não apaga nem altera dados:
+-- Rodar uma vez no SQL Editor, DEPOIS da 041. Não apaga nem altera dados:
 -- cria uma coluna (vazia) e uma função.
 
 alter table public.groups

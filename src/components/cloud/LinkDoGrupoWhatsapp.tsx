@@ -77,7 +77,8 @@ export function LinkDoGrupoWhatsapp() {
       </p>
       <p className="mt-1 text-xs leading-relaxed text-ink-400">
         Com o link do grupo, "Mandar a lista no grupo" já abre o grupo da pelada com a lista copiada: é só colar e
-        enviar. No WhatsApp: dados do grupo › Convidar via link › Copiar link.
+        enviar. E o convidado que se inscreve pelo link de convidados ganha o botão "Acesso ao grupo". No WhatsApp: dados
+        do grupo › Convidar via link › Copiar link.
       </p>
       {editando ? (
         <form onSubmit={salvar} className="mt-3">

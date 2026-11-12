@@ -110,6 +110,10 @@ quem se identificou como mensalista (convidado nem aparece em "Quem é você?");
 no banco, `guest_add_player` recusa quem não é mensalista. Quem leva também
 informa a posição do levado. No banco a posição é opcional, de propósito: quem
 estava com a versão antiga aberta na troca não fica travado.
+  Depois de inscrito, o convidado vê **"Acesso ao grupo"**: abre o link de
+  convite do grupo do WhatsApp que o administrador colou em Ajustes (migração
+  043, `guest_link_do_grupo`). Sem link salvo, o cartão não aparece. Pedido do
+  Guilherme em 12/11/2026; mensalista continua no cadastro com aprovação.
 - `/#/r/CÓDIGO` — link de **cadastro de mensalistas** (`groups.register_code`):
   nome, **apelido**, nascimento, telefone, posição e nível. Fica **pendente**
   (`players.pending`) até o administrador aprovar no topo de Atletas; pendente

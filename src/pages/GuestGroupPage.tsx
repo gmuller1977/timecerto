@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { AlertCircle, BellRing, Check, Hourglass, Lock, MapPin, UserPlus, X } from 'lucide-react';
+import { AlertCircle, BellRing, Check, Hourglass, Lock, MapPin, MessageCircle, UserPlus, X } from 'lucide-react';
 import {
   guestAddPlayer,
   guestGroup,
@@ -742,6 +742,30 @@ export function GuestGroupPage() {
                   }}
                 />
                 <MeuWhatsapp key={mine.id} code={code} playerId={mine.id} />
+                {/*
+                  Pedido do Guilherme em 12/11/2026: o convidado que se
+                  inscreve recebe o acesso ao grupo da pelada no WhatsApp. É o
+                  link de convite que o administrador cola em Ajustes (043);
+                  sem ele, o cartão não aparece. Mensalista entra no grupo
+                  pelo administrador, depois da aprovação.
+                */}
+                {mine.kind === 'convidado' && linkGrupo && (
+                  <div className="mt-3 rounded-2xl border border-ink-700 bg-ink-900 p-4">
+                    <p className="text-sm font-semibold text-ink-50">Grupo da pelada no WhatsApp</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-ink-400">
+                      Entre no grupo para acompanhar a lista, os avisos e os times.
+                    </p>
+                    <a
+                      href={linkGrupo}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
+                    >
+                      <MessageCircle size={18} />
+                      Acesso ao grupo
+                    </a>
+                  </div>
+                )}
                 {respostaErro && (
                   <p className="mt-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm leading-relaxed text-red-200">
                     {respostaErro}
