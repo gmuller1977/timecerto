@@ -1,15 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { StarRating } from '@/components/ui/StarRating';
-import {
-  guestRegister,
-  guestRegisterAtleta,
-  guestRegisterInfo,
-  type InfoDoCadastro,
-  type ResultadoDoCadastro,
-} from '@/lib/cloud';
+import { guestRegister, guestRegisterAtleta, guestRegisterInfo, type InfoDoCadastro } from '@/lib/cloud';
 import { AGE_GROUP_LABEL, NAIPE_LABEL, ageOn } from '@/lib/pro';
 import { SPORTS } from '@/lib/sports';
 import { isValidPhone, maskPhoneInput, onlyDigits } from '@/lib/phone';
@@ -18,10 +12,8 @@ import { cn } from '@/lib/utils';
 import { Frame } from '@/pages/GuestGroupPage';
 
 /**
- * Link de cadastro. Sem conta. Na pelada, a pessoa entra direto no grupo e
- * abre a lista do jogo já como ela (migração 042); fica pendente só quando
- * parece alguém que já está no grupo ou o plano grátis está cheio. No time, o
- * pedido sempre espera o técnico aprovar.
+ * Link de cadastro. Sem conta: a pessoa preenche e o pedido fica pendente até
+ * o administrador aprovar.
  *
  * Na pelada é o mensalista, com nível (sugestão — quem decide o que o sorteio
  * usa é o administrador). No time (migração 027) é o atleta: sem nível e sem
@@ -30,7 +22,6 @@ import { Frame } from '@/pages/GuestGroupPage';
  */
 export function GuestRegisterPage() {
   const { code = '' } = useParams();
-  const navigate = useNavigate();
   const [info, setInfo] = useState<InfoDoCadastro | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +36,7 @@ export function GuestRegisterPage() {
   const [altura, setAltura] = useState('');
   const [peso, setPeso] = useState('');
   const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState<ResultadoDoCadastro | null>(null);
+  const [done, setDone] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,24 +54,6 @@ export function GuestRegisterPage() {
 
   if (error) return <Frame><p className="mt-10 text-center text-sm leading-relaxed text-ink-400">{error}</p></Frame>;
   if (!info) return <Frame><p className="mt-10 text-center text-sm text-ink-500">Carregando…</p></Frame>;
-
-  if (done?.status === 'aprovado') {
-    const abrirLista = () => navigate(`/c/${done.code}?eu=${done.playerId}`, { replace: true });
-    return (
-      <Frame>
-        <div className="mt-12 text-center">
-          <CheckCircle2 size={48} className="mx-auto text-brand-400" />
-          <p className="mt-4 text-xl font-bold text-ink-50">Você já está no {info.name}!</p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-400">
-            Agora é só confirmar presença na lista do jogo. Este celular já sabe quem você é.
-          </p>
-          <Button size="lg" className="mt-6 w-full" onClick={abrirLista}>
-            Abrir a lista do jogo
-          </Button>
-        </div>
-      </Frame>
-    );
-  }
 
   if (done) {
     return (
@@ -126,10 +99,10 @@ export function GuestRegisterPage() {
         // "1,72" é metro; "172" já é centímetro
         const heightCm = m === undefined ? undefined : m < 3 ? Math.round(m * 100) : Math.round(m);
         await guestRegisterAtleta(code, { name, birthDate: birth, phone: fone, posicoes, heightCm, weightKg: numero(peso) });
-        setDone({ status: 'pendente' });
       } else {
-        setDone(await guestRegister(code, { name, nickname, birthDate: birth, phone: fone, position, level }));
+        await guestRegister(code, { name, nickname, birthDate: birth, phone: fone, position, level });
       }
+      setDone(true);
     } catch (err) {
       console.error('cadastro pelo link', err);
       const msg = (err as { message?: string })?.message;

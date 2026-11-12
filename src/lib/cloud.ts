@@ -1015,15 +1015,7 @@ export async function guestRegisterAtleta(
   if (error) throw error;
 }
 
-/**
- * Cadastro da pelada (migração 042): entra direto no grupo, com o código do
- * link do jogo para abrir a lista já como a pessoa; ou fica pendente, quando
- * parece alguém que já está no grupo ou o plano grátis está cheio.
- */
-export type ResultadoDoCadastro =
-  | { status: 'aprovado'; playerId: string; code: string }
-  | { status: 'pendente' };
-
+/** Pedido de cadastro do mensalista. Fica pendente até o administrador aprovar. */
 export async function guestRegister(
   code: string,
   input: {
@@ -1034,8 +1026,8 @@ export async function guestRegister(
     position: string;
     level: number;
   },
-): Promise<ResultadoDoCadastro> {
-  const { data, error } = await db().rpc('guest_register', {
+): Promise<void> {
+  const { error } = await db().rpc('guest_register', {
     code,
     p_name: input.name,
     p_birth: input.birthDate,
@@ -1045,12 +1037,6 @@ export async function guestRegister(
     p_nickname: input.nickname.trim() || null,
   });
   if (error) throw error;
-  // Banco antes da 042 não devolve nada: o cadastro ficou pendente
-  const r = (data ?? null) as { status?: string; player?: string; code?: string } | null;
-  if (r?.status === 'aprovado' && r.player && r.code) {
-    return { status: 'aprovado', playerId: r.player, code: r.code };
-  }
-  return { status: 'pendente' };
 }
 
 /** O convidado se inscreve pelo link de convidados e entra na fila */
