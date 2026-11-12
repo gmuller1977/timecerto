@@ -22,6 +22,7 @@ import {
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos, normalizar } from '@/lib/juntar';
 import { iconeDoTipo, textoDaLista } from '@/lib/listaDoJogo';
+import { compartilharNoGrupo } from '@/lib/share';
 import { diaDaPromocao, faseDoJogo } from '@/lib/promocao';
 import { mensagemDaMensalidade, mensagemDoDia, pixCopiaECola } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
@@ -759,9 +760,7 @@ export function GuestGroupPage() {
                         : 'Agora mande a lista atualizada no grupo da pelada, para todo mundo ver quem vai.'}
                     </p>
                     <button
-                      onClick={() =>
-                        window.open(`https://wa.me/?text=${encodeURIComponent(listaParaOGrupo)}`, '_blank', 'noopener')
-                      }
+                      onClick={() => void compartilharNoGrupo(listaParaOGrupo)}
                       className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
                     >
                       Mandar a lista atualizada no grupo

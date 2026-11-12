@@ -8,6 +8,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { vagasDoJogo } from '@/lib/vagas';
 import { haQuantoChamado } from '@/lib/jogo';
 import { textoDaLista } from '@/lib/listaDoJogo';
+import { compartilharNoGrupo } from '@/lib/share';
 import { nomeDeExibicao } from '@/lib/nome';
 import { whatsappTo } from '@/lib/phone';
 import {
@@ -18,7 +19,6 @@ import {
   inscritosComAviso,
   guestLink,
   setListClosed,
-  shareOnWhatsApp,
   sincronizarJogos,
   syncAmador,
   type CloudGroup,
@@ -181,7 +181,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
   // O WhatsApp abre primeiro — depois de um await o navegador pode barrar a
   // janela — e a sincronização vem em seguida, em segundo plano
   function convidar(text: string) {
-    shareOnWhatsApp(text);
+    void compartilharNoGrupo(text);
     if (group) sincronizar(group).catch((e) => setError(explain(e)));
   }
 
@@ -298,7 +298,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
               <Button
                 variant="secondary"
                 className="mt-2 w-full"
-                onClick={() => shareOnWhatsApp(listaDoJogo(jogo, players, group))}
+                onClick={() => void compartilharNoGrupo(listaDoJogo(jogo, players, group))}
               >
                 <MessageCircle size={17} />
                 Mandar a lista no grupo

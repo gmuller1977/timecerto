@@ -893,6 +893,14 @@ significa — é isso que separa este app de um placar.
 
 ## Armadilhas já pagas
 
+**Mensagem para o grupo do WhatsApp.** `wa.me` não aponta para grupo. Convite
+do jogo e "Mandar a lista no grupo" (admin e link do atleta) usam
+`compartilharNoGrupo` (`lib/share.ts`): no celular abre a folha de compartilhar
+do sistema, onde o grupo recente aparece no topo (um toque); no computador cai
+no `wa.me`. Postar sozinho no grupo só com robô (banimento) ou a API oficial de
+grupos da Meta (só grupos criados pela empresa, conta verificada, pago) —
+descartado em 12/11/2026.
+
 **Hidratação.** `localStorage` não é lido instantaneamente. Qualquer página que
 redirecione quando não encontra algo (`<Navigate>`) precisa esperar
 `useHydrated()` antes de decidir. Sem isso o app expulsa o usuário para a home

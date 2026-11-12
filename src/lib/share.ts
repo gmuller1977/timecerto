@@ -57,3 +57,28 @@ export async function nativeShare(text: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Mensagem para o GRUPO do WhatsApp (pedido do Guilherme em 12/11/2026: "já
+ * ser enviado direto no grupo sem precisar procurar").
+ *
+ * O link wa.me não aponta para grupo, e postar sozinho no grupo só com robô
+ * (risco de banir o número) ou a API oficial de grupos (só grupos criados
+ * pela empresa, conta verificada, pago). O que dá sem custo: no celular, a
+ * folha de compartilhar do sistema, que mostra as conversas recentes do
+ * WhatsApp — o grupo da pelada aparece no topo e vai com um toque. Sem a
+ * folha (computador), cai no wa.me de sempre.
+ */
+export async function compartilharNoGrupo(text: string): Promise<void> {
+  const celular = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (celular && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ text });
+      return;
+    } catch (e) {
+      // Fechou a folha sem escolher: não abre mais nada
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+    }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+}
