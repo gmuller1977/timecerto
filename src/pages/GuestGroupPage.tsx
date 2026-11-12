@@ -23,7 +23,6 @@ import {
 import { distribuirVagas, type Situacao } from '@/lib/vagas';
 import { nomesParecidos, normalizar } from '@/lib/juntar';
 import { iconeDoTipo, textoDaLista } from '@/lib/listaDoJogo';
-import { AVISO_COLAR, compartilharNoGrupo } from '@/lib/share';
 import { diaDaPromocao, faseDoJogo } from '@/lib/promocao';
 import { mensagemDaMensalidade, mensagemDoDia, pixCopiaECola } from '@/lib/financeiro';
 import { formatBRL } from '@/lib/utils';
@@ -128,9 +127,8 @@ export function GuestGroupPage() {
     return doLink ?? readMe(code);
   });
   const [saving, setSaving] = useState(false);
-  // Link do grupo do WhatsApp (migração 043): o botão da lista abre o grupo
+  // Link do grupo do WhatsApp (migração 043): botão "Acesso ao grupo" do convidado
   const [linkGrupo, setLinkGrupo] = useState<string | null>(null);
-  const [colar, setColar] = useState(false);
   useEffect(() => {
     let vivo = true;
     void guestLinkDoGrupoWhatsapp(code).then((l) => vivo && setLinkGrupo(l));
@@ -795,14 +793,13 @@ export function GuestGroupPage() {
                         : 'Agora mande a lista atualizada no grupo da pelada, para todo mundo ver quem vai.'}
                     </p>
                     <button
-                      onClick={() => {
-                        if (compartilharNoGrupo(listaParaOGrupo, linkGrupo) === 'copiado') setColar(true);
-                      }}
+                      onClick={() =>
+                        window.open(`https://wa.me/?text=${encodeURIComponent(listaParaOGrupo)}`, '_blank', 'noopener')
+                      }
                       className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
                     >
                       Mandar a lista atualizada no grupo
                     </button>
-                    {colar && <p className="mt-2 text-xs leading-relaxed text-brand-100/90">{AVISO_COLAR}</p>}
                   </div>
                 )}
                 <AvisoDoAtleta code={code} playerId={mine.id} />

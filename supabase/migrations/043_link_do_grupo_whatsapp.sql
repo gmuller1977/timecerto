@@ -1,10 +1,8 @@
 -- 043 · O link do grupo do WhatsApp
 --
--- Pedido do Guilherme em 12/11/2026: ao tocar em "Mandar a lista no grupo",
--- abrir direto o grupo da pelada, sem procurar. O wa.me não aponta para
--- grupo; o link de convite do grupo (https://chat.whatsapp.com/...) abre o
--- grupo para quem já é membro. O app copia a lista e abre o grupo; a pessoa
--- cola e envia. Nada é postado sozinho.
+-- Pedido do Guilherme em 12/11/2026: o link de convite do grupo
+-- (https://chat.whatsapp.com/...) salvo no grupo, para o botão "Acesso ao
+-- grupo" do convidado que se inscreve pelo link de convidados.
 --
 -- O administrador cola o link em Ajustes. O link do atleta lê pela função
 -- guest_link_do_grupo (nenhuma tabela aberta para anônimo).

@@ -13,9 +13,8 @@ import { explain } from '@/components/cloud/partes';
 
 /**
  * Ajustes › Grupo do WhatsApp (migração 043, pedido do Guilherme em
- * 12/11/2026). Com o link de convite do grupo salvo, "Mandar a lista no
- * grupo" copia a lista e abre o grupo direto — no app do admin e no link do
- * atleta. Nada é postado sozinho: a pessoa cola e envia.
+ * 12/11/2026). Com o link de convite do grupo salvo, o convidado que se
+ * inscreve pelo link de convidados ganha o botão "Acesso ao grupo".
  */
 export function LinkDoGrupoWhatsapp() {
   const ready = useAuth((s) => s.ready);
@@ -76,9 +75,8 @@ export function LinkDoGrupoWhatsapp() {
         Grupo do WhatsApp
       </p>
       <p className="mt-1 text-xs leading-relaxed text-ink-400">
-        Com o link do grupo, "Mandar a lista no grupo" já abre o grupo da pelada com a lista copiada: é só colar e
-        enviar. E o convidado que se inscreve pelo link de convidados ganha o botão "Acesso ao grupo". No WhatsApp: dados
-        do grupo › Convidar via link › Copiar link.
+        O convidado que se inscreve pelo link de convidados ganha o botão "Acesso ao grupo". No WhatsApp: dados do
+        grupo › Convidar via link › Copiar link.
       </p>
       {editando ? (
         <form onSubmit={salvar} className="mt-3">

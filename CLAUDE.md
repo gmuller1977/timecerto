@@ -897,14 +897,13 @@ significa — é isso que separa este app de um placar.
 
 ## Armadilhas já pagas
 
-**Mensagem para o grupo do WhatsApp.** `wa.me` não aponta para grupo. Convite
-do jogo e "Mandar a lista no grupo" (admin e link do atleta) usam
-`compartilharNoGrupo` (`lib/share.ts`). Com o link de convite do grupo salvo em
-Ajustes › Grupo do WhatsApp (migração 043, `groups.link_whatsapp`, lido à parte
-do GROUP_COLS para não quebrar sem a migração), copia a lista e abre o grupo; a
-pessoa cola e envia. Sem link: folha de compartilhar no celular, `wa.me` no
-computador. Nada é postado sozinho (robô bane; API oficial de grupos da Meta só
-serve a grupos criados pela empresa e é paga) — decidido em 12/11/2026.
+**Mensagem para o grupo do WhatsApp.** `wa.me` não aponta para grupo, e o
+WhatsApp não deixa abrir um grupo com o texto já escrito. Testado em
+12/11/2026: copiar a lista e abrir o grupo pelo link de convite (a pessoa cola
+e envia) foi recusado pelo Guilherme — "se não dá para enviar o texto direto
+no grupo, não faz sentido". "Mandar a lista no grupo" e o convite seguem no
+`wa.me` com o texto pronto. Postar sozinho: robô bane; API oficial de grupos
+da Meta só serve a grupos criados pela empresa e é paga.
 
 **Hidratação.** `localStorage` não é lido instantaneamente. Qualquer página que
 redirecione quando não encontra algo (`<Navigate>`) precisa esperar
