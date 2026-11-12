@@ -19,7 +19,8 @@ import { explain, ShareRow } from '@/components/cloud/partes';
  * tela (docs/telas-amador.md).
  *
  * Duas portas (pedido do Guilherme, 29/09/2026): o MENSALISTA recebe o link
- * de cadastro, que fica pendente até a aprovação; o CONVIDADO recebe o link
+ * de cadastro e entra direto no grupo (migração 042; só fica pendente quando
+ * parece alguém que já está no grupo); o CONVIDADO recebe o link
  * da lista de convidados — ele não se cadastra antes, entra direto no jogo
  * aberto, atrás dos mensalistas. Os convites do jogo da semana continuam no
  * cartão da aba Jogo.
@@ -157,8 +158,10 @@ ${link}`,
         <>
           {escolha}
           <p className="text-sm leading-relaxed text-ink-400">
-            Cada um preenche nome, apelido, nascimento, telefone, posição e nível. O
-            cadastro fica aguardando a sua aprovação no topo de Atletas.
+            Cada um preenche nome, apelido, nascimento, telefone, posição e nível e já
+            entra no grupo, pronto para confirmar presença. Se o nome ou o telefone
+            for de alguém que já está no grupo, o cadastro espera você juntar no topo
+            de Atletas.
           </p>
           <ShareRow
             label="Enviar link de cadastro"

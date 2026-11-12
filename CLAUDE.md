@@ -111,10 +111,15 @@ no banco, `guest_add_player` recusa quem não é mensalista. Quem leva também
 informa a posição do levado. No banco a posição é opcional, de propósito: quem
 estava com a versão antiga aberta na troca não fica travado.
 - `/#/r/CÓDIGO` — link de **cadastro de mensalistas** (`groups.register_code`):
-  nome, **apelido**, nascimento, telefone, posição e nível. Fica **pendente**
-  (`players.pending`) até o administrador aprovar no topo de Atletas; pendente
-  não aparece em link nenhum nem entra no sorteio. O nível é sugestão — o
-  sorteio usa o que o administrador deixar.
+  nome, **apelido**, nascimento, telefone, posição e nível. **Entra direto no
+  grupo** (migração 042, pedido do Guilherme em 12/11/2026): a tela mostra
+  "Abrir a lista do jogo", que leva a `/#/c/CÓDIGO?eu=ID` e o celular já fica
+  sabendo quem é a pessoa. Fica **pendente** (`players.pending`, aprovar no
+  topo de Atletas) só quando o nome (sem caixa) ou o telefone já é de alguém
+  do grupo — a junção nunca é automática — ou quando o plano grátis já tem 20
+  mensalistas. Pendente não aparece em link nenhum nem entra no sorteio. O
+  nível é sugestão — o sorteio usa o que o administrador deixar. No modo
+  profissional o atleta continua esperando o técnico aprovar.
 
   **Nome que já existe passa como pendente** (migração 009, 24/09/2026). Antes
   o link recusava, e quem batia nisso era quem já é do grupo indo completar o
