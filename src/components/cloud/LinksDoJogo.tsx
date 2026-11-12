@@ -120,7 +120,7 @@ function ComGrupo({ jogo, proximo }: { jogo: Jogo; proximo: Jogo | null }) {
   const [name, setName] = useState('Pelada');
   const [busy, setBusy] = useState(false);
   const [linkAdded, setLinkAdded] = useState(0);
-  // Link do grupo do WhatsApp (migração 042): abre o grupo direto
+  // Link do grupo do WhatsApp (migração 043): abre o grupo direto
   const [linkGrupo, setLinkGrupo] = useState<string | null>(null);
   const [colar, setColar] = useState(false);
   const noGrupo = (text: string) => {

@@ -446,7 +446,7 @@ export async function renomearGrupo(groupId: string, nome: string): Promise<stri
 }
 
 /**
- * O link do grupo do WhatsApp (migração 042). Lido à parte, fora do
+ * O link do grupo do WhatsApp (migração 043). Lido à parte, fora do
  * GROUP_COLS: antes de a migração rodar, a coluna não existe e o resto do
  * app não pode quebrar por isso — sem link, cai no compartilhar de sempre.
  */

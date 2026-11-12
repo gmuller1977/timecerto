@@ -12,7 +12,7 @@ import {
 import { explain } from '@/components/cloud/partes';
 
 /**
- * Ajustes › Grupo do WhatsApp (migração 042, pedido do Guilherme em
+ * Ajustes › Grupo do WhatsApp (migração 043, pedido do Guilherme em
  * 12/11/2026). Com o link de convite do grupo salvo, "Mandar a lista no
  * grupo" copia a lista e abre o grupo direto — no app do admin e no link do
  * atleta. Nada é postado sozinho: a pessoa cola e envia.

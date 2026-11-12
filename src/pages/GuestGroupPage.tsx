@@ -128,7 +128,7 @@ export function GuestGroupPage() {
     return doLink ?? readMe(code);
   });
   const [saving, setSaving] = useState(false);
-  // Link do grupo do WhatsApp (migração 042): o botão da lista abre o grupo
+  // Link do grupo do WhatsApp (migração 043): o botão da lista abre o grupo
   const [linkGrupo, setLinkGrupo] = useState<string | null>(null);
   const [colar, setColar] = useState(false);
   useEffect(() => {

@@ -63,7 +63,7 @@ export async function nativeShare(text: string): Promise<boolean> {
  * "clicar e já abrir o grupo, onde o usuário clica" — nada é postado sozinho).
  *
  * O wa.me não aponta para grupo. Com o link do grupo salvo em Ajustes
- * (migração 042), a lista vai para a área de transferência e o grupo abre;
+ * (migração 043), a lista vai para a área de transferência e o grupo abre;
  * a pessoa cola e envia. Sem o link: no celular, a folha de compartilhar do
  * sistema (o grupo recente aparece no topo); no computador, o wa.me.
  *

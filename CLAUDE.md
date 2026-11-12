@@ -901,7 +901,7 @@ significa — é isso que separa este app de um placar.
 **Mensagem para o grupo do WhatsApp.** `wa.me` não aponta para grupo. Convite
 do jogo e "Mandar a lista no grupo" (admin e link do atleta) usam
 `compartilharNoGrupo` (`lib/share.ts`). Com o link de convite do grupo salvo em
-Ajustes › Grupo do WhatsApp (migração 042, `groups.link_whatsapp`, lido à parte
+Ajustes › Grupo do WhatsApp (migração 043, `groups.link_whatsapp`, lido à parte
 do GROUP_COLS para não quebrar sem a migração), copia a lista e abre o grupo; a
 pessoa cola e envia. Sem link: folha de compartilhar no celular, `wa.me` no
 computador. Nada é postado sozinho (robô bane; API oficial de grupos da Meta só
