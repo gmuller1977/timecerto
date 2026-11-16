@@ -369,6 +369,10 @@ tela aprovada por ele):
   quem toca no nome de outro vê o atraso dele, aceito pelo Guilherme.
 - Interruptor `groups.bloquear_devedor` (ligado). Sem a 044 no banco, nada
   trava e o cartão de Ajustes não aparece.
+- A cobrança do jogo no grupo (`mensagemDoDia`, pelo Financeiro e pelo fim do
+  dia) traz "Vencimento: DD/MM" (jogo + prazo) e o aviso de que quem estiver
+  em atraso não entra na lista dos próximos jogos (pedido do Guilherme em
+  16/11/2026). A lista que o convidado manda de volta pelo link não leva.
 
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.

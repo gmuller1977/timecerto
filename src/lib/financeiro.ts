@@ -179,6 +179,13 @@ export function mensagemDaMensalidade(m: {
  * (🎟️, o ícone do convidado em `listaDoJogo`) antes de cada nome. Valor igual
  * para todos vai no cabeçalho; diferente, ao lado de cada nome.
  */
+/** 'AAAA-MM-DD' + n dias, sem fuso (meio-dia UTC não vira o dia) */
+export function somarDias(data: string, n: number): string {
+  const d = new Date(`${data}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 export function mensagemDoDia(m: {
   grupo: string;
   /** AAAA-MM-DD */
@@ -188,6 +195,12 @@ export function mensagemDoDia(m: {
   lista: { nome: string; valorCents: number; ok?: boolean }[];
   /** O link dos convidados na aba Pagamento, para confirmar (12/10/2026) */
   link?: string | null;
+  /**
+   * Bloqueio por pendência (044, pedido do Guilherme em 16/11/2026): com o
+   * prazo da diária, a mensagem traz o vencimento (dia do jogo + prazo) e o
+   * aviso de que quem estiver em atraso não entra na lista dos próximos jogos.
+   */
+  bloqueio?: { prazoDias: number; bloquear: boolean } | null;
 }): string {
   const valores = new Set(m.lista.map((x) => x.valorCents));
   const unico = valores.size === 1 ? m.lista[0].valorCents : null;
@@ -195,11 +208,17 @@ export function mensagemDoDia(m: {
     .map((x) => `🎟️ ${x.nome}${unico === null && !x.ok ? ` — ${formatBRL(x.valorCents)}` : ''}${x.ok ? ' ✅' : ''}`)
     .join('\n');
   const valor = unico !== null ? `\nValor: ${formatBRL(unico)}` : '';
+  const vence = m.bloqueio ? somarDias(m.data, m.bloqueio.prazoDias) : null;
+  const vencimento = vence ? `\nVencimento: ${vence.slice(8, 10)}/${vence.slice(5, 7)}` : '';
   const pix = m.pixChave ? `\n\nPix: ${m.pixChave}` : '';
+  const aviso = m.bloqueio?.bloquear
+    ? `⚠️ Quem estiver com pagamento em atraso não conseguirá colocar o nome na lista dos próximos jogos.\n\n`
+    : '';
   return (
     `⚡ ${m.grupo}\n` +
-    `Jogo ${m.data.slice(8, 10)}/${m.data.slice(5, 7)}${valor}\n\n` +
+    `Jogo ${m.data.slice(8, 10)}/${m.data.slice(5, 7)}${valor}${vencimento}\n\n` +
     `${linhas}${pix}\n\n` +
+    aviso +
     `Quem já pagou, desconsidere. 🙏` +
     (m.link ? `\n\nQuando fizer o pagamento, entre no link abaixo e confirme o pagamento.\n${m.link}` : '')
   );

@@ -688,6 +688,7 @@ export function CobrarVarios({
             ? listaDoJogo(refDoDia, dados.cobrancas, saldosPorJogador(dados.cobrancas, dados.pagamentos), nome)
             : alvos.map((d) => ({ nome: nome(d.playerId), valorCents: d.saldoCents })),
           link: linkConvidados,
+          bloqueio: dados.bloqueio && { prazoDias: dados.bloqueio.prazoDiaria, bloquear: dados.bloqueio.bloquear },
         })
       : null;
     const dosConvidados =

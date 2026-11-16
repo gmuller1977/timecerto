@@ -95,6 +95,7 @@ export function CobrarODia({ jogo, players, onFechar }: { jogo: Jogo; players: P
               pixChave: dados.config.pixChave,
               lista: convidados.map((n) => ({ nome: n, valorCents: dados.config.diariaCents! })),
               link: grupo.guestCode ? `${guestLink(grupo.guestCode)}?aba=pagamento` : null,
+              bloqueio: dados.bloqueio && { prazoDias: dados.bloqueio.prazoDiaria, bloquear: dados.bloqueio.bloquear },
             })}
           />
         ) : (

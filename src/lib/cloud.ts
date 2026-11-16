@@ -1852,6 +1852,8 @@ export interface DadosFinanceiros {
   despesas: Despesa[];
   /** Do mais recente para o mais antigo */
   lembretes: Lembrete[];
+  /** Bloqueio por pendência (044): prazo da diária e se bloqueia. Sem a 044, null */
+  bloqueio: ConfigDoBloqueio | null;
 }
 
 const CONFIG_COLS =
@@ -1895,7 +1897,7 @@ export async function salvarConfigFinanceiro(groupId: string, c: ConfigFinanceir
 }
 
 export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> {
-  const [config, jog, cob, pag, desp, lem] = await Promise.all([
+  const [config, jog, cob, pag, desp, lem, bloqueio] = await Promise.all([
     lerConfigFinanceiro(groupId),
     db().from('players').select('id, name, nickname, kind, phone, active, pending, deleted_at').eq('group_id', groupId),
     db()
@@ -1912,10 +1914,12 @@ export async function lerFinanceiro(groupId: string): Promise<DadosFinanceiros> 
       .select('player_id, canal, valor_cents, enviado_em')
       .eq('group_id', groupId)
       .order('enviado_em', { ascending: false }),
+    configDoBloqueio(groupId),
   ]);
   for (const r of [jog, cob, pag, desp, lem]) if (r.error) throw r.error;
   return {
     config,
+    bloqueio,
     jogadores: new Map(
       (jog.data ?? []).map((p) => [
         p.id,
