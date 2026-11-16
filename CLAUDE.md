@@ -306,8 +306,9 @@ Feito em 29/09/2026, migração 017, com o desenho aprovado pelo Guilherme.
 - **Pagou e desistiu**: o dinheiro vira crédito. O administrador decide em
   Financeiro › Com crédito: deixa (a próxima diária já aparece paga) ou
   devolve (estorno do pagamento).
-- **Dívida não impede confirmar**: na lista do jogo aparece "deve R$ 25" ao
-  lado do nome, e o administrador decide.
+- ~~Dívida não impede confirmar~~ — **mudou em 16/11/2026 (migração 044)**:
+  pagamento em ATRASO bloqueia a lista pelo link (ver "Bloqueio por
+  pendência" abaixo).
 - Pendência de antes do app entra como **cobrança avulsa**, com vencimento no
   passado.
 
@@ -347,6 +348,27 @@ confirma o pagamento na aba Pagamento ganha "Mandar a lista do jogo DD/MM no
 grupo", no texto de `mensagemDoDia` — todos os convidados do jogo, ✅ em quem
 pagou ou confirmou (`guest_diarias_do_jogo`, até 3 jogos dos últimos 60 dias
 em que a diária dele já está ok). Sem a 040 no banco, o botão só não aparece.
+
+**Bloqueio por pendência** (migração 044, pedido do Guilherme em 16/11/2026,
+tela aprovada por ele):
+
+- Quem tem cobrança **vencida** não coloca o nome na lista pelo link (vou,
+  fila, espera, aceitar a vaga do chamado, ser levado por mensalista). "Não
+  vou" continua; quem já está na lista não sai. O administrador confirma
+  qualquer um pelo app. Trava no banco (`conferir_pendencia`, chamada por
+  `guest_set_attendance`, `guest_join`, `guest_add_player`).
+- Vencida: mensalidade e avulsa no dia seguinte ao vencimento; a diária, N
+  dias depois do jogo (`groups.diaria_prazo_dias`, padrão 3, em Ajustes ›
+  Financeiro › Pagamento em atraso). `vencimento_efetivo` é a única regra.
+- **"Já paguei" vale só para cobrança em dia** (`guest_informar_pendencias`
+  ignora a atrasada). Atrasada: a pessoa fala com o administrador, que
+  confere e dá baixa — só a baixa libera.
+- O link mostra motivo, vencimento e valor de cada atraso, o total, o Pix com
+  o valor e "Falar com o administrador" (WhatsApp de `groups.admin_whatsapp`,
+  mensagem pronta). Isto substitui a regra da 033 de não mostrar valores:
+  quem toca no nome de outro vê o atraso dele, aceito pelo Guilherme.
+- Interruptor `groups.bloquear_devedor` (ligado). Sem a 044 no banco, nada
+  trava e o cartão de Ajustes não aparece.
 
 **Fase 2, pendente**: o atleta ver o que deve pelo link, o histórico
 financeiro na ficha do jogador, relatório para exportar.

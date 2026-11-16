@@ -2024,13 +2024,100 @@ export async function guestMensalidade(code: string): Promise<MensalidadeDoLink 
  * Pelo link: só o ESTADO das pendências da pessoa (migração 033) — nunca
  * itens nem valores. A lista com valores sai só na mensagem do grupo.
  */
-export async function guestPendencias(
-  code: string,
-  playerId: string,
-): Promise<{ emAberto: boolean; confirmado: boolean }> {
+export interface PendenciasDoLink {
+  emAberto: boolean;
+  /** Tudo o que está em dia já foi informado */
+  confirmado: boolean;
+  /** Há cobrança vencida (migração 044) — "Já paguei" não vale para ela */
+  atrasado?: boolean;
+  /** Há cobrança em aberto ainda no prazo (044). Sem a 044, vem undefined */
+  emDia?: boolean;
+}
+
+export async function guestPendencias(code: string, playerId: string): Promise<PendenciasDoLink> {
   const { data, error } = await db().rpc('guest_pendencias', { code, p_player: playerId });
   if (error) throw error;
-  return data as { emAberto: boolean; confirmado: boolean };
+  return data as PendenciasDoLink;
+}
+
+/**
+ * Bloqueio por pendência (migração 044, pedido do Guilherme em 16/11/2026):
+ * quem tem cobrança vencida não coloca o nome na lista pelo link. Aqui vêm os
+ * itens (motivo, vencimento, valor), o contato do administrador e o Pix.
+ * Sem a 044 no banco, devolve null e nada trava na tela.
+ */
+export interface BloqueioDoLink {
+  bloqueado: boolean;
+  itens?: { tipo: string; descricao: string; /** AAAA-MM-DD, já com o prazo da diária */ venceEm: string; faltaCents: number }[];
+  totalCents?: number;
+  admin?: ContatoDoAdmin;
+  pix?: { chave: string | null; nome: string | null; cidade: string | null };
+}
+export interface ContatoDoAdmin {
+  nome: string | null;
+  whatsapp: string | null;
+}
+
+export async function guestBloqueio(code: string, playerId: string): Promise<BloqueioDoLink | null> {
+  try {
+    const { data, error } = await db().rpc('guest_bloqueio', { code, p_player: playerId });
+    if (error) return null;
+    return (data as BloqueioDoLink | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function guestContatoAdmin(code: string): Promise<ContatoDoAdmin | null> {
+  try {
+    const { data, error } = await db().rpc('guest_contato_admin', { code });
+    if (error) return null;
+    return (data as ContatoDoAdmin | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ajustes › Pagamento em atraso (044). Lido à parte do GROUP_COLS: sem a 044, a coluna não existe */
+export interface ConfigDoBloqueio {
+  bloquear: boolean;
+  adminWhatsapp: string | null;
+  adminNome: string | null;
+  prazoDiaria: number;
+}
+
+export async function configDoBloqueio(groupId: string): Promise<ConfigDoBloqueio | null> {
+  try {
+    const { data, error } = await db()
+      .from('groups')
+      .select('bloquear_devedor, admin_whatsapp, admin_nome, diaria_prazo_dias')
+      .eq('id', groupId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return {
+      bloquear: Boolean(data.bloquear_devedor),
+      adminWhatsapp: (data.admin_whatsapp as string | null) ?? null,
+      adminNome: (data.admin_nome as string | null) ?? null,
+      prazoDiaria: (data.diaria_prazo_dias as number | null) ?? 3,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function salvarConfigDoBloqueio(groupId: string, c: ConfigDoBloqueio): Promise<void> {
+  const { data, error } = await db()
+    .from('groups')
+    .update({
+      bloquear_devedor: c.bloquear,
+      admin_whatsapp: c.adminWhatsapp,
+      admin_nome: c.adminNome,
+      diaria_prazo_dias: c.prazoDiaria,
+    })
+    .eq('id', groupId)
+    .select('id');
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error('Só o dono ou um administrador do grupo pode mudar isto.');
 }
 
 /**

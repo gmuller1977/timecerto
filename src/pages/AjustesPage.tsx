@@ -23,6 +23,9 @@ const LinkDoGrupoWhatsapp = lazy(() =>
 );
 const PerfilDoTime = lazy(() => import('@/components/cloud/PerfilDoTime').then((m) => ({ default: m.PerfilDoTime })));
 const PlanoDoGrupo = lazy(() => import('@/components/cloud/PlanoDoGrupo').then((m) => ({ default: m.PlanoDoGrupo })));
+const BloqueioPorPendencia = lazy(() =>
+  import('@/components/cloud/BloqueioPorPendencia').then((m) => ({ default: m.BloqueioPorPendencia })),
+);
 const FinanceiroAjustes = lazy(() =>
   import('@/components/cloud/FinanceiroAjustes').then((m) => ({ default: m.FinanceiroAjustes })),
 );
@@ -85,7 +88,12 @@ const SECOES: Secao[] = [
     resumo: 'Mensalidade, diária, Pix e caixa',
     icone: Wallet,
     conta: true,
-    conteudo: () => <FinanceiroAjustes />,
+    conteudo: () => (
+      <>
+        <FinanceiroAjustes />
+        <BloqueioPorPendencia />
+      </>
+    ),
   },
   {
     id: 'inscricao',

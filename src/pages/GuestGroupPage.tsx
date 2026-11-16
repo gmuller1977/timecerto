@@ -9,6 +9,11 @@ import {
   guestMensalidade,
   guestDiariasDoJogo,
   guestPendencias,
+  guestBloqueio,
+  guestContatoAdmin,
+  type BloqueioDoLink,
+  type ContatoDoAdmin,
+  type PendenciasDoLink,
   type DiariasDoLink,
   guestSalvarWhatsapp,
   guestTemWhatsapp,
@@ -30,7 +35,7 @@ import { TEAM_COLOR_CLASSES } from '@/lib/draw';
 import { SPORTS, getPositionLabel } from '@/lib/sports';
 import type { SportId } from '@/types';
 import { cn } from '@/lib/utils';
-import { isValidPhone, maskPhoneInput, onlyDigits } from '@/lib/phone';
+import { isValidPhone, maskPhoneInput, onlyDigits, whatsappTo } from '@/lib/phone';
 import { AvisoDoAtleta } from '@/components/cloud/Avisos';
 
 /** Quem este aparelho é, por link. Conveniência — errar custa um toque. */
@@ -202,12 +207,27 @@ export function GuestGroupPage() {
     }
     let vivo = true;
     guestPendencias(code, me)
-      .then((e) => vivo && setPendencia(e.emAberto && !e.confirmado))
+      .then((e) => vivo && setPendencia(e.emAberto && (Boolean(e.atrasado) || !e.confirmado)))
       .catch(() => vivo && setPendencia(false));
     return () => {
       vivo = false;
     };
   }, [code, me, data]);
+
+  /*
+   * Bloqueio por pendência (migração 044, pedido do Guilherme em 16/11/2026):
+   * com cobrança vencida, o "Vou" trava e aparece o que está em atraso. Quem
+   * trava de verdade é o banco; a tela só explica. Relê junto com a página.
+   */
+  const [bloqueio, setBloqueio] = useState<BloqueioDoLink | null>(null);
+  const lerBloqueio = useCallback(() => {
+    if (!me) {
+      setBloqueio(null);
+      return;
+    }
+    void guestBloqueio(code, me).then(setBloqueio);
+  }, [code, me]);
+  useEffect(() => lerBloqueio(), [lerBloqueio, data]);
 
   // Lista fechada: os times estão para sair, e a fila de espera anda — quem
   // está olhando o link vê as duas coisas chegarem sem recarregar
@@ -345,6 +365,7 @@ export function GuestGroupPage() {
     } catch (e) {
       console.error('resposta de presença', e);
       setRespostaErro(dbMessage(e, 'Não deu para salvar. Confira a internet e tente de novo.'));
+      lerBloqueio();
     }
     setSaving(false);
   }
@@ -725,7 +746,16 @@ export function GuestGroupPage() {
           <section className="mt-6">
             {mine ? (
               <>
+                {bloqueio?.bloqueado && (
+                  <BloqueioPorPendencia
+                    bloqueio={bloqueio}
+                    nome={mine.name}
+                    grupo={data.group.name}
+                    dataDoJogo={event.startsAt}
+                  />
+                )}
                 <MyCard
+                  bloqueado={Boolean(bloqueio?.bloqueado)}
                   name={mine.name}
                   antesDaPromocao={fase.tipo === 'mensalistas' ? diaDaAbertura : null}
                   situacao={sit(mine.id)}
@@ -1110,15 +1140,18 @@ function MeuPagamento({
   /** Na aba Pagamento: aparece mesmo sem nada em aberto, dizendo isso */
   sempre?: boolean;
 }) {
-  const [estado, setEstado] = useState<{ emAberto: boolean; confirmado: boolean } | null>(null);
+  const [estado, setEstado] = useState<PendenciasDoLink | null>(null);
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Em atraso (044): "Já paguei" não vale; o caminho é o administrador
+  const [admin, setAdmin] = useState<ContatoDoAdmin | null>(null);
 
   useEffect(() => {
     let vivo = true;
     guestPendencias(code, meuId)
       .then((e) => vivo && setEstado(e))
       .catch((e) => console.warn('pendências pelo link', e));
+    void guestContatoAdmin(code).then((a) => vivo && setAdmin(a));
     return () => {
       vivo = false;
     };
@@ -1190,18 +1223,37 @@ function MeuPagamento({
     setBusy(false);
   }
 
+  // Sem a 044, emDia vem undefined: vale o comportamento antigo (tudo em aberto confirma)
+  const atrasado = Boolean(estado.atrasado);
+  const temEmDia = estado.emDia ?? estado.emAberto;
+
   return (
     <div className="mt-3 rounded-2xl border border-ink-800 bg-ink-900 p-4">
       <p className="text-[15px] font-semibold text-ink-50">Pagamento</p>
-      {estado.confirmado ? (
+      {atrasado && (
+        <div className="mt-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2.5">
+          <p className="flex items-center gap-2 text-sm font-semibold text-amber-200">
+            <AlertCircle size={16} className="shrink-0" />
+            Você tem pagamento em atraso
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-100/85">
+            Pagamento atrasado não se confirma por aqui. Depois de pagar, fale com o administrador para conferir e dar
+            baixa. Enquanto isso, não dá para colocar o nome na lista do jogo.
+          </p>
+          <FalarComAdmin admin={admin} />
+        </div>
+      )}
+      {atrasado && !temEmDia ? null : estado.confirmado ? (
         <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-brand-200">
           <Check size={16} className="mt-0.5 shrink-0" />
           Você confirmou o pagamento. O organizador vai conferir.
         </p>
-      ) : estado.emAberto ? (
+      ) : temEmDia ? (
         <>
           <p className="mt-1 text-sm leading-relaxed text-ink-400">
-            Já fez o pagamento? Confirme aqui para o organizador conferir.
+            {atrasado
+              ? 'Pagou o que ainda está no prazo? Confirme aqui para o organizador conferir.'
+              : 'Já fez o pagamento? Confirme aqui para o organizador conferir.'}
           </p>
           <button
             disabled={busy}
@@ -1372,7 +1424,129 @@ function posicao(s: Situacao | undefined): number {
   return s?.tipo === 'fila' || s?.tipo === 'espera' ? s.posicao : 0;
 }
 
+const fmtData = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
+/** A mensagem pronta para o administrador, com o que está em atraso */
+function mensagemAoAdmin(p: {
+  nome: string;
+  grupo: string;
+  dataDoJogo: string | null;
+  itens: NonNullable<BloqueioDoLink['itens']>;
+  totalCents: number;
+}): string {
+  const jogo = p.dataDoJogo
+    ? ` do jogo de ${new Date(p.dataDoJogo).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}`
+    : '';
+  return [
+    `Olá! Sou ${p.nome}, do grupo ${p.grupo}. Estou com pagamento em atraso e não consigo colocar meu nome na lista${jogo}:`,
+    '',
+    ...p.itens.map((i) => `• ${i.descricao} (venceu ${fmtData(i.venceEm).slice(0, 5)}) — ${formatBRL(i.faltaCents)}`),
+    `Total: ${formatBRL(p.totalCents)}`,
+    '',
+    'Quero acertar. Se já paguei, pode conferir e dar baixa?',
+  ].join('\n');
+}
+
+/** O botão "Falar com o administrador": WhatsApp do admin salvo em Ajustes (044) */
+function FalarComAdmin({ admin, texto }: { admin: ContatoDoAdmin | null | undefined; texto?: string }) {
+  if (!admin?.whatsapp) return null;
+  const href = `${whatsappTo(admin.whatsapp)}${texto ? `?text=${encodeURIComponent(texto)}` : ''}`;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-700 text-sm font-semibold text-ink-50 active:scale-[0.99]"
+    >
+      <MessageCircle size={18} />
+      Falar com o administrador{admin.nome ? ` (${admin.nome})` : ''}
+    </a>
+  );
+}
+
+/**
+ * Pagamento em atraso (migração 044, tela aprovada pelo Guilherme em
+ * 16/11/2026): motivo, vencimento e valor de cada pendência, o aviso de que é
+ * preciso acertar antes de entrar na lista e o caminho para o administrador.
+ * "Já paguei" não aparece aqui: atrasado só libera com a baixa do admin.
+ */
+function BloqueioPorPendencia({
+  bloqueio,
+  nome,
+  grupo,
+  dataDoJogo,
+}: {
+  bloqueio: BloqueioDoLink;
+  nome: string;
+  grupo: string;
+  dataDoJogo: string | null;
+}) {
+  const [copiado, setCopiado] = useState(false);
+  const itens = bloqueio.itens ?? [];
+  const total = bloqueio.totalCents ?? itens.reduce((t, i) => t + i.faltaCents, 0);
+  const pix = bloqueio.pix;
+  const codigo =
+    pix?.chave && pix.nome && pix.cidade && total > 0
+      ? pixCopiaECola({ chave: pix.chave, nome: pix.nome, cidade: pix.cidade, valorCents: total })
+      : null;
+
+  async function copiar() {
+    if (!codigo) return;
+    try {
+      await navigator.clipboard.writeText(codigo);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      /* sem permissão: o código fica à vista para copiar à mão */
+    }
+  }
+
+  return (
+    <div className="mb-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4">
+      <p className="flex items-center gap-2 text-base font-bold text-amber-200">
+        <Lock size={18} className="shrink-0 text-amber-300" />
+        Pagamento em atraso
+      </p>
+      <p className="mt-1 text-sm leading-relaxed text-amber-50">
+        Antes de colocar o nome na lista do jogo, você precisa acertar a pendência abaixo.
+      </p>
+      <div className="mt-3 overflow-hidden rounded-xl border border-ink-700 bg-ink-950">
+        {itens.map((i, n) => (
+          <div key={n} className="flex items-center justify-between gap-3 border-b border-ink-800 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-ink-50">{i.descricao}</p>
+              <p className="text-xs text-ink-400">Venceu em {fmtData(i.venceEm)}</p>
+            </div>
+            <p className="shrink-0 text-[15px] font-bold text-ink-50">{formatBRL(i.faltaCents)}</p>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-3 bg-ink-900 px-3 py-2.5">
+          <p className="text-sm font-semibold text-amber-200">Total em atraso</p>
+          <p className="shrink-0 text-base font-bold text-amber-200">{formatBRL(total)}</p>
+        </div>
+      </div>
+      {codigo && (
+        <button
+          onClick={copiar}
+          className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
+        >
+          {copiado ? 'Código Pix copiado!' : `Copiar o Pix de ${formatBRL(total)}`}
+        </button>
+      )}
+      <FalarComAdmin
+        admin={bloqueio.admin}
+        texto={mensagemAoAdmin({ nome, grupo, dataDoJogo, itens, totalCents: total })}
+      />
+      <p className="mt-3 text-xs leading-relaxed text-amber-100/80">
+        Depois de pagar, avise o administrador para conferir e dar baixa: a lista libera em seguida. Qualquer dúvida,
+        fale com o administrador do grupo.
+      </p>
+    </div>
+  );
+}
+
 function MyCard({
+  bloqueado = false,
   name,
   antesDaPromocao,
   situacao,
@@ -1382,6 +1556,8 @@ function MyCard({
   onAnswer,
   onNotMe,
 }: {
+  /** Pagamento em atraso (044): não entra na lista; "Não vou" continua */
+  bloqueado?: boolean;
   name: string;
   /** "quinta-feira (08/10) às 6h": a fila ainda espera a promoção (migração 028) */
   antesDaPromocao?: string | null;
@@ -1401,9 +1577,9 @@ function MyCard({
       </button>
     </p>
   );
-  const botao = (texto: React.ReactNode, onClick: () => void, forte = true) => (
+  const botao = (texto: React.ReactNode, onClick: () => void, forte = true, travado = false) => (
     <button
-      disabled={saving}
+      disabled={saving || travado}
       onClick={onClick}
       className={cn(
         'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98] disabled:opacity-50',
@@ -1430,7 +1606,7 @@ function MyCard({
             para o próximo.
           </p>
           <div className="mt-3 flex gap-2">
-            {botao(<><Check size={20} /> Sim, quero jogar</>, () => onAnswer('vou'))}
+            {botao(<><Check size={20} /> Sim, quero jogar</>, () => onAnswer('vou'), true, bloqueado)}
             {botao(<><X size={20} /> Não posso</>, () => onAnswer('nao_vou'), false)}
           </div>
         </div>
@@ -1480,7 +1656,12 @@ function MyCard({
               Ainda dá para entrar na fila de espera: se alguém sair, você é chamado para confirmar.
             </p>
             <div className="mt-3 flex">
-              {botao(tipo === 'pulado' ? 'Voltar para a fila de espera' : 'Entrar na fila de espera', () => onAnswer('vou'))}
+              {botao(
+                tipo === 'pulado' ? 'Voltar para a fila de espera' : 'Entrar na fila de espera',
+                () => onAnswer('vou'),
+                true,
+                bloqueado,
+              )}
             </div>
           </>
         )}
@@ -1521,10 +1702,10 @@ function MyCard({
       </p>
       <div className="mt-2 flex gap-2">
         <button
-          disabled={saving}
+          disabled={saving || (bloqueado && !vai)}
           onClick={() => onAnswer('vou')}
           className={cn(
-            'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98]',
+            'flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl border text-base font-semibold active:scale-[0.98] disabled:opacity-40',
             vai ? 'border-brand-500 bg-brand-500 text-ink-950' : 'border-ink-700 bg-ink-800 text-ink-100',
           )}
         >
