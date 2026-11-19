@@ -1,3 +1,4 @@
+import { abrirWhatsappComTexto } from '@/lib/whatsapp';
 import type { DrawResult } from '@/types';
 import { SPORTS } from '@/lib/sports';
 import { skillOf } from '@/lib/draw';
@@ -35,8 +36,7 @@ export function formatResultText(result: DrawResult, opts?: { showStars?: boolea
 }
 
 export function shareOnWhatsApp(text: string) {
-  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-  window.open(url, '_blank', 'noopener');
+  abrirWhatsappComTexto(text);
 }
 
 export async function copyToClipboard(text: string): Promise<boolean> {

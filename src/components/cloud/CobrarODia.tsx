@@ -1,3 +1,4 @@
+import { abrirWhatsappComTexto } from '@/lib/whatsapp';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Copy, MessageCircle, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -157,7 +158,7 @@ function SemDiariaLancada({ texto }: { texto: string }) {
           {copiado ? <CheckCircle2 size={16} /> : <Copy size={16} />}
           {copiado ? 'Copiado' : 'Copiar'}
         </Button>
-        <Button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank', 'noopener')}>
+        <Button onClick={() => abrirWhatsappComTexto(texto)}>
           <MessageCircle size={16} />
           WhatsApp
         </Button>

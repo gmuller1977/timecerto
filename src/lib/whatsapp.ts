@@ -10,6 +10,9 @@
  * instalado, o Chrome segue para o `wa.me` de sempre (browser_fallback_url).
  *
  * iPhone e computador: `wa.me` como antes (o iOS não deixa escolher o app).
+ *
+ * Vale para o app todo: no link a troca fica junto do botão; o administrador
+ * escolhe em Ajustes › WhatsApp deste celular (só aparece no Android).
  */
 
 export type QualWhatsApp = 'comum' | 'business';
@@ -40,15 +43,29 @@ export function lembrarWhatsapp(qual: QualWhatsApp) {
   }
 }
 
-/** Abre o WhatsApp com o texto pronto. No Android, no app escolhido. */
-export function abrirWhatsappComTexto(text: string, qual: QualWhatsApp = whatsappPreferido()) {
-  const waMe = `https://wa.me/?text=${encodeURIComponent(text)}`;
+/** Número brasileiro sem DDI ganha o 55 (mesma regra de `whatsappTo`). */
+function comDdi(phone: string): string {
+  const d = phone.replace(/\D/g, '');
+  return d.length <= 11 ? `55${d}` : d;
+}
+
+/**
+ * Abre o WhatsApp com o texto pronto — na conversa da pessoa, se vier o
+ * telefone. No Android, no app escolhido (comum, se ninguém escolheu).
+ */
+export function abrirWhatsappComTexto(
+  text: string,
+  qual: QualWhatsApp = whatsappPreferido(),
+  phone?: string | null,
+) {
+  const numero = phone ? comDdi(phone) : '';
+  const waMe = `https://wa.me/${numero}?text=${encodeURIComponent(text)}`;
   if (!ehAndroid()) {
     window.open(waMe, '_blank', 'noopener');
     return;
   }
   const intent =
-    `intent://send?text=${encodeURIComponent(text)}` +
+    `intent://send?${numero ? `phone=${numero}&` : ''}text=${encodeURIComponent(text)}` +
     `#Intent;scheme=whatsapp;package=${PACOTE[qual]};` +
     `S.browser_fallback_url=${encodeURIComponent(waMe)};end`;
   window.location.href = intent;

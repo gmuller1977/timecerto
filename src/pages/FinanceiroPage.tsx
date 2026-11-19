@@ -1,3 +1,4 @@
+import { abrirWhatsappComTexto } from '@/lib/whatsapp';
 import { iconeDoTipo } from '@/lib/listaDoJogo';
 import { normalizar } from '@/lib/juntar';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -38,7 +39,6 @@ import {
   type SaldoDoJogador,
 } from '@/lib/financeiro';
 import { hoje } from '@/lib/jogo';
-import { whatsappTo } from '@/lib/phone';
 import { cn, formatBRL } from '@/lib/utils';
 import { explain } from '@/components/cloud/partes';
 import { situacaoDoPlano } from '@/lib/plano';
@@ -257,8 +257,7 @@ function anotar(
 }
 
 function abrirWhatsApp(texto: string, phone?: string | null) {
-  const destino = phone ? whatsappTo(phone) : 'https://wa.me/';
-  window.open(`${destino}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+  abrirWhatsappComTexto(texto, undefined, phone);
 }
 
 /**

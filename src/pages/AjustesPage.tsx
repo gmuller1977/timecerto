@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Bell,
   CalendarClock,
+  MessageCircle,
   ChevronRight,
   Crown,
   Palette,
@@ -15,6 +16,8 @@ import {
 import { hasSavedSession } from '@/lib/sessao';
 import { useAppStore } from '@/store/useAppStore';
 import { cn } from '@/lib/utils';
+import { ehAndroid } from '@/lib/whatsapp';
+import { WhatsappDoCelular } from '@/components/cloud/WhatsappDoCelular';
 
 // Cada seção traz o Supabase: só carrega quando é aberta
 const NomeDoGrupo = lazy(() => import('@/components/cloud/NomeDoGrupo').then((m) => ({ default: m.NomeDoGrupo })));
@@ -53,6 +56,8 @@ interface Secao {
   pelada?: boolean;
   /** Só no profissional */
   time?: boolean;
+  /** Só no Android (dá para escolher o app do WhatsApp) */
+  android?: boolean;
   perigo?: boolean;
   conteudo: () => ReactNode;
 }
@@ -113,6 +118,15 @@ const SECOES: Secao[] = [
     pelada: true,
     conteudo: () => <AvisosDoAdmin />,
   },
+  // Celular com WhatsApp e WhatsApp Business (19/11/2026)
+  {
+    id: 'whatsapp',
+    titulo: 'WhatsApp deste celular',
+    resumo: 'WhatsApp ou WhatsApp Business',
+    icone: MessageCircle,
+    android: true,
+    conteudo: () => <WhatsappDoCelular />,
+  },
   // Só no profissional: as cores da quadra e da escalação (08/10/2026)
   {
     id: 'cores',
@@ -146,7 +160,9 @@ const SECOES: Secao[] = [
 function useSecoes(): Secao[] {
   const pelada = (useAppStore((s) => s.mode) ?? 'amador') === 'amador';
   const comConta = hasSavedSession();
-  return SECOES.filter((s) => (!s.conta || comConta) && (!s.pelada || pelada) && (!s.time || !pelada));
+  return SECOES.filter(
+    (s) => (!s.conta || comConta) && (!s.pelada || pelada) && (!s.time || !pelada) && (!s.android || ehAndroid()),
+  );
 }
 
 export function AjustesPage() {

@@ -938,7 +938,9 @@ consegue fazer o Android perguntar de novo. Nos botões de lista do link
 Chrome): o comum por padrão, e "Tem dois WhatsApps? Mandar pelo WhatsApp
 Business" troca e fica lembrado no aparelho. O site não sabe quais apps estão
 instalados, então o link aparece em todo Android. Sem o app escolhido, cai no `wa.me`. iPhone e
-computador seguem no `wa.me`. As telas do administrador ainda usam o `wa.me`.
+computador seguem no `wa.me`. O app todo abre por ali (`abrirWhatsappComTexto`,
+com telefone quando há): `shareOnWhatsApp`, cobranças, chamar da espera, fim do
+dia. O administrador escolhe em Ajustes › WhatsApp deste celular (só Android).
 
 **Hidratação.** `localStorage` não é lido instantaneamente. Qualquer página que
 redirecione quando não encontra algo (`<Navigate>`) precisa esperar

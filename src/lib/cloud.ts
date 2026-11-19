@@ -1,3 +1,4 @@
+import { abrirWhatsappComTexto } from '@/lib/whatsapp';
 import { meuAparelho } from '@/lib/aparelho';
 import { supabase } from '@/lib/supabase';
 import type { PromocaoDoGrupo } from '@/lib/promocao';
@@ -955,7 +956,7 @@ export const athleteLink = (token: string) => `${base()}#/a/${token}`;
 
 /** Abre o WhatsApp com a mensagem pronta; a pessoa escolhe o contato ou grupo */
 export function shareOnWhatsApp(text: string) {
-  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  abrirWhatsappComTexto(text);
 }
 
 // ── Convidado sem conta ─────────────────────────────────────

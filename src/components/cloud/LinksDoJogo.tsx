@@ -1,3 +1,4 @@
+import { abrirWhatsappComTexto } from '@/lib/whatsapp';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, BellOff, BellRing, ChevronRight, Send, Lock, MessageCircle, RefreshCw, SkipForward } from 'lucide-react';
@@ -9,7 +10,6 @@ import { vagasDoJogo } from '@/lib/vagas';
 import { haQuantoChamado } from '@/lib/jogo';
 import { textoDaLista } from '@/lib/listaDoJogo';
 import { nomeDeExibicao } from '@/lib/nome';
-import { whatsappTo } from '@/lib/phone';
 import {
   createGroup,
   findActiveGroup,
@@ -374,8 +374,7 @@ ${detalhes}
 
 ${nomeDeExibicao(p)}, abriu uma vaga e você é o próximo da fila de espera! Ainda quer jogar? Responda no link:
 ${link}`;
-    const destino = p.phone ? whatsappTo(p.phone) : 'https://wa.me/';
-    window.open(`${destino}?text=${encodeURIComponent(texto)}`, '_blank', 'noopener');
+    abrirWhatsappComTexto(texto, undefined, p.phone);
   }
 
   function passar(p: Player) {
