@@ -935,8 +935,9 @@ da Meta só serve a grupos criados pela empresa e é paga.
 o `wa.me` abre o que o Android tem como padrão ("Sempre"), e o site não
 consegue fazer o Android perguntar de novo. Nos botões de lista do link
 (`GuestGroupPage`), o Android abre pelo pacote (`lib/whatsapp.ts`, intent do
-Chrome): o comum por padrão, e "Meu grupo está no WhatsApp Business" troca e
-fica lembrado no aparelho. Sem o app escolhido, cai no `wa.me`. iPhone e
+Chrome): o comum por padrão, e "Tem dois WhatsApps? Mandar pelo WhatsApp
+Business" troca e fica lembrado no aparelho. O site não sabe quais apps estão
+instalados, então o link aparece em todo Android. Sem o app escolhido, cai no `wa.me`. iPhone e
 computador seguem no `wa.me`. As telas do administrador ainda usam o `wa.me`.
 
 **Hidratação.** `localStorage` não é lido instantaneamente. Qualquer página que

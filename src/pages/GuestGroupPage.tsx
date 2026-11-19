@@ -1319,7 +1319,7 @@ function OutroWhatsapp({ texto }: { texto: string }) {
       }}
       className="mt-2 w-full text-center text-xs font-medium text-brand-200/80 underline underline-offset-2"
     >
-      {outro === 'business' ? 'Meu grupo está no WhatsApp Business' : 'Meu grupo está no WhatsApp comum'}
+      {outro === 'business' ? 'Tem dois WhatsApps? Mandar pelo WhatsApp Business' : 'Tem dois WhatsApps? Mandar pelo WhatsApp comum'}
     </button>
   );
 }
