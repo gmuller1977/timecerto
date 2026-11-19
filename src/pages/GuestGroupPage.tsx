@@ -37,6 +37,7 @@ import type { SportId } from '@/types';
 import { cn } from '@/lib/utils';
 import { isValidPhone, maskPhoneInput, onlyDigits, whatsappTo } from '@/lib/phone';
 import { AvisoDoAtleta } from '@/components/cloud/Avisos';
+import { abrirWhatsappComTexto, ehAndroid, lembrarWhatsapp, whatsappPreferido } from '@/lib/whatsapp';
 
 /** Quem este aparelho é, por link. Conveniência — errar custa um toque. */
 const meKey = (code: string) => `timecerto:guest:${code.toUpperCase()}`;
@@ -823,13 +824,12 @@ export function GuestGroupPage() {
                         : 'Agora mande a lista atualizada no grupo da pelada, para todo mundo ver quem vai.'}
                     </p>
                     <button
-                      onClick={() =>
-                        window.open(`https://wa.me/?text=${encodeURIComponent(listaParaOGrupo)}`, '_blank', 'noopener')
-                      }
+                      onClick={() => abrirWhatsappComTexto(listaParaOGrupo)}
                       className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-500 text-sm font-semibold text-ink-950 active:scale-[0.99]"
                     >
                       Mandar a lista atualizada no grupo
                     </button>
+                    <OutroWhatsapp texto={listaParaOGrupo} />
                   </div>
                 )}
                 <AvisoDoAtleta code={code} playerId={mine.id} />
@@ -1273,7 +1273,7 @@ function MeuPagamento({
 
       {lista && (
         <button
-          onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(lista)}`, '_blank', 'noopener')}
+          onClick={() => abrirWhatsappComTexto(lista)}
           className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/50 text-sm font-semibold text-brand-200 active:scale-[0.99]"
         >
           Mandar a lista da mensalidade no grupo
@@ -1282,12 +1282,13 @@ function MeuPagamento({
       {listasDoJogo.map((l) => (
         <button
           key={l.data}
-          onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(l.texto)}`, '_blank', 'noopener')}
+          onClick={() => abrirWhatsappComTexto(l.texto)}
           className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-brand-500/50 text-sm font-semibold text-brand-200 active:scale-[0.99]"
         >
           Mandar a lista do jogo {l.data.slice(8, 10)}/{l.data.slice(5, 7)} no grupo
         </button>
       ))}
+      {(lista || listasDoJogo.length > 0) && <OutroWhatsapp texto={lista ?? listasDoJogo[0].texto} />}
       {erro && <p className="mt-2 text-sm text-red-300">{erro}</p>}
     </div>
   );
@@ -1299,6 +1300,30 @@ function MeuPagamento({
  * O link só sabe SE a pessoa tem número, nunca qual. Quem já tem não troca por
  * aqui: trocar é com o organizador.
  */
+/**
+ * Celular Android com WhatsApp e WhatsApp Business (pedido do Guilherme em
+ * 19/11/2026): os botões abrem o WhatsApp comum; este link manda pelo outro e
+ * o aparelho lembra a escolha. iPhone e computador não mostram (lá vai pelo
+ * wa.me, e o iOS não deixa escolher o app).
+ */
+function OutroWhatsapp({ texto }: { texto: string }) {
+  const [qual, setQual] = useState(whatsappPreferido);
+  if (!ehAndroid()) return null;
+  const outro = qual === 'comum' ? 'business' : 'comum';
+  return (
+    <button
+      onClick={() => {
+        lembrarWhatsapp(outro);
+        setQual(outro);
+        abrirWhatsappComTexto(texto, outro);
+      }}
+      className="mt-2 w-full text-center text-xs font-medium text-brand-200/80 underline underline-offset-2"
+    >
+      {outro === 'business' ? 'Meu grupo está no WhatsApp Business' : 'Meu grupo está no WhatsApp comum'}
+    </button>
+  );
+}
+
 function MeuWhatsapp({ code, playerId }: { code: string; playerId: string }) {
   const [tem, setTem] = useState<boolean | null>(null);
   const [fone, setFone] = useState('');

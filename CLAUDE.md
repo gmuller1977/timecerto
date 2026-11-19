@@ -931,6 +931,14 @@ no grupo, não faz sentido". "Mandar a lista no grupo" e o convite seguem no
 `wa.me` com o texto pronto. Postar sozinho: robô bane; API oficial de grupos
 da Meta só serve a grupos criados pela empresa e é paga.
 
+**Dois WhatsApps no Android** (19/11/2026). Com WhatsApp e WhatsApp Business,
+o `wa.me` abre o que o Android tem como padrão ("Sempre"), e o site não
+consegue fazer o Android perguntar de novo. Nos botões de lista do link
+(`GuestGroupPage`), o Android abre pelo pacote (`lib/whatsapp.ts`, intent do
+Chrome): o comum por padrão, e "Meu grupo está no WhatsApp Business" troca e
+fica lembrado no aparelho. Sem o app escolhido, cai no `wa.me`. iPhone e
+computador seguem no `wa.me`. As telas do administrador ainda usam o `wa.me`.
+
 **Hidratação.** `localStorage` não é lido instantaneamente. Qualquer página que
 redirecione quando não encontra algo (`<Navigate>`) precisa esperar
 `useHydrated()` antes de decidir. Sem isso o app expulsa o usuário para a home
